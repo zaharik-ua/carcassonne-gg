@@ -466,6 +466,40 @@ export function registerInPersonRoutes(app, {
     }, logger)
   );
   app.post(
+    "/in-person-tournaments/:tournamentId/swiss/rounds/import/preview",
+    requireInPersonTournamentAdmin,
+    asyncHandler(async (req, res) => {
+      const preview = await inPersonService.previewImportedSwissRound(
+        req.inPersonTournamentId,
+        req.body || {}
+      );
+      res.json({ ok: true, preview });
+    }, logger)
+  );
+  app.post(
+    "/in-person-tournaments/:tournamentId/swiss/rounds/import/confirm",
+    requireInPersonTournamentAdmin,
+    asyncHandler(async (req, res) => {
+      const overview = await inPersonService.confirmImportedSwissRound(
+        req.inPersonTournamentId,
+        req.body || {}
+      );
+      res.json({ ok: true, ...overview });
+    }, logger)
+  );
+  app.post(
+    "/in-person-tournaments/:tournamentId/swiss/rounds/:roundId/results/import",
+    requireInPersonTournamentAdmin,
+    asyncHandler(async (req, res) => {
+      const overview = await inPersonService.importSwissRoundResults(
+        req.inPersonTournamentId,
+        req.params.roundId,
+        req.body || {}
+      );
+      res.json({ ok: true, ...overview });
+    }, logger)
+  );
+  app.post(
     "/in-person-tournaments/:tournamentId/swiss/rounds/:roundId/publish",
     requireInPersonTournamentAdmin,
     asyncHandler(async (req, res) => {

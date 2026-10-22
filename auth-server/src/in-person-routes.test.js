@@ -25,6 +25,7 @@ function createService() {
     completePlayoff: async () => ({}),
     completeSwissRound: async () => ({}),
     confirmLateParticipant: async () => ({}),
+    confirmImportedSwissRound: async () => ({}),
     confirmPlayoff: async () => ({}),
     confirmSwissRound: async () => ({}),
     createCity: async () => ({}),
@@ -46,12 +47,14 @@ function createService() {
     }),
     getSwissOverview: async () => ({}),
     getTournament: async () => ({}),
+    importSwissRoundResults: async () => ({}),
     listAccessibleTournaments: async () => [],
     listCities: async () => [],
     listParticipantCities: async () => [],
     listPublicTournaments: async () => [],
     listTournamentAdmins: async () => [],
     listTournaments: async () => [],
+    previewImportedSwissRound: async () => ({}),
     previewLateParticipant: async () => ({}),
     previewPlayoff: async () => ({}),
     previewSwissRound: async () => ({}),
@@ -93,7 +96,7 @@ test("always registers protected global and tournament routes", () => {
   });
 
   assert.deepEqual(result, { registered: true });
-  assert.equal(app.routes.length, 63);
+  assert.equal(app.routes.length, 66);
   const globalFoundation = app.routes.find((route) => (
     route.path === "/in-person-tournaments/_foundation"
   ));
@@ -177,6 +180,15 @@ test("always registers protected global and tournament routes", () => {
   )));
   assert.ok(app.routes.some((route) => (
     route.method === "POST" && route.path.endsWith("/swiss/rounds/:roundId/test-results")
+  )));
+  assert.ok(app.routes.some((route) => (
+    route.method === "POST" && route.path.endsWith("/swiss/rounds/import/preview")
+  )));
+  assert.ok(app.routes.some((route) => (
+    route.method === "POST" && route.path.endsWith("/swiss/rounds/import/confirm")
+  )));
+  assert.ok(app.routes.some((route) => (
+    route.method === "POST" && route.path.endsWith("/swiss/rounds/:roundId/results/import")
   )));
   assert.ok(app.routes.some((route) => (
     route.method === "PUT" && route.path.endsWith("/result")

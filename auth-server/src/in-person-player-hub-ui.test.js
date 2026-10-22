@@ -375,7 +375,11 @@ test("In-Person page contains the complete Swiss organizer workflow", () => {
   assert.doesNotMatch(completeRoundFlow, /window\.confirm/);
   assert.match(
     completeRoundFlow,
-    /adoptSwissResponse\(data\);[\s\S]*?if \(data\.swiss_complete\)[\s\S]*?tournamentUrl\("\/playoff"\)[\s\S]*?adoptPlayoffResponse\(playoffData\);[\s\S]*?renderWorkspace\(\);/
+    /adoptSwissResponse\(data\);[\s\S]*?await refreshPlayoffIfSwissComplete\(data\);[\s\S]*?renderWorkspace\(\);/
+  );
+  assert.match(
+    inPersonHtml,
+    /async function refreshPlayoffIfSwissComplete\(data\) \{[\s\S]*?if \(!data\?\.swiss_complete\) return null;[\s\S]*?adoptPlayoffResponse\(await apiJson\(tournamentUrl\("\/playoff"\)\)\);/
   );
   assert.match(inPersonHtml, /function swissTableProgress\(round\)[\s\S]*?filter\(\(match\) => !match\.is_bye\)/);
   assert.match(inPersonHtml, /const rounds = state\.swiss\?\.rounds \|\| \[\];[\s\S]*?rounds\.forEach\(\(round\) =>/);
@@ -628,6 +632,70 @@ test("In-Person page uses an interactive playoff bracket and result modal", () =
     /is_test_tournament === true[\s\S]*?!playoff\.can_complete[\s\S]*?"ip-btn test-action"/
   );
   assert.match(inPersonHtml, /Array\.isArray\(data\.participant_ids\)/);
+});
+
+test("In-Person page imports external Swiss pairings and results from pasted text", () => {
+  [
+    "Import round 1",
+    "Import results",
+    "Confirm import",
+    "Edit import",
+    "Complete the round after import",
+    "First player (starts)",
+  ].forEach((text) => assert.ok(inPersonHtml.includes(text), `missing Swiss import UI text: ${text}`));
+  [
+    /\/swiss\/rounds\/import\/preview/,
+    /\/swiss\/rounds\/import\/confirm/,
+    /\/swiss\/rounds\/\$\{encodeURIComponent\(round\.id\)\}\/results\/import/,
+  ].forEach((pattern) => assert.match(inPersonHtml, pattern));
+
+  const start = inPersonHtml.indexOf("  const IMPORT_BYE_NAMES");
+  const end = inPersonHtml.indexOf("  function importParticipantLabel");
+  assert.ok(start > 0 && end > start, "import parser helpers must stay together");
+  const { parseSwissImportText, matchImportParticipant, parseImportResult } = new Function(
+    `${inPersonHtml.slice(start, end)}; return { parseSwissImportText, matchImportParticipant, parseImportResult };`
+  )();
+  const candidates = [
+    { id: "p1", name_en: "Timofei Gretšenko" },
+    { id: "p2", name_en: "Georgios Kyriazidis" },
+    { id: "p3", name_en: "Qin Xiangyu" },
+    { id: "p4", name_en: "Stefan Jonsson" },
+    { id: "p5", name_en: "Nickolas Teo" },
+  ];
+  const rows = parseSwissImportText(
+    "Nr\tWhite\tBlack\tResult\n1\tTimofei Gretšenko\tGeorgios Kyriazidis\t70−75\n"
+      + "2\tXiangyu Qin\tStefán Jónsson\t1−0\n3\tNickolas Teo Jia Ming\tbye\t",
+    candidates
+  );
+  assert.deepEqual(rows.map((row) => [row.table, row.first, row.second, row.result]), [
+    ["1", "Timofei Gretšenko", "Georgios Kyriazidis", "70−75"],
+    ["2", "Xiangyu Qin", "Stefán Jónsson", "1−0"],
+    ["3", "Nickolas Teo Jia Ming", "bye", ""],
+  ]);
+  assert.deepEqual(matchImportParticipant("Xiangyu Qin", candidates), {
+    participantId: "p3",
+    confidence: "exact",
+  });
+  assert.deepEqual(matchImportParticipant("Stefán Jónsson", candidates), {
+    participantId: "p4",
+    confidence: "exact",
+  });
+  assert.equal(matchImportParticipant("Nickolas Teo Jia Ming", candidates).confidence, "likely");
+  assert.equal(matchImportParticipant("Unknown Player", candidates).confidence, "none");
+  const [singleSpaced] = parseSwissImportText("4 Timofei Gretšenko Georgios Kyriazidis 101 - 93", candidates);
+  assert.deepEqual(
+    [singleSpaced.first, singleSpaced.second, singleSpaced.result],
+    ["Timofei Gretšenko", "Georgios Kyriazidis", "101 - 93"]
+  );
+  assert.deepEqual(parseImportResult("88−88"), { result_type: "points", points: [88, 88] });
+  assert.deepEqual(parseImportResult("0–1"), { result_type: "simple", winner: 1 });
+  assert.deepEqual(parseImportResult("+ −"), {
+    result_type: "technical",
+    finish_reason: "no_show",
+    winner: 0,
+  });
+  assert.equal(parseImportResult(""), null);
+  assert.equal(parseImportResult("½-½").invalid, true);
 });
 
 test("all Player Hub scripts parse after the In-Person additions", () => {

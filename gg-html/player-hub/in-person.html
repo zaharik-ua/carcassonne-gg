@@ -1308,6 +1308,152 @@
     -webkit-appearance: none;
   }
 
+  .ip-import-dialog {
+    max-width: 920px;
+    max-height: calc(100vh - 32px);
+    overflow-y: auto;
+  }
+
+  .ip-import-textarea {
+    min-height: 140px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 12px;
+    white-space: pre;
+  }
+
+  .ip-import-summary {
+    color: #344054;
+    font-size: 12px;
+    font-weight: 600;
+  }
+
+  .ip-import-rows {
+    display: grid;
+    gap: 6px;
+  }
+
+  .ip-import-head,
+  .ip-import-row {
+    display: grid;
+    grid-template-columns: 40px minmax(0, 1fr) minmax(0, 1fr) 90px;
+    grid-template-areas:
+      "table first second result"
+      "message message message message";
+    gap: 4px 8px;
+    align-items: center;
+  }
+
+  .ip-import-head {
+    padding: 0 9px;
+    color: var(--ip-muted);
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+  }
+
+  .ip-import-row {
+    padding: 6px 8px;
+    border: 1px solid var(--ip-line);
+    border-radius: 6px;
+  }
+
+  .ip-import-row.needs-review {
+    border-color: #f0c36c;
+    background: var(--ip-warning-bg);
+  }
+
+  .ip-import-row.has-error {
+    border-color: #efb4ae;
+    background: #fff6f5;
+  }
+
+  .ip-import-row-table {
+    grid-area: table;
+    color: #344054;
+    font-size: 14px;
+    font-weight: 700;
+  }
+
+  .ip-import-player {
+    display: grid;
+    gap: 2px;
+    min-width: 0;
+  }
+
+  .ip-import-player.first {
+    grid-area: first;
+  }
+
+  .ip-import-player.second {
+    grid-area: second;
+  }
+
+  .ip-import-player .ip-select {
+    min-height: 32px;
+    padding: 4px 6px;
+    font-size: 13px;
+  }
+
+  .ip-import-player .ip-select.review {
+    border-color: #d99a00;
+  }
+
+  .ip-import-player .ip-select.invalid {
+    border-color: var(--ip-danger);
+  }
+
+  .ip-import-player-source {
+    overflow: hidden;
+    color: var(--ip-muted);
+    font-size: 11px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .ip-import-player-bye {
+    color: #344054;
+    font-size: 13px;
+    font-weight: 600;
+  }
+
+  .ip-import-result {
+    grid-area: result;
+    color: #344054;
+    font-size: 13px;
+    font-weight: 700;
+    text-align: center;
+  }
+
+  .ip-import-row-message {
+    grid-area: message;
+    color: var(--ip-danger);
+    font-size: 11px;
+    line-height: 1.4;
+  }
+
+  .ip-import-row-message.review {
+    color: #7a4b00;
+  }
+
+  .ip-import-row-message:empty {
+    display: none;
+  }
+
+  .ip-import-complete {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: #344054;
+    font-size: 13px;
+    font-weight: 600;
+  }
+
+  .ip-import-complete input {
+    width: 18px;
+    height: 18px;
+    margin: 0;
+  }
+
   .ip-swiss-summary,
   .ip-swiss-preview,
   .ip-swiss-matches {
@@ -2012,6 +2158,19 @@
   }
 
   @media (max-width: 720px) {
+    .ip-import-head {
+      display: none;
+    }
+
+    .ip-import-row {
+      grid-template-columns: minmax(0, 1fr) auto;
+      grid-template-areas:
+        "table result"
+        "first first"
+        "second second"
+        "message message";
+    }
+
     .ip-head,
     .ip-tournament-heading,
     .ip-toolbar,
@@ -2235,6 +2394,7 @@
     swiss: null,
     playoff: null,
     pairingPreview: null,
+    swissImportDraft: null,
     playoffSetupSlots: [],
     playoffSetupStarters: {},
     activeTab: "players",
@@ -5044,6 +5204,8 @@
       rematch: "Rematch unavoidable",
       starter_3_in_a_row: "Third identical start role",
       starter_imbalance: "Starter imbalance",
+      repeated_bye: "Second bye",
+      not_paired: "Not paired",
     };
     return labels[String(code || "")] || String(code || "Pairing warning").replace(/_/g, " ");
   }
@@ -5273,6 +5435,692 @@
     if (index >= 0) state.tournaments[index] = { ...state.tournaments[index], ...data.tournament };
   }
 
+  const IMPORT_BYE_NAMES = new Set(["bye", "spielfrei", "free", "пропуск", "-", "--", "---", "—"]);
+  const IMPORT_HEADER_WORDS = {
+    table: ["nr", "no", "table", "tbl", "bo", "#", "стіл"],
+    first: ["white", "player 1", "player1", "home", "first player", "гравець 1"],
+    second: ["black", "player 2", "player2", "away", "second player", "гравець 2"],
+    result: ["result", "res", "score", "результат"],
+  };
+  const IMPORT_HEADER_TOKENS = new Set(
+    Object.values(IMPORT_HEADER_WORDS).flat().flatMap((word) => word.split(" "))
+  );
+
+  function normalizeImportName(value) {
+    return String(value || "")
+      .replace(/[øØ]/g, "o")
+      .replace(/[æÆ]/g, "ae")
+      .replace(/ß/g, "ss")
+      .replace(/[đĐ]/g, "d")
+      .replace(/[łŁ]/g, "l")
+      .replace(/ı/g, "i")
+      .replace(/[þÞ]/g, "th")
+      .replace(/[œŒ]/g, "oe")
+      .normalize("NFD")
+      .replace(/[̀-ͯ]/g, "")
+      .toLowerCase()
+      .replace(/[^\p{L}\p{N}]+/gu, " ")
+      .trim();
+  }
+
+  function importEditDistance(left, right) {
+    if (left === right) return 0;
+    if (Math.abs(left.length - right.length) > 2) return 3;
+    let previous = Array.from({ length: right.length + 1 }, (_, index) => index);
+    for (let leftIndex = 1; leftIndex <= left.length; leftIndex += 1) {
+      const current = [leftIndex];
+      for (let rightIndex = 1; rightIndex <= right.length; rightIndex += 1) {
+        current[rightIndex] = Math.min(
+          previous[rightIndex] + 1,
+          current[rightIndex - 1] + 1,
+          previous[rightIndex - 1] + (left[leftIndex - 1] === right[rightIndex - 1] ? 0 : 1)
+        );
+      }
+      previous = current;
+    }
+    return previous[right.length];
+  }
+
+  /** 100 exact, 95 same words in another order, 85 word subset, ≤80 small typos, 0 no match. */
+  function importNameScore(normalized, participant) {
+    if (!normalized) return 0;
+    const tokens = normalized.split(" ");
+    const sortedCompact = tokens.slice().sort().join("");
+    const compact = normalized.replace(/ /g, "");
+    let best = 0;
+    [participant.name_en, participant.name_local, participant.bga_nickname].forEach((value) => {
+      const candidate = normalizeImportName(value);
+      if (!candidate) return;
+      const candidateTokens = candidate.split(" ");
+      const candidateSortedCompact = candidateTokens.slice().sort().join("");
+      const candidateCompact = candidate.replace(/ /g, "");
+      if (candidate === normalized) best = Math.max(best, 100);
+      if (candidateSortedCompact === sortedCompact || candidateCompact === compact) {
+        best = Math.max(best, 95);
+      }
+      const shared = tokens.filter((token) => candidateTokens.includes(token)).length;
+      if (shared >= 2 && (shared === tokens.length || shared === candidateTokens.length)) {
+        best = Math.max(best, 85);
+      }
+      const allowedDistance = compact.length >= 10 ? 2 : compact.length >= 6 ? 1 : 0;
+      const distance = Math.min(
+        importEditDistance(compact, candidateCompact),
+        importEditDistance(sortedCompact, candidateSortedCompact)
+      );
+      if (distance <= allowedDistance) best = Math.max(best, 80 - distance * 5);
+    });
+    return best;
+  }
+
+  function bestImportNameScore(rawName, candidates) {
+    const normalized = normalizeImportName(rawName);
+    return candidates.reduce((best, participant) => (
+      Math.max(best, importNameScore(normalized, participant))
+    ), 0);
+  }
+
+  function matchImportParticipant(rawName, candidates) {
+    const normalized = normalizeImportName(rawName);
+    const scored = candidates
+      .map((participant) => ({ participant, score: importNameScore(normalized, participant) }))
+      .filter((entry) => entry.score > 0)
+      .sort((left, right) => right.score - left.score);
+    const [best, second] = scored;
+    if (!best) return { participantId: "", confidence: "none" };
+    if (second && second.score === best.score) return { participantId: "", confidence: "ambiguous" };
+    return { participantId: best.participant.id, confidence: best.score >= 95 ? "exact" : "likely" };
+  }
+
+  /** Scores are always "first player – second player"; 1–0 / 0–1 mean a win without points. */
+  function parseImportResult(value) {
+    const text = String(value || "")
+      .replace(/[‐-―−:]/g, "-")
+      .replace(/\s+/g, "");
+    if (!text) return null;
+    if (/^\+-+$/.test(text)) return { result_type: "technical", finish_reason: "no_show", winner: 0 };
+    if (/^-+\+$/.test(text)) return { result_type: "technical", finish_reason: "no_show", winner: 1 };
+    const points = text.match(/^(\d{1,3})-(\d{1,3})$/);
+    if (!points) return { invalid: true };
+    const first = Number(points[1]);
+    const second = Number(points[2]);
+    if (first + second === 1) return { result_type: "simple", winner: first === 1 ? 0 : 1 };
+    return { result_type: "points", points: [first, second] };
+  }
+
+  function looksLikeImportResult(value) {
+    const result = parseImportResult(value);
+    return !!result && !result.invalid;
+  }
+
+  function importHeaderColumns(cells) {
+    const columns = {};
+    cells.forEach((cell, index) => {
+      const raw = String(cell || "").trim().toLowerCase();
+      const key = normalizeImportName(cell);
+      Object.entries(IMPORT_HEADER_WORDS).forEach(([column, words]) => {
+        if (columns[column] == null && (words.includes(key) || words.includes(raw))) {
+          columns[column] = index;
+        }
+      });
+    });
+    return columns.first != null && columns.second != null ? columns : null;
+  }
+
+  function isImportHeaderLine(line) {
+    const tokens = normalizeImportName(line).split(" ").filter(Boolean);
+    const hits = tokens.filter((token) => IMPORT_HEADER_TOKENS.has(token)).length;
+    return hits >= 2 && hits >= tokens.length - 1;
+  }
+
+  function importRowFromCells(cells, columns) {
+    if (columns) {
+      const cell = (column) => (
+        columns[column] == null ? "" : String(cells[columns[column]] || "").trim()
+      );
+      return {
+        table: cell("table"),
+        first: cell("first"),
+        second: cell("second"),
+        result: cell("result"),
+      };
+    }
+    const values = cells.map((value) => value.trim()).filter(Boolean);
+    const row = { table: "", first: "", second: "", result: "" };
+    if (values.length && /^\d+\.?$/.test(values[0])) row.table = values.shift();
+    if (values.length > 2 && looksLikeImportResult(values[values.length - 1])) row.result = values.pop();
+    const names = values.filter((value) => (
+      /\p{L}/u.test(value) || IMPORT_BYE_NAMES.has(value.toLowerCase())
+    ));
+    row.first = names[0] || "";
+    row.second = names[1] || "";
+    return row;
+  }
+
+  /** Single-spaced lines carry no column boundaries, so the names are split where both sides match players best. */
+  function importRowFromWords(line, candidates) {
+    const words = line.trim().split(/\s+/);
+    const row = { table: "", first: "", second: "", result: "" };
+    if (words.length && /^\d+\.?$/.test(words[0])) row.table = words.shift();
+    for (const size of [3, 1]) {
+      if (words.length > size + 1 && looksLikeImportResult(words.slice(-size).join(" "))) {
+        row.result = words.splice(-size).join(" ");
+        break;
+      }
+    }
+    const separatorIndex = words.findIndex((word, index) => (
+      index > 0 && index < words.length - 1 && /^(vs\.?|v|-|–|—|−|:)$/i.test(word)
+    ));
+    if (separatorIndex > 0) {
+      row.first = words.slice(0, separatorIndex).join(" ");
+      row.second = words.slice(separatorIndex + 1).join(" ");
+      return row;
+    }
+    if (words.length > 1 && IMPORT_BYE_NAMES.has(words[words.length - 1].toLowerCase())) {
+      row.second = words.pop();
+      row.first = words.join(" ");
+      return row;
+    }
+    let best = null;
+    for (let index = 1; index < words.length; index += 1) {
+      const score = bestImportNameScore(words.slice(0, index).join(" "), candidates)
+        + bestImportNameScore(words.slice(index).join(" "), candidates);
+      if (!best || score > best.score) best = { score, index };
+    }
+    const splitIndex = best?.score ? best.index : Math.ceil(words.length / 2);
+    row.first = words.slice(0, splitIndex).join(" ");
+    row.second = words.slice(splitIndex).join(" ");
+    return row;
+  }
+
+  function parseSwissImportText(text, candidates) {
+    const rows = [];
+    let columns = null;
+    String(text || "").split(/\r?\n/).forEach((line, index) => {
+      if (!line.trim()) return;
+      const cells = line.includes("\t") ? line.split("\t") : line.trim().split(/\s{2,}/);
+      const headerColumns = importHeaderColumns(cells);
+      if (headerColumns) {
+        columns = headerColumns;
+        return;
+      }
+      if (cells.length === 1 && isImportHeaderLine(line)) return;
+      const values = cells.length > 1
+        ? importRowFromCells(cells, columns)
+        : importRowFromWords(line, candidates);
+      rows.push({ lineNumber: index + 1, ...values });
+    });
+    return rows;
+  }
+
+  function importParticipantLabel(participant) {
+    const local = participant.name_local && participant.name_local !== participant.name_en
+      ? ` (${participant.name_local})`
+      : "";
+    return `${participant.name_en || participant.id}${local}`;
+  }
+
+  function swissImportApiResult(result, firstId, secondId) {
+    if (!result) return null;
+    if (result.result_type === "points") {
+      return { result_type: "points", points_a: result.points[0], points_b: result.points[1] };
+    }
+    return {
+      result_type: result.result_type,
+      finish_reason: result.finish_reason,
+      winner_participant_id: result.winner === 0 ? firstId : secondId,
+    };
+  }
+
+  function swissImportResultLabel(result) {
+    if (!result) return "—";
+    if (result.invalid) return "?";
+    if (result.result_type === "points") return `${result.points[0]} : ${result.points[1]}`;
+    if (result.result_type === "technical") return result.winner === 0 ? "+ : −" : "− : +";
+    return result.winner === 0 ? "1 : 0" : "0 : 1";
+  }
+
+  /**
+   * mode "pairings" creates the next round from external pairings (the first player starts);
+   * mode "results" fills results of the published round, matching tables by their two players.
+   */
+  function openSwissImportModal(mode) {
+    const swiss = state.swiss;
+    const round = swiss?.current_round || null;
+    const isResults = mode === "results";
+    if (isResults && round?.status !== "published") return;
+    const roundNumber = isResults ? round.round_number : (swiss?.next_round_number || 1);
+    const allParticipants = state.overview?.participants || [];
+    const roundMatches = isResults ? (round.matches || []).filter((match) => !match.is_bye) : [];
+    const roundParticipantIds = new Set(roundMatches.flatMap((match) => (
+      [match.participant_a_id, match.participant_b_id]
+    )));
+    const candidates = allParticipants
+      .filter((participant) => (
+        isResults ? roundParticipantIds.has(participant.id) : participant.status === "checked_in"
+      ))
+      .sort((left, right) => importParticipantLabel(left).localeCompare(importParticipantLabel(right)));
+    const participantById = new Map(candidates.map((participant) => [participant.id, participant]));
+    const draftKey = `${state.selectedTournamentId}:${mode}:${roundNumber}`;
+    const draft = state.swissImportDraft?.key === draftKey ? state.swissImportDraft : null;
+    const overrides = new Map(draft?.overrides || []);
+
+    const overlay = document.createElement("div");
+    overlay.className = "ip-modal-overlay";
+    const dialog = document.createElement("div");
+    dialog.className = "ip-modal-dialog ip-import-dialog";
+    dialog.setAttribute("role", "dialog");
+    dialog.setAttribute("aria-modal", "true");
+    dialog.setAttribute("aria-labelledby", "ipSwissImportTitle");
+    const title = document.createElement("div");
+    title.id = "ipSwissImportTitle";
+    title.className = "ip-modal-title";
+    title.textContent = isResults
+      ? `Import round ${roundNumber} results`
+      : `Import round ${roundNumber} pairings`;
+    const hint = document.createElement("div");
+    hint.className = "ip-modal-player";
+    hint.textContent = isResults
+      ? "Paste one table per line: table number, first player, second player, result. Tables are matched by their two players; results are read in the pasted player order (70−75, 1−0, 0−1, +−, −+)."
+      : "Paste one table per line: table number, first player, second player, result (optional). The first player of each pair starts the game. Results: 70−75, 1−0, 0−1, +−, −+. Write “bye” instead of the second player for a bye.";
+    const source = createTextareaField("Pasted data");
+    source.textarea.classList.add("ip-import-textarea");
+    source.textarea.placeholder = "Nr\tWhite\tBlack\tResult\n1\tTimofei Gretšenko\tGeorgios Kyriazidis\t70−75";
+    source.textarea.spellcheck = false;
+    source.textarea.value = draft?.text || "";
+    const summary = document.createElement("div");
+    summary.className = "ip-import-summary";
+    const head = document.createElement("div");
+    head.className = "ip-import-head";
+    ["Table", "First player (starts)", "Second player", "Result"].forEach((labelText) => {
+      const label = document.createElement("span");
+      label.textContent = labelText;
+      head.appendChild(label);
+    });
+    if (isResults) head.children[1].textContent = "First player";
+    const rowsMount = document.createElement("div");
+    rowsMount.className = "ip-import-rows";
+    const unpaired = document.createElement("div");
+    unpaired.className = "ip-hint";
+    const completeLabel = document.createElement("label");
+    completeLabel.className = "ip-import-complete";
+    const completeInput = document.createElement("input");
+    completeInput.type = "checkbox";
+    completeLabel.appendChild(completeInput);
+    completeLabel.appendChild(document.createTextNode("Complete the round after import"));
+    const error = document.createElement("div");
+    error.className = "ip-modal-warning";
+    error.setAttribute("role", "alert");
+    const actions = document.createElement("div");
+    actions.className = "ip-modal-actions";
+    const cancel = createButton("Cancel", "ip-btn", () => closeModal());
+    const submit = createButton(
+      isResults ? "Save results" : `Preview round ${roundNumber}`,
+      "ip-btn primary",
+      () => submitImport()
+    );
+    actions.appendChild(cancel);
+    actions.appendChild(submit);
+    [title, hint, source.field, summary, head, rowsMount, unpaired, completeLabel, error, actions]
+      .forEach((element) => dialog.appendChild(element));
+    overlay.appendChild(dialog);
+
+    let rows = [];
+    let saving = false;
+    let parseTimer = null;
+
+    function resolveName(rawName) {
+      const key = normalizeImportName(rawName);
+      if (overrides.has(key)) return { raw: rawName, participantId: overrides.get(key), confidence: "manual" };
+      return { raw: rawName, ...matchImportParticipant(rawName, candidates) };
+    }
+
+    function resolveRows() {
+      rows = parseSwissImportText(source.textarea.value, candidates).map((parsed) => {
+        const isBye = !parsed.second || IMPORT_BYE_NAMES.has(parsed.second.trim().toLowerCase());
+        return {
+          ...parsed,
+          isBye,
+          resultRaw: parsed.result,
+          result: parseImportResult(parsed.result),
+          firstPlayer: resolveName(parsed.first),
+          secondPlayer: isBye ? null : resolveName(parsed.second),
+          errors: [],
+          notes: [],
+          match: null,
+        };
+      });
+      const rowByParticipantId = new Map();
+      rows.forEach((row) => {
+        if (isResults && row.isBye) {
+          row.notes.push("Byes are recorded automatically: skipped.");
+          return;
+        }
+        const label = row.table ? `table ${row.table}` : `line ${row.lineNumber}`;
+        [row.firstPlayer, row.secondPlayer].filter(Boolean).forEach((player) => {
+          if (!player.raw) {
+            row.errors.push("A player name is missing.");
+          } else if (!player.participantId) {
+            row.errors.push(player.confidence === "ambiguous"
+              ? `Several players match “${player.raw}”, choose one.`
+              : `No player matches “${player.raw}”, choose one.`);
+          } else {
+            const duplicate = rowByParticipantId.get(player.participantId);
+            if (duplicate) {
+              const name = importParticipantLabel(participantById.get(player.participantId));
+              row.errors.push(`${name} is already in ${duplicate}.`);
+            } else {
+              rowByParticipantId.set(player.participantId, label);
+            }
+            if (player.confidence === "likely") {
+              row.notes.push(
+                `Check “${player.raw}” → ${importParticipantLabel(participantById.get(player.participantId))}.`
+              );
+            }
+          }
+        });
+        if (row.result?.invalid) row.errors.push(`Result “${row.resultRaw}” is not recognised.`);
+        if (row.isBye && row.result && !row.result.invalid) {
+          row.notes.push("A bye always counts as a win; the result is ignored.");
+        }
+        if (!isResults) return;
+        const firstId = row.firstPlayer.participantId;
+        const secondId = row.secondPlayer?.participantId;
+        if (!firstId || !secondId) return;
+        row.match = roundMatches.find((match) => (
+          [match.participant_a_id, match.participant_b_id].sort().join("|")
+          === [firstId, secondId].sort().join("|")
+        )) || null;
+        if (!row.match) {
+          row.errors.push(`These players do not share a table in round ${roundNumber}.`);
+        } else if (!row.result) {
+          row.notes.push("No result: this table is skipped.");
+        } else if (
+          row.result.result_type === "points"
+          && row.result.points[0] === row.result.points[1]
+          && row.match.starting_participant_id !== firstId
+        ) {
+          const starter = participantById.get(row.match.starting_participant_id);
+          row.notes.push(
+            `Tied score: ${starter ? importParticipantLabel(starter) : "the recorded starting player"} started this table, so the other player wins.`
+          );
+        }
+      });
+    }
+
+    function createPlayerCell(row, side) {
+      const player = side === "first" ? row.firstPlayer : row.secondPlayer;
+      const cell = document.createElement("div");
+      cell.className = `ip-import-player ${side}`;
+      if (!player) {
+        const bye = document.createElement("div");
+        bye.className = "ip-import-player-bye";
+        bye.textContent = "Bye";
+        cell.appendChild(bye);
+        return cell;
+      }
+      const select = document.createElement("select");
+      select.className = "ip-select";
+      select.setAttribute("aria-label", `${side === "first" ? "First" : "Second"} player for “${player.raw}”`);
+      const empty = document.createElement("option");
+      empty.value = "";
+      empty.textContent = "Choose player";
+      select.appendChild(empty);
+      candidates.forEach((participant) => {
+        const option = document.createElement("option");
+        option.value = participant.id;
+        option.textContent = importParticipantLabel(participant);
+        if (participant.id === player.participantId) option.selected = true;
+        select.appendChild(option);
+      });
+      if (!player.participantId) select.classList.add("invalid");
+      else if (player.confidence === "likely") select.classList.add("review");
+      select.addEventListener("change", () => {
+        overrides.set(normalizeImportName(player.raw), select.value);
+        render();
+      });
+      const sourceName = document.createElement("div");
+      sourceName.className = "ip-import-player-source";
+      sourceName.textContent = player.raw || "—";
+      sourceName.title = player.raw || "";
+      cell.appendChild(select);
+      cell.appendChild(sourceName);
+      return cell;
+    }
+
+    function canComplete() {
+      if (!rows.length || rows.some((row) => row.errors.length)) return false;
+      if (!isResults) return rows.every((row) => row.isBye || (row.result && !row.result.invalid));
+      const covered = new Set(rows.filter((row) => row.match && row.result).map((row) => row.match.id));
+      return roundMatches.every((match) => match.status === "completed" || covered.has(match.id));
+    }
+
+    function render() {
+      resolveRows();
+      rowsMount.innerHTML = "";
+      rows.forEach((row) => {
+        const element = document.createElement("div");
+        element.className = `ip-import-row${
+          row.errors.length ? " has-error" : row.notes.length ? " needs-review" : ""
+        }`;
+        const table = document.createElement("div");
+        table.className = "ip-import-row-table";
+        table.textContent = row.isBye ? "Bye" : (row.table || "—");
+        const result = document.createElement("div");
+        result.className = "ip-import-result";
+        result.textContent = swissImportResultLabel(row.result);
+        const message = document.createElement("div");
+        message.className = `ip-import-row-message${row.errors.length ? "" : " review"}`;
+        message.textContent = [...row.errors, ...row.notes].join(" ");
+        element.appendChild(table);
+        element.appendChild(createPlayerCell(row, "first"));
+        element.appendChild(createPlayerCell(row, "second"));
+        element.appendChild(result);
+        element.appendChild(message);
+        row.element = element;
+        row.messageEl = message;
+        rowsMount.appendChild(element);
+      });
+      const errorCount = rows.filter((row) => row.errors.length).length;
+      const reviewCount = rows.filter((row) => !row.errors.length && row.notes.length).length;
+      const resultCount = rows.filter((row) => !row.isBye && row.result && !row.result.invalid).length;
+      summary.textContent = rows.length
+        ? [
+          `${rows.length} ${rows.length === 1 ? "line" : "lines"}`,
+          `${resultCount} with results`,
+          errorCount ? `${errorCount} to fix` : "",
+          reviewCount ? `${reviewCount} to check` : "",
+        ].filter(Boolean).join(" · ")
+        : "";
+      head.classList.toggle("ip-hidden", !rows.length);
+      if (!isResults && rows.length) {
+        const paired = new Set(rows.flatMap((row) => (
+          [row.firstPlayer.participantId, row.secondPlayer?.participantId].filter(Boolean)
+        )));
+        const missing = candidates.filter((participant) => !paired.has(participant.id));
+        unpaired.textContent = missing.length
+          ? `Checked-in players not in this import (they will sit out the round): ${missing.map(importParticipantLabel).join(", ")}.`
+          : "";
+      } else {
+        unpaired.textContent = "";
+      }
+      const completable = canComplete();
+      completeInput.disabled = !completable;
+      if (!completable) completeInput.checked = false;
+      submit.disabled = saving || !rows.length || errorCount > 0
+        || (isResults && !rows.some((row) => row.match && row.result));
+      error.textContent = "";
+    }
+
+    function buildPayload() {
+      if (isResults) {
+        const payloadRows = rows.filter((row) => row.match && row.result);
+        return {
+          payloadRows,
+          body: {
+            complete_round: completeInput.checked,
+            results: payloadRows.map((row) => {
+              const firstId = row.firstPlayer.participantId;
+              const secondId = row.secondPlayer.participantId;
+              const result = swissImportApiResult(row.result, firstId, secondId);
+              if (result.result_type === "points" && row.match.participant_a_id !== firstId) {
+                [result.points_a, result.points_b] = [result.points_b, result.points_a];
+              }
+              return { match_id: row.match.id, ...result };
+            }),
+          },
+        };
+      }
+      return {
+        payloadRows: rows,
+        body: {
+          round_number: roundNumber,
+          complete_round: completeInput.checked,
+          matches: rows.map((row) => {
+            const firstId = row.firstPlayer.participantId;
+            if (row.isBye) return { participant_a_id: firstId, is_bye: true };
+            const secondId = row.secondPlayer.participantId;
+            return {
+              table_number: /^\d+\.?$/.test(row.table) ? Number.parseInt(row.table, 10) : null,
+              participant_a_id: firstId,
+              participant_b_id: secondId,
+              result: swissImportApiResult(row.result, firstId, secondId),
+            };
+          }),
+        },
+      };
+    }
+
+    function saveDraft() {
+      state.swissImportDraft = {
+        key: draftKey,
+        text: source.textarea.value,
+        overrides: Array.from(overrides.entries()),
+      };
+    }
+
+    function closeModal() {
+      if (saving) return;
+      saveDraft();
+      clearTimeout(parseTimer);
+      document.removeEventListener("keydown", handleEscape);
+      overlay.remove();
+    }
+
+    function handleEscape(event) {
+      if (event.key === "Escape") closeModal();
+    }
+
+    async function submitImport() {
+      render();
+      if (submit.disabled) return;
+      const { payloadRows, body } = buildPayload();
+      saving = true;
+      submit.disabled = true;
+      cancel.disabled = true;
+      submit.textContent = "Working...";
+      try {
+        if (isResults) {
+          const data = await apiJson(
+            tournamentUrl(`/swiss/rounds/${encodeURIComponent(round.id)}/results/import`),
+            { method: "POST", body: JSON.stringify(body) }
+          );
+          adoptSwissResponse(data);
+          state.swissImportDraft = null;
+          const playoffRefreshError = await refreshPlayoffIfSwissComplete(data);
+          saving = false;
+          document.removeEventListener("keydown", handleEscape);
+          overlay.remove();
+          renderWorkspace();
+          setStatus(
+            playoffRefreshError
+              ? `Round ${roundNumber} results imported, but Playoff controls could not be refreshed.`
+              : `${data.updated_count} result(s) imported${data.completed ? `; round ${roundNumber} completed` : ""}.`,
+            playoffRefreshError ? "error" : "success"
+          );
+          return;
+        }
+        const data = await apiJson(tournamentUrl("/swiss/rounds/import/preview"), {
+          method: "POST",
+          body: JSON.stringify(body),
+        });
+        saving = false;
+        saveDraft();
+        document.removeEventListener("keydown", handleEscape);
+        overlay.remove();
+        state.pairingPreview = { ...data.preview, import_payload: body };
+        renderSwiss();
+        setStatus(`Round ${roundNumber} import is ready to confirm.`, "success");
+      } catch (requestError) {
+        saving = false;
+        cancel.disabled = false;
+        submit.textContent = isResults ? "Save results" : `Preview round ${roundNumber}`;
+        submit.disabled = false;
+        const failedRow = payloadRows[Number(requestError.details?.row_number) - 1];
+        if (failedRow?.element) {
+          failedRow.element.className = "ip-import-row has-error";
+          failedRow.messageEl.className = "ip-import-row-message";
+          failedRow.messageEl.textContent = requestError.message;
+          failedRow.element.scrollIntoView({ block: "nearest" });
+        }
+        error.textContent = requestError.message || "Failed to import Swiss data.";
+      }
+    }
+
+    source.textarea.addEventListener("input", () => {
+      clearTimeout(parseTimer);
+      parseTimer = setTimeout(render, 200);
+    });
+    overlay.addEventListener("click", (event) => {
+      if (event.target === overlay) closeModal();
+    });
+    document.addEventListener("keydown", handleEscape);
+    render();
+    document.body.appendChild(overlay);
+    source.textarea.focus();
+  }
+
+  async function refreshPlayoffIfSwissComplete(data) {
+    if (!data?.swiss_complete) return null;
+    try {
+      adoptPlayoffResponse(await apiJson(tournamentUrl("/playoff")));
+      return null;
+    } catch (error) {
+      return error;
+    }
+  }
+
+  async function confirmImportedSwissPreview(button) {
+    const preview = state.pairingPreview;
+    if (!preview?.import_payload) return;
+    button.disabled = true;
+    try {
+      const data = await apiJson(tournamentUrl("/swiss/rounds/import/confirm"), {
+        method: "POST",
+        body: JSON.stringify(preview.import_payload),
+      });
+      adoptSwissResponse(data);
+      state.swissImportDraft = null;
+      const playoffRefreshError = await refreshPlayoffIfSwissComplete(data);
+      renderWorkspace();
+      if (playoffRefreshError) {
+        setStatus(
+          `Round ${preview.round_number} imported, but Playoff controls could not be refreshed.`,
+          "error"
+        );
+      } else {
+        setStatus(
+          data.completed
+            ? `Round ${preview.round_number} imported and completed. Standings updated.`
+            : `Round ${preview.round_number} imported and published.`,
+          "success"
+        );
+      }
+    } catch (error) {
+      setStatus(error.message || "Failed to import the Swiss round.", "error");
+      button.disabled = false;
+    }
+  }
+
   async function previewNextSwissRound() {
     const roundNumber = state.swiss?.next_round_number || 1;
     setStatus(`Building round ${roundNumber} preview...`);
@@ -5332,15 +6180,7 @@
         { method: "POST", body: "{}" }
       );
       adoptSwissResponse(data);
-      let playoffRefreshError = null;
-      if (data.swiss_complete) {
-        try {
-          const playoffData = await apiJson(tournamentUrl("/playoff"));
-          adoptPlayoffResponse(playoffData);
-        } catch (error) {
-          playoffRefreshError = error;
-        }
-      }
+      const playoffRefreshError = await refreshPlayoffIfSwissComplete(data);
       renderWorkspace();
       if (playoffRefreshError) {
         setStatus(
@@ -6120,7 +6960,9 @@
     const header = document.createElement("div");
     header.className = "ip-preview-head";
     const title = document.createElement("strong");
-    title.textContent = `Round ${preview.round_number} pairing preview`;
+    title.textContent = preview.imported
+      ? `Round ${preview.round_number} imported pairings`
+      : `Round ${preview.round_number} pairing preview`;
     header.appendChild(title);
     const warningCount = preview.warnings?.length || 0;
     if (warningCount > 0) {
@@ -6130,6 +6972,35 @@
       header.appendChild(warningBadge);
     }
     swissPreview.appendChild(header);
+    if (preview.imported) {
+      const tableCount = (preview.matches || []).filter((match) => !match.is_bye).length;
+      const details = document.createElement("div");
+      details.className = "ip-hint";
+      details.textContent = [
+        `${tableCount} tables`,
+        `${preview.results_count || 0} results`,
+        preview.complete_round ? "the round will be completed on confirm" : "the round will be published on confirm",
+      ].join(" · ");
+      swissPreview.appendChild(details);
+      if (warningCount > 0) {
+        const nameOf = (participantId) => importParticipantLabel(
+          (state.overview?.participants || []).find((participant) => participant.id === participantId)
+          || { id: participantId }
+        );
+        const warnings = document.createElement("div");
+        warnings.className = "ip-warning-list";
+        preview.warnings.forEach((warning) => {
+          const item = document.createElement("span");
+          item.className = "ip-warning";
+          const where = warning.table_number ? `Table ${warning.table_number}: ` : "";
+          item.textContent = `${where}${warningLabel(warning.code)} — ${
+            (warning.participant_ids || []).map(nameOf).join(", ")
+          }`;
+          warnings.appendChild(item);
+        });
+        swissPreview.appendChild(warnings);
+      }
+    }
     const grid = document.createElement("div");
     grid.className = "ip-swiss-table-grid";
     (preview.matches || []).forEach((match) => {
@@ -6298,10 +7169,11 @@
     const swiss = state.swiss;
     if (!swiss) return;
     if (state.pairingPreview) {
+      const imported = state.pairingPreview.imported === true;
       const confirm = createButton(
-        "Confirm and publish",
+        imported ? "Confirm import" : "Confirm and publish",
         "ip-btn primary",
-        () => confirmSwissPreview(confirm)
+        () => (imported ? confirmImportedSwissPreview(confirm) : confirmSwissPreview(confirm))
       );
       const discard = createButton("Discard preview", "ip-btn", () => {
         state.pairingPreview = null;
@@ -6309,6 +7181,13 @@
         setStatus("");
       });
       swissActions.appendChild(confirm);
+      if (imported) {
+        swissActions.appendChild(createButton("Edit import", "ip-btn", () => {
+          state.pairingPreview = null;
+          renderSwiss();
+          openSwissImportModal("pairings");
+        }));
+      }
       swissActions.appendChild(discard);
       return;
     }
@@ -6364,6 +7243,25 @@
         badge.textContent = "Swiss complete";
         swissActions.appendChild(badge);
       }
+    }
+    if (!round && swiss.can_generate_first_round) {
+      swissActions.appendChild(createButton(
+        "Import round 1",
+        "ip-btn",
+        () => openSwissImportModal("pairings")
+      ));
+    } else if (round?.status === "completed" && swiss.can_generate_next_round) {
+      swissActions.appendChild(createButton(
+        `Import round ${swiss.next_round_number}`,
+        "ip-btn",
+        () => openSwissImportModal("pairings")
+      ));
+    } else if (round?.status === "published") {
+      swissActions.appendChild(createButton(
+        "Import results",
+        "ip-btn",
+        () => openSwissImportModal("results")
+      ));
     }
     if (round && swiss.can_cancel_current_round) {
       const cancel = createButton(
