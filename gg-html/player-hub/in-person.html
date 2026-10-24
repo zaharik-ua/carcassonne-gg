@@ -2420,7 +2420,7 @@
             <button id="ipAddTestPlayersBtn" class="ip-btn test-action ip-hidden" type="button">Add test players</button>
             <div id="ipPlayersFilter" class="ip-players-filter"></div>
             <button id="ipAddPlayersBulkBtn" class="ip-btn" type="button">Bulk add</button>
-            <button id="ipFillBgaIdsBtn" class="ip-btn" type="button" title="Update BGA ID, GG Rank, GG Elo and Current BGA Elo from the GG database">Update players</button>
+            <button id="ipFillBgaIdsBtn" class="ip-btn" type="button" title="Update BGA ID, GG Rank, GG Elo and Current BGA Elo from the GG database">Get players data</button>
             <button id="ipAddPlayerBtn" class="ip-btn primary" type="button">Add player</button>
           </div>
         </div>
@@ -2500,6 +2500,7 @@
     playoffSetupStarters: {},
     activeTab: "players",
     playerFormController: null,
+    editingParticipantId: null,
     currentUser: null,
   };
 
@@ -4175,7 +4176,12 @@
       linkParticipantBgaNickname(main, participant, tournament);
       const actions = document.createElement("div");
       actions.className = "ip-actions";
-      actions.appendChild(createButton("Edit", "ip-btn", () => openPlayerForm(participant, row)));
+      const edit = createButton("Edit", "ip-btn", () => {
+        if (state.editingParticipantId === participant.id) closePlayerForm();
+        else openPlayerForm(participant, row);
+      });
+      edit.setAttribute("aria-expanded", "false");
+      actions.appendChild(edit);
       row.appendChild(main);
       row.appendChild(actions);
       playersList.appendChild(row);
@@ -4424,6 +4430,16 @@
     firstRow.nameEn.input.focus();
   }
 
+  function closePlayerForm() {
+    const tournament = state.overview?.tournament;
+    state.playerFormController?.abort();
+    state.playerFormController = null;
+    playerFormMount.innerHTML = "";
+    addPlayerBtn.disabled = playerCreationDisabled(tournament);
+    addPlayersBulkBtn.disabled = playerCreationDisabled(tournament);
+    setStatus("");
+  }
+
   function openPlayerForm(participant = null, row = null) {
     const tournament = state.overview?.tournament;
     if (!tournament) return;
@@ -4435,7 +4451,15 @@
     playerFormMount.innerHTML = "";
     const form = document.createElement("form");
     form.className = "ip-form";
-    formController.signal.addEventListener("abort", () => form.remove(), { once: true });
+    // A second click on the same row's Edit closes this form.
+    const editButton = participant ? row?.querySelector(".ip-actions .ip-btn") : null;
+    state.editingParticipantId = participant?.id || null;
+    editButton?.setAttribute("aria-expanded", "true");
+    formController.signal.addEventListener("abort", () => {
+      form.remove();
+      editButton?.setAttribute("aria-expanded", "false");
+      if (state.editingParticipantId === (participant?.id || null)) state.editingParticipantId = null;
+    }, { once: true });
     const nameEn = createField("Name (English) *");
     nameEn.input.value = participant?.name_en || "";
     const nameLocal = tournament.scope === "local" ? createField("Name (local)") : null;
@@ -4499,14 +4523,7 @@
     save.className = "ip-btn primary";
     save.textContent = participant ? "Save" : "Create";
     actions.appendChild(save);
-    actions.appendChild(createButton("Cancel", "ip-btn", () => {
-      formController.abort();
-      if (state.playerFormController === formController) state.playerFormController = null;
-      playerFormMount.innerHTML = "";
-      addPlayerBtn.disabled = playerCreationDisabled(tournament);
-      addPlayersBulkBtn.disabled = playerCreationDisabled(tournament);
-      setStatus("");
-    }));
+    actions.appendChild(createButton("Cancel", "ip-btn", closePlayerForm));
     if (participant) {
       if (
         ["swiss", "playoff"].includes(tournament.status)
@@ -4531,8 +4548,7 @@
       deleteButton.disabled = participant.has_matches || !!tournament.has_started_swiss;
       actions.appendChild(deleteButton);
     }
-    if (participant) form.appendChild(actions);
-    else form.insertBefore(actions, form.firstChild);
+    form.insertBefore(actions, form.firstChild);
 
     async function saveParticipant(confirmDuplicate) {
       save.disabled = true;
@@ -5906,7 +5922,7 @@
     actions.className = "ip-modal-actions";
     const cancel = createButton("Cancel", "ip-btn", () => closeModal());
     const submit = createButton(
-      isResults ? "Save results" : `Preview round ${roundNumber}`,
+      isResults ? "Save results" : "Preview import",
       "ip-btn primary",
       () => submitImport()
     );
@@ -6428,7 +6444,7 @@
       } catch (requestError) {
         saving = false;
         cancel.disabled = false;
-        submit.textContent = isResults ? "Save results" : `Preview round ${roundNumber}`;
+        submit.textContent = isResults ? "Save results" : "Preview import";
         submit.disabled = false;
         const failedRow = payloadRows[Number(requestError.details?.row_number) - 1];
         if (failedRow?.element) {
@@ -7408,7 +7424,7 @@
       const empty = document.createElement("div");
       empty.className = "ip-empty";
       empty.textContent = state.overview?.tournament?.status === "check_in"
-        ? "Complete check-in, then preview the first Swiss round."
+        ? "Complete check-in, then generate or import the first Swiss round."
         : "Swiss rounds have not started.";
       swissMatches.appendChild(empty);
       return;
@@ -7599,12 +7615,15 @@
       );
       swissActions.appendChild(autoFill);
     }
+    const generateHint = "Builds pairings for review. Nothing is published until you confirm.";
     if (!round && swiss.can_generate_first_round && state.overview?.readiness?.ready) {
-      swissActions.appendChild(createButton(
-        "Preview first round",
+      const generate = createButton(
+        "Generate & preview round 1",
         "ip-btn primary",
         previewNextSwissRound
-      ));
+      );
+      generate.title = generateHint;
+      swissActions.appendChild(generate);
     } else if (round?.status === "draft") {
       const publish = createButton("Publish round", "ip-btn primary", () => publishSwissRound(round, publish));
       swissActions.appendChild(publish);
@@ -7612,7 +7631,11 @@
       round?.status === "published"
       && round.progress.completed === round.progress.total
     ) {
-      const complete = createButton("Complete round", "ip-btn primary", () => completeSwissRound(round, complete));
+      const complete = createButton(
+        `Complete round ${round.round_number}`,
+        "ip-btn primary",
+        () => completeSwissRound(round, complete)
+      );
       swissActions.appendChild(complete);
     } else if (round?.status === "completed") {
       if (swiss.can_reopen_current_round) {
@@ -7624,11 +7647,13 @@
         swissActions.appendChild(reopen);
       }
       if (swiss.can_generate_next_round) {
-        swissActions.appendChild(createButton(
-          `Preview round ${swiss.next_round_number}`,
+        const generate = createButton(
+          `Generate & preview round ${swiss.next_round_number}`,
           "ip-btn primary",
           previewNextSwissRound
-        ));
+        );
+        generate.title = generateHint;
+        swissActions.appendChild(generate);
       } else if (swiss.swiss_complete) {
         const badge = document.createElement("span");
         badge.className = "ip-badge";
@@ -8940,7 +8965,7 @@
   addPlayersBulkBtn.addEventListener("click", openBulkPlayerForm);
   fillBgaIdsBtn.addEventListener("click", async () => {
     fillBgaIdsBtn.disabled = true;
-    fillBgaIdsBtn.textContent = "Updating...";
+    fillBgaIdsBtn.textContent = "Getting data...";
     try {
       const result = await apiJson(tournamentUrl("/participants/fill-bga-ids"), {
         method: "POST",
@@ -8951,7 +8976,7 @@
     } catch (error) {
       setStatus(error.message || "Failed to update player data.", "error");
     } finally {
-      fillBgaIdsBtn.textContent = "Update players";
+      fillBgaIdsBtn.textContent = "Get players data";
       const tournament = state.overview?.tournament;
       fillBgaIdsBtn.disabled = ["cancelled", "completed"].includes(String(tournament?.status || ""))
         || !(state.overview?.participants || []).some((participant) => participant.bga_id || participant.bga_nickname);

@@ -512,9 +512,26 @@
     box-shadow: 0 12px 30px rgba(0, 0, 0, 0.35);
   }
 
+  .players-table .player-flag-mobile,
+  .label-short {
+    display: none;
+  }
+
   @media (max-width: 768px) {
-    .players-table .col-elo {
+    .players-table .col-elo,
+    .players-table .col-assoc,
+    .swiss-standings-table .col-played,
+    .label-full {
       display: none;
+    }
+
+    .players-table .player-flag-mobile {
+      display: inline-block;
+      margin-right: 7px;
+    }
+
+    .label-short {
+      display: inline;
     }
   }
 
@@ -656,7 +673,37 @@
   .rounds-player-starter-icon {
     width: 10px;
     height: 10px;
+    margin-left: 7px;
     object-fit: contain;
+    vertical-align: middle;
+  }
+
+  .rounds-player {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 7px;
+  }
+
+  .rounds-player-name {
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+
+  @media (max-width: 768px) {
+    .match-table td {
+      padding: 6px 3px;
+    }
+
+    .rounds-player {
+      flex-direction: column;
+      gap: 3px;
+    }
+
+    .rounds-board .yt-icon {
+      display: block;
+      margin: 3px 0 0;
+    }
   }
 
   #tab-playoffs-content .playoff-starter-legend {
@@ -840,7 +887,7 @@
   // === GLOBAL CONFIG FOR PLAYOFF BRACKET ===
   const BRACKET_MARGIN = 15;
   const MATCH_HEIGHT = 70;
-  const MATCH_WIDTH = 300;
+  const MATCH_WIDTH = window.matchMedia("(max-width: 768px)").matches ? 200 : 300;
   const ROUND_TITLE_TO_MATCH_SPACING = 55;
   const VERTICAL_SPACING = 40;
   const HORIZONTAL_SPACING = 50;
@@ -1368,7 +1415,7 @@
     thPlayer.style.textAlign = "left";
     headTr.appendChild(thPlayer);
     const thAssoc = document.createElement("th");
-    thAssoc.className = "data-header";
+    thAssoc.className = "data-header col-assoc";
     thAssoc.textContent = "Association";
     thAssoc.style.textAlign = "left";
     headTr.appendChild(thAssoc);
@@ -1486,11 +1533,19 @@
       const nameSpan = document.createElement("span");
       nameSpan.className = "data-normal";
       nameSpan.textContent = (p.player_name_en || p.player_name || "");
+      if (p.flag || p.avatar) {
+        const mobileFlag = document.createElement("img");
+        mobileFlag.src = p.flag || p.avatar;
+        mobileFlag.className = "player-logo player-flag-mobile";
+        mobileFlag.alt = "";
+        tdPlayer.appendChild(mobileFlag);
+      }
       tdPlayer.appendChild(nameSpan);
       tr.appendChild(tdPlayer);
 
       // Association: flag + association
       const tdAssoc = document.createElement("td");
+      tdAssoc.className = "col-assoc";
       tdAssoc.style.textAlign = "left";
       const assocWrap = document.createElement("div");
       assocWrap.style.display = "flex";
@@ -1822,14 +1877,14 @@
     // single table layout
 
     const table = document.createElement("table");
-    table.className = "group-table";
+    table.className = "group-table swiss-standings-table";
     table.style.minWidth = "280px";
     table.innerHTML = `
       <tr>
         <th class=\"data-header\" style=\"width:10%; min-width:40px;\">#</th>
         <th class=\"data-header\" style=\"text-align:left;\">Player</th>
-        <th class=\"data-header\">Played</th>
-        <th class=\"data-header\">Points</th>
+        <th class=\"data-header col-played\">Played</th>
+        <th class=\"data-header\"><span class=\"label-full\">Points</span><span class=\"label-short\">Pts</span></th>
         <th class=\"data-header\">W.2</th>
         <th class=\"data-header\">W.3</th>
         <th class=\"data-header\">Diff. VP</th>
@@ -1851,7 +1906,7 @@
       tr.innerHTML = `
         <td>${rankHtml}</td>
         <td style=\"text-align:left;\"><div style=\"display:flex; align-items:center; gap:7px;\">${avatarHtml}${nameHtml}</div></td>
-        <td><span class=\"data-normal\">${row.played ?? ''}</span></td>
+        <td class=\"col-played\"><span class=\"data-normal\">${row.played ?? ''}</span></td>
         <td><span class=\"data-normal standings-points\">${row.wins ?? ''}</span></td>
         <td><span class=\"data-normal\">${row.solkoff1 ?? ''}</span></td>
         <td><span class=\"data-normal\">${row.solkoff2 ?? ''}</span></td>
@@ -2032,20 +2087,18 @@
         const timeLostTitleA = timeLostSide === 'A' ? ' title="Lost on time"' : '';
         const timeLostTitleB = timeLostSide === 'B' ? ' title="Lost on time"' : '';
         row.innerHTML = `
-          <td class="rounds-board">${g.board ? `<span class=\"data-normal\">Board: ${g.board}</span>${String(g.board) === '1' ? ' <img src=\"https://carcassonne.gg/gallery/YouTube_full-color_icon_(2017).svg-ts1700987678.png\" alt=\"YouTube\" class=\"yt-icon\">' : ''}` : ''}</td>
+          <td class="rounds-board">${g.board ? `<span class=\"data-normal\"><span class=\"label-full\">Board: </span>${g.board}</span>${String(g.board) === '1' ? ' <img src=\"https://carcassonne.gg/gallery/YouTube_full-color_icon_(2017).svg-ts1700987678.png\" alt=\"YouTube\" class=\"yt-icon\">' : ''}` : ''}</td>
           <td class="player-cell">
-            <div style="display:flex; align-items:center; justify-content:center; gap:7px;">
+            <div class="rounds-player">
               ${p1Avatar ? `<img src="${p1Avatar}" class="player-logo">` : ''}
-              <span class="${isWinnerA ? 'data-winner' : 'data-normal'}">${p1Name}</span>
-              ${iconA}
+              <span class="rounds-player-name"><span class="${isWinnerA ? 'data-winner' : 'data-normal'}">${p1Name}</span>${iconA}</span>
             </div>
           </td>
           <td class="score-cell"><span class="rounds-score-part${timeLostClassA}"${timeLostTitleA}><span class="${isWinnerA ? 'data-winner' : 'data-normal'}">${pt1 ?? ''}</span></span> - <span class="rounds-score-part${timeLostClassB}"${timeLostTitleB}><span class="${isWinnerB ? 'data-winner' : 'data-normal'}">${pt2 ?? ''}</span></span></td>
           <td class="player-cell">
-            <div style="display:flex; align-items:center; justify-content:center; gap:7px;">
+            <div class="rounds-player">
               ${p2Avatar ? `<img src="${p2Avatar}" class="player-logo">` : ''}
-              <span class="${isWinnerB ? 'data-winner' : 'data-normal'}">${p2Name}</span>
-              ${iconB}
+              <span class="rounds-player-name"><span class="${isWinnerB ? 'data-winner' : 'data-normal'}">${p2Name}</span>${iconB}</span>
             </div>
           </td>`;
         table.appendChild(row);

@@ -230,11 +230,11 @@ test("In-Person page lists accessible tournaments and opens a dedicated tourname
 test("In-Person page contains the complete Swiss organizer workflow", () => {
   [
     "Swiss rounds",
-    "Preview first round",
+    "Generate & preview round 1",
     "Confirm and publish",
     "Publish round",
     "Save result",
-    "Complete round",
+    "`Complete round ${round.round_number}`",
     "Undo complete round",
     "Swiss standings",
     "Solkoff1",
@@ -427,11 +427,17 @@ test("participant row actions are moved into the Edit form", () => {
 
 test("the add-player form disables its launcher and keeps primary actions at the top", () => {
   const addForm = inPersonHtml.slice(
-    inPersonHtml.indexOf("function openPlayerForm"),
+    inPersonHtml.indexOf("function closePlayerForm"),
     inPersonHtml.indexOf("async function deletePlayer")
   );
   assert.match(addForm, /addPlayerBtn\.disabled = !participant \|\| playerCreationDisabled\(tournament\)/);
-  assert.match(addForm, /else form\.insertBefore\(actions, form\.firstChild\)/);
+  assert.match(addForm, /\n    form\.insertBefore\(actions, form\.firstChild\);/, "add and edit forms keep actions on top");
+  assert.doesNotMatch(addForm, /form\.appendChild\(actions\)/);
+  assert.match(
+    inPersonHtml,
+    /if \(state\.editingParticipantId === participant\.id\) closePlayerForm\(\);\s*else openPlayerForm\(participant, row\);/,
+    "a second Edit click closes the open edit form"
+  );
   assert.match(addForm, /addPlayerBtn\.disabled = playerCreationDisabled\(tournament\)/);
 });
 
@@ -639,6 +645,7 @@ test("In-Person page imports external Swiss pairings and results from pasted tex
   [
     "Import round 1",
     "Import results",
+    "Preview import",
     "Confirm import",
     "Edit import",
     "Complete the round after import",
@@ -758,5 +765,5 @@ test("Players links BGA nicknames only when the participant has a BGA ID", () =>
   assert.equal(plainMeta.textContent, "BGA: MissingId");
   assert.equal(plainMeta.children.length, 0);
   assert.match(inPersonHtml, /id="ipAddPlayersBulkBtn"[^>]*>Bulk add<\/button>/);
-  assert.match(inPersonHtml, /id="ipFillBgaIdsBtn"[^>]*>Update players<\/button>/);
+  assert.match(inPersonHtml, /id="ipFillBgaIdsBtn"[^>]*>Get players data<\/button>/);
 });
