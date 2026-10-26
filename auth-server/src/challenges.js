@@ -9,6 +9,7 @@ const CHALLENGE_AUTO_CLOSED_COMMENTS = Object.freeze({
   match_removed: "Automatically closed: linked match was removed.",
   period_closed: "Automatically closed: challenge period is closed.",
   player_unavailable: "Automatically closed: a player became unavailable.",
+  tpr_target_reached: "Automatically closed: tournament match limit (TPR target) reached.",
 });
 
 export function getChallengeAutoClosedComment(reason) {
@@ -191,18 +192,25 @@ export function buildChallengeMatchProgress(matchesCount, matchesPlayedCount, co
   };
 }
 
+function normalizeChallengeCount(value) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : 0;
+}
+
 export function buildChallengeTournamentProgress(
   matchesPlayedCount,
   configuredTargetGames,
-  hasLinkedTournament = true
+  hasLinkedTournament = true,
+  matchesScheduledCount = 0
 ) {
-  const parsedPlayedCount = Number(matchesPlayedCount);
-  const playedCount = Number.isFinite(parsedPlayedCount) && parsedPlayedCount > 0
-    ? Math.floor(parsedPlayedCount)
-    : 0;
+  const playedCount = normalizeChallengeCount(matchesPlayedCount);
+  const scheduledCount = normalizeChallengeCount(matchesScheduledCount);
+  const committedCount = playedCount + scheduledCount;
   if (!hasLinkedTournament) {
     return {
       tournament_matches_played_count: playedCount,
+      tournament_matches_scheduled_count: scheduledCount,
+      tournament_matches_committed_count: committedCount,
       tpr_target_games: null,
       tournament_matches_remaining: null,
       is_tpr_target_reached: false,
@@ -214,10 +222,39 @@ export function buildChallengeTournamentProgress(
   ) || DEFAULT_TPR_TARGET_GAMES;
   return {
     tournament_matches_played_count: playedCount,
+    tournament_matches_scheduled_count: scheduledCount,
+    tournament_matches_committed_count: committedCount,
     tpr_target_games: targetGames,
-    tournament_matches_remaining: Math.max(0, targetGames - playedCount),
-    is_tpr_target_reached: playedCount >= targetGames,
+    tournament_matches_remaining: Math.max(0, targetGames - committedCount),
+    is_tpr_target_reached: committedCount >= targetGames,
   };
+}
+
+// FROM/WHERE clause selecting a tournament's duels (aliased tournament_duel) that count
+// toward the TPR target: "played" = scored Done duels, "scheduled" = Planned / In progress.
+// tournamentIdSql is an SQL expression (a column reference or "?").
+export function buildChallengeTournamentDuelsSql(tournamentIdSql, kind = "played") {
+  const statusSql = kind === "scheduled"
+    ? "lower(trim(COALESCE(tournament_duel.status, ''))) IN ('planned', 'in progress')"
+    : `lower(trim(COALESCE(tournament_duel.status, ''))) = 'done'
+        AND tournament_duel.dw1 IS NOT NULL
+        AND tournament_duel.dw2 IS NOT NULL`;
+  return `
+    FROM duels tournament_duel
+    LEFT JOIN matches tournament_match
+      ON trim(COALESCE(tournament_match.id, '')) = trim(COALESCE(tournament_duel.match_id, ''))
+     AND tournament_match.deleted_at IS NULL
+    WHERE upper(trim(COALESCE(
+        NULLIF(trim(tournament_duel.tournament_id), ''),
+        tournament_match.tournament_id,
+        ''
+      ))) = upper(trim(${tournamentIdSql}))
+      AND ${statusSql}
+      AND tournament_duel.deleted_at IS NULL
+      AND trim(COALESCE(tournament_duel.player_1_id, '')) <> ''
+      AND trim(COALESCE(tournament_duel.player_2_id, '')) <> ''
+      AND trim(tournament_duel.player_1_id) <> trim(tournament_duel.player_2_id)
+  `;
 }
 
 export async function loadChallengeTournamentProgress(db, options = {}) {
@@ -226,6 +263,12 @@ export async function loadChallengeTournamentProgress(db, options = {}) {
   if (!tournamentId || !playerId) {
     return buildChallengeTournamentProgress(0, null, false);
   }
+  const playerConditionSql = `
+    AND (
+      trim(COALESCE(tournament_duel.player_1_id, '')) = trim(?)
+      OR trim(COALESCE(tournament_duel.player_2_id, '')) = trim(?)
+    )
+  `;
   const row = await dbGet(
     db,
     `
@@ -234,37 +277,25 @@ export async function loadChallengeTournamentProgress(db, options = {}) {
         COALESCE(t.tpr_target_games, ${DEFAULT_TPR_TARGET_GAMES}) AS tpr_target_games,
         (
           SELECT COUNT(*)
-          FROM duels tournament_duel
-          LEFT JOIN matches tournament_match
-            ON trim(COALESCE(tournament_match.id, '')) = trim(COALESCE(tournament_duel.match_id, ''))
-           AND tournament_match.deleted_at IS NULL
-          WHERE upper(trim(COALESCE(
-              NULLIF(trim(tournament_duel.tournament_id), ''),
-              tournament_match.tournament_id,
-              ''
-            ))) = upper(trim(t.id))
-            AND lower(trim(COALESCE(tournament_duel.status, ''))) = 'done'
-            AND tournament_duel.deleted_at IS NULL
-            AND tournament_duel.dw1 IS NOT NULL
-            AND tournament_duel.dw2 IS NOT NULL
-            AND trim(COALESCE(tournament_duel.player_1_id, '')) <> ''
-            AND trim(COALESCE(tournament_duel.player_2_id, '')) <> ''
-            AND trim(tournament_duel.player_1_id) <> trim(tournament_duel.player_2_id)
-            AND (
-              trim(COALESCE(tournament_duel.player_1_id, '')) = trim(?)
-              OR trim(COALESCE(tournament_duel.player_2_id, '')) = trim(?)
-            )
-        ) AS tournament_matches_played_count
+          ${buildChallengeTournamentDuelsSql("t.id", "played")}
+          ${playerConditionSql}
+        ) AS tournament_matches_played_count,
+        (
+          SELECT COUNT(*)
+          ${buildChallengeTournamentDuelsSql("t.id", "scheduled")}
+          ${playerConditionSql}
+        ) AS tournament_matches_scheduled_count
       FROM tournaments t
       WHERE upper(trim(COALESCE(t.id, ''))) = upper(trim(?))
       LIMIT 1
     `,
-    [playerId, playerId, tournamentId]
+    [playerId, playerId, playerId, playerId, tournamentId]
   );
   return buildChallengeTournamentProgress(
     row?.tournament_matches_played_count,
     row?.tpr_target_games,
-    !!row?.rivals_tournament_id
+    !!row?.rivals_tournament_id,
+    row?.tournament_matches_scheduled_count
   );
 }
 
@@ -275,57 +306,59 @@ export async function loadChallengeTournamentRecords(db, options = {}) {
   const rows = await dbAll(
     db,
     `
-      WITH completed_tournament_duels AS (
+      WITH counted_tournament_duels AS (
         SELECT
           trim(tournament_duel.player_1_id) AS player_1_id,
           trim(tournament_duel.player_2_id) AS player_2_id,
           CAST(tournament_duel.dw1 AS REAL) AS dw1,
-          CAST(tournament_duel.dw2 AS REAL) AS dw2
-        FROM duels tournament_duel
-        LEFT JOIN matches tournament_match
-          ON trim(COALESCE(tournament_match.id, '')) = trim(COALESCE(tournament_duel.match_id, ''))
-         AND tournament_match.deleted_at IS NULL
-        WHERE upper(trim(COALESCE(
-            NULLIF(trim(tournament_duel.tournament_id), ''),
-            tournament_match.tournament_id,
-            ''
-          ))) = upper(trim(?))
-          AND lower(trim(COALESCE(tournament_duel.status, ''))) = 'done'
-          AND tournament_duel.deleted_at IS NULL
-          AND tournament_duel.dw1 IS NOT NULL
-          AND tournament_duel.dw2 IS NOT NULL
-          AND trim(COALESCE(tournament_duel.player_1_id, '')) <> ''
-          AND trim(COALESCE(tournament_duel.player_2_id, '')) <> ''
-          AND trim(tournament_duel.player_1_id) <> trim(tournament_duel.player_2_id)
+          CAST(tournament_duel.dw2 AS REAL) AS dw2,
+          1 AS is_played,
+          0 AS is_scheduled
+        ${buildChallengeTournamentDuelsSql("?", "played")}
+        UNION ALL
+        SELECT
+          trim(tournament_duel.player_1_id) AS player_1_id,
+          trim(tournament_duel.player_2_id) AS player_2_id,
+          NULL AS dw1,
+          NULL AS dw2,
+          0 AS is_played,
+          1 AS is_scheduled
+        ${buildChallengeTournamentDuelsSql("?", "scheduled")}
       ),
       player_results AS (
         SELECT
           player_1_id AS player_id,
-          CASE WHEN dw1 > dw2 THEN 1 ELSE 0 END AS is_win,
-          CASE WHEN dw1 < dw2 THEN 1 ELSE 0 END AS is_loss
-        FROM completed_tournament_duels
+          is_played,
+          is_scheduled,
+          CASE WHEN is_played = 1 AND dw1 > dw2 THEN 1 ELSE 0 END AS is_win,
+          CASE WHEN is_played = 1 AND dw1 < dw2 THEN 1 ELSE 0 END AS is_loss
+        FROM counted_tournament_duels
         UNION ALL
         SELECT
           player_2_id AS player_id,
-          CASE WHEN dw2 > dw1 THEN 1 ELSE 0 END AS is_win,
-          CASE WHEN dw2 < dw1 THEN 1 ELSE 0 END AS is_loss
-        FROM completed_tournament_duels
+          is_played,
+          is_scheduled,
+          CASE WHEN is_played = 1 AND dw2 > dw1 THEN 1 ELSE 0 END AS is_win,
+          CASE WHEN is_played = 1 AND dw2 < dw1 THEN 1 ELSE 0 END AS is_loss
+        FROM counted_tournament_duels
       )
       SELECT
         player_id,
-        COUNT(*) AS tournament_matches_played_count,
+        COALESCE(SUM(is_played), 0) AS tournament_matches_played_count,
+        COALESCE(SUM(is_scheduled), 0) AS tournament_matches_scheduled_count,
         COALESCE(SUM(is_win), 0) AS tournament_wins,
         COALESCE(SUM(is_loss), 0) AS tournament_losses
       FROM player_results
       GROUP BY player_id
       ORDER BY player_id COLLATE NOCASE ASC
     `,
-    [tournamentId]
+    [tournamentId, tournamentId]
   );
 
   return (rows || []).map((row) => ({
     player_id: normalizeChallengeIdentifier(row?.player_id),
     tournament_matches_played_count: Math.max(0, Number(row?.tournament_matches_played_count) || 0),
+    tournament_matches_scheduled_count: Math.max(0, Number(row?.tournament_matches_scheduled_count) || 0),
     tournament_wins: Math.max(0, Number(row?.tournament_wins) || 0),
     tournament_losses: Math.max(0, Number(row?.tournament_losses) || 0),
   })).filter((row) => row.player_id);
@@ -495,6 +528,13 @@ export async function closeChallengePendingRequestsAfterAccept(db, options = {})
       .map(normalizeChallengeIdentifier)
       .filter((playerId) => playerId === player1Id || playerId === player2Id)
   ));
+  const tprTargetReachedPlayerIds = rivalsTournamentId
+    ? Array.from(new Set(
+      (Array.isArray(options.tprTargetReachedPlayerIds) ? options.tprTargetReachedPlayerIds : [])
+        .map(normalizeChallengeIdentifier)
+        .filter((playerId) => playerId === player1Id || playerId === player2Id)
+    ))
+    : [];
   if (!periodId || !acceptedRequestId || !player1Id || !player2Id) {
     return {
       auto_cancelled_request_ids: [],
@@ -546,6 +586,24 @@ export async function closeChallengePendingRequestsAfterAccept(db, options = {})
     `);
     targetParams.push(periodId, ...saturatedPlayerIds, ...saturatedPlayerIds);
   }
+  if (tprTargetReachedPlayerIds.length) {
+    const playerPlaceholders = tprTargetReachedPlayerIds.map(() => "?").join(", ");
+    targetConditions.push(`
+      (
+        (
+          cr.player_1_id IN (${playerPlaceholders})
+          OR cr.player_2_id IN (${playerPlaceholders})
+        )
+        AND EXISTS (
+          SELECT 1
+          FROM challenge_periods tpr_period
+          WHERE tpr_period.id = cr.period_id
+            AND upper(trim(COALESCE(tpr_period.rivals_tournament_id, ''))) = upper(trim(?))
+        )
+      )
+    `);
+    targetParams.push(...tprTargetReachedPlayerIds, ...tprTargetReachedPlayerIds, rivalsTournamentId);
+  }
 
   const targetRequests = await dbAll(
     db,
@@ -562,13 +620,18 @@ export async function closeChallengePendingRequestsAfterAccept(db, options = {})
   const targetRequestIds = targetRequests
     .map((request) => normalizeChallengeIdentifier(request?.id))
     .filter(Boolean);
+  const requestInvolvesAnyPlayer = (request, playerIds) => playerIds.some((playerId) => (
+    normalizeChallengeIdentifier(request?.player_1_id) === playerId
+    || normalizeChallengeIdentifier(request?.player_2_id) === playerId
+  ));
+  const tprTargetRequestIds = targetRequests
+    .filter((request) => requestInvolvesAnyPlayer(request, tprTargetReachedPlayerIds))
+    .map((request) => normalizeChallengeIdentifier(request?.id))
+    .filter(Boolean);
   const matchLimitRequestIds = targetRequests
     .filter((request) => (
       normalizeChallengeIdentifier(request?.period_id) === periodId
-      && saturatedPlayerIds.some((playerId) => (
-        normalizeChallengeIdentifier(request?.player_1_id) === playerId
-        || normalizeChallengeIdentifier(request?.player_2_id) === playerId
-      ))
+      && requestInvolvesAnyPlayer(request, saturatedPlayerIds)
     ))
     .map((request) => normalizeChallengeIdentifier(request?.id))
     .filter(Boolean);
@@ -581,19 +644,26 @@ export async function closeChallengePendingRequestsAfterAccept(db, options = {})
   }
 
   const requestPlaceholders = targetRequestIds.map(() => "?").join(", ");
-  const requestCommentExpression = matchLimitRequestIds.length
+  // Earlier cases take precedence: TPR target, then period match limit, then the default.
+  const requestCommentCases = [
+    [tprTargetRequestIds, "tpr_target_reached"],
+    [matchLimitRequestIds, "match_limit_reached"],
+  ].filter(([requestIds]) => requestIds.length);
+  const requestCommentExpression = requestCommentCases.length
     ? `CASE
-        WHEN id IN (${matchLimitRequestIds.map(() => "?").join(", ")}) THEN ?
+        ${requestCommentCases.map(([requestIds]) => (
+          `WHEN id IN (${requestIds.map(() => "?").join(", ")}) THEN ?`
+        )).join("\n        ")}
         ELSE ?
       END`
     : "?";
-  const requestCommentParams = matchLimitRequestIds.length
-    ? [
-      ...matchLimitRequestIds,
-      getChallengeAutoClosedComment("match_limit_reached"),
-      getChallengeAutoClosedComment("another_match_accepted"),
-    ]
-    : [getChallengeAutoClosedComment("another_match_accepted")];
+  const requestCommentParams = [
+    ...requestCommentCases.flatMap(([requestIds, reason]) => [
+      ...requestIds,
+      getChallengeAutoClosedComment(reason),
+    ]),
+    getChallengeAutoClosedComment("another_match_accepted"),
+  ];
   const duelResult = await dbRun(
     db,
     `

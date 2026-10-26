@@ -39,6 +39,7 @@ import {
   CHALLENGE_RIVALS_PAIR_DUEL_STATUSES,
   buildChallengeMatchCapacity,
   buildChallengeMatchProgress,
+  buildChallengeTournamentDuelsSql,
   buildChallengeTournamentProgress,
   closeChallengePendingRequestsAfterAccept,
   didChallengeDuelTransitionToDone,
@@ -9867,7 +9868,8 @@ function mapChallengeOpponent(row) {
   const tournamentProgress = buildChallengeTournamentProgress(
     row?.tournament_matches_played_count,
     row?.tpr_target_games,
-    row?.tpr_target_games !== null && row?.tpr_target_games !== undefined
+    row?.tpr_target_games !== null && row?.tpr_target_games !== undefined,
+    row?.tournament_matches_scheduled_count
   );
   return {
     player_id: normalizeNullableText(row?.player_id),
@@ -10088,7 +10090,7 @@ async function loadChallengeTournamentProgressForPlayer(period, playerId) {
 function createChallengeTprTargetReachedError(progress, subject = "You") {
   const targetGames = Math.max(1, Number.parseInt(progress?.tpr_target_games, 10) || 10);
   const error = new Error(
-    `${subject} ${subject === "You" ? "have" : "has"} already played ${targetGames} `
+    `${subject} ${subject === "You" ? "have" : "has"} already played or scheduled ${targetGames} `
       + `${targetGames === 1 ? "match" : "matches"} in this tournament and reached its TPR target`
   );
   error.httpStatus = 409;
@@ -10360,7 +10362,8 @@ function mapChallengePeriodForPlayer(row) {
     row?.tpr_target_games,
     !!normalizeNullableText(row?.rivals_tournament_id)
       && row?.tpr_target_games !== null
-      && row?.tpr_target_games !== undefined
+      && row?.tpr_target_games !== undefined,
+    row?.tournament_matches_scheduled_count
   );
 
   return {
@@ -10489,25 +10492,14 @@ app.get("/challenge-periods/player", async (req, res) => {
           ) AS matches_played_count,
           (
             SELECT COUNT(*)
-            FROM duels tournament_duel
-            LEFT JOIN matches tournament_match
-              ON trim(COALESCE(tournament_match.id, '')) = trim(COALESCE(tournament_duel.match_id, ''))
-             AND tournament_match.deleted_at IS NULL
-            WHERE rivals_tournament.id IS NOT NULL
-              AND upper(trim(COALESCE(
-                NULLIF(trim(tournament_duel.tournament_id), ''),
-                tournament_match.tournament_id,
-                ''
-              ))) = upper(trim(rivals_tournament.id))
-              AND lower(trim(COALESCE(tournament_duel.status, ''))) = 'done'
-              AND tournament_duel.deleted_at IS NULL
-              AND tournament_duel.dw1 IS NOT NULL
-              AND tournament_duel.dw2 IS NOT NULL
-              AND trim(COALESCE(tournament_duel.player_1_id, '')) <> ''
-              AND trim(COALESCE(tournament_duel.player_2_id, '')) <> ''
-              AND trim(tournament_duel.player_1_id) <> trim(tournament_duel.player_2_id)
+            ${buildChallengeTournamentDuelsSql("rivals_tournament.id", "played")}
               AND (tournament_duel.player_1_id = ? OR tournament_duel.player_2_id = ?)
           ) AS tournament_matches_played_count,
+          (
+            SELECT COUNT(*)
+            ${buildChallengeTournamentDuelsSql("rivals_tournament.id", "scheduled")}
+              AND (tournament_duel.player_1_id = ? OR tournament_duel.player_2_id = ?)
+          ) AS tournament_matches_scheduled_count,
           cpp.availability_start_1_utc,
           cpp.availability_end_1_utc,
           cpp.availability_start_2_utc,
@@ -10526,6 +10518,8 @@ app.get("/challenge-periods/player", async (req, res) => {
       [
         playerId,
         ...slotStatuses,
+        playerId,
+        playerId,
         playerId,
         playerId,
         playerId,
@@ -10701,6 +10695,7 @@ app.get("/challenge-periods/:id/eligible-opponents", async (req, res) => {
         normalizeNullableText(row?.player_id),
         {
           tournament_matches_played_count: Math.max(0, Number(row?.tournament_matches_played_count) || 0),
+          tournament_matches_scheduled_count: Math.max(0, Number(row?.tournament_matches_scheduled_count) || 0),
           tournament_wins: Math.max(0, Number(row?.tournament_wins) || 0),
           tournament_losses: Math.max(0, Number(row?.tournament_losses) || 0),
         },
@@ -10733,13 +10728,15 @@ app.get("/challenge-periods/:id/eligible-opponents", async (req, res) => {
       const capacity = buildChallengeMatchCapacity(row?.matches_count, period.max_matches_per_player);
       const tournamentResult = tournamentResultsByPlayerId.get(opponentId) || {
         tournament_matches_played_count: 0,
+        tournament_matches_scheduled_count: 0,
         tournament_wins: 0,
         tournament_losses: 0,
       };
       const tournamentProgress = buildChallengeTournamentProgress(
         tournamentResult.tournament_matches_played_count,
         currentTournamentProgress.tpr_target_games,
-        currentTournamentProgress.tpr_target_games !== null
+        currentTournamentProgress.tpr_target_games !== null,
+        tournamentResult.tournament_matches_scheduled_count
       );
       const periodStatus = normalizeChallengePlayerPeriodStatus(row?.period_player_status);
       const opponentCanBeRequested = isChallengePlayerRequestEligibleStatus(periodStatus)
@@ -12862,6 +12859,13 @@ app.patch("/challenge-periods/:id/requests/:requestId/accept", requireAuthentica
       const saturatedPlayerIds = playerMatchCapacities
         .filter((capacity) => capacity.is_match_limit_reached)
         .map((capacity) => capacity.player_id);
+      const postAcceptTournamentProgress = await Promise.all(
+        acceptedPlayerIds.map((acceptedPlayerId) => (
+          loadChallengeTournamentProgressForPlayer(lockedPeriod, acceptedPlayerId)
+        ))
+      );
+      const tprTargetReachedPlayerIds = acceptedPlayerIds
+        .filter((_acceptedPlayerId, index) => postAcceptTournamentProgress[index].is_tpr_target_reached);
       autoCancellationResult = await closeChallengePendingRequestsAfterAccept(db, {
         periodId,
         rivalsTournamentId: lockedPeriod.rivals_tournament_id,
@@ -12869,6 +12873,7 @@ app.patch("/challenge-periods/:id/requests/:requestId/accept", requireAuthentica
         player1Id: lockedRequest.player_1_id,
         player2Id: lockedRequest.player_2_id,
         saturatedPlayerIds,
+        tprTargetReachedPlayerIds,
         actorPlayerId: playerId,
       });
 

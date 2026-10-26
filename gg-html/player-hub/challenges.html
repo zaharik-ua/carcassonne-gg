@@ -6318,8 +6318,11 @@
     return Number.isInteger(value) && value > 0 ? value : null;
   }
 
-  function getChallengeTournamentPlayedMatchCount(period) {
-    const value = Number.parseInt(String(period?.tournament_matches_played_count ?? "0"), 10);
+  function getChallengeTournamentCommittedMatchCount(period) {
+    const value = Number.parseInt(
+      String(period?.tournament_matches_committed_count ?? period?.tournament_matches_played_count ?? "0"),
+      10
+    );
     return Number.isInteger(value) && value > 0 ? value : 0;
   }
 
@@ -6328,7 +6331,7 @@
       return period.is_tpr_target_reached;
     }
     const target = getChallengeTournamentTarget(period);
-    return target !== null && getChallengeTournamentPlayedMatchCount(period) >= target;
+    return target !== null && getChallengeTournamentCommittedMatchCount(period) >= target;
   }
 
   function shouldCollapseChallengeActionSections(period) {
@@ -6372,7 +6375,7 @@
 
   function getChallengeTprTargetReachedMessage(period, subject = "You") {
     const target = getChallengeTournamentTarget(period) || 10;
-    return `${subject} ${subject === "You" ? "have" : "has"} already played ${target} `
+    return `${subject} ${subject === "You" ? "have" : "has"} already played or scheduled ${target} `
       + `${target === 1 ? "match" : "matches"} in this tournament.`;
   }
 
@@ -8685,6 +8688,8 @@
           "rivals_tournament_id",
           "rivals_tournament_short_title",
           "tournament_matches_played_count",
+          "tournament_matches_scheduled_count",
+          "tournament_matches_committed_count",
           "tpr_target_games",
           "tournament_matches_remaining",
           "is_tpr_target_reached",
@@ -9348,6 +9353,8 @@
           "rivals_tournament_id",
           "rivals_tournament_short_title",
           "tournament_matches_played_count",
+          "tournament_matches_scheduled_count",
+          "tournament_matches_committed_count",
           "tpr_target_games",
           "tournament_matches_remaining",
           "is_tpr_target_reached",

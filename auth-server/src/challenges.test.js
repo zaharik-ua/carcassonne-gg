@@ -248,34 +248,58 @@ test("provides a system comment for every automatic Challenge closure reason", (
   assert.equal(getChallengeAutoClosedComment("unknown"), "Automatically closed.");
 });
 
-test("tracks a player's completed matches against the linked tournament TPR target", () => {
+test("tracks a player's played and scheduled matches against the linked tournament TPR target", () => {
   assert.deepEqual(buildChallengeTournamentProgress(9, 10), {
     tournament_matches_played_count: 9,
+    tournament_matches_scheduled_count: 0,
+    tournament_matches_committed_count: 9,
     tpr_target_games: 10,
     tournament_matches_remaining: 1,
     is_tpr_target_reached: false,
   });
   assert.deepEqual(buildChallengeTournamentProgress(10, 10), {
     tournament_matches_played_count: 10,
+    tournament_matches_scheduled_count: 0,
+    tournament_matches_committed_count: 10,
     tpr_target_games: 10,
     tournament_matches_remaining: 0,
     is_tpr_target_reached: true,
+  });
+  assert.deepEqual(buildChallengeTournamentProgress(9, 10, true, 1), {
+    tournament_matches_played_count: 9,
+    tournament_matches_scheduled_count: 1,
+    tournament_matches_committed_count: 10,
+    tpr_target_games: 10,
+    tournament_matches_remaining: 0,
+    is_tpr_target_reached: true,
+  });
+  assert.deepEqual(buildChallengeTournamentProgress(7, 10, true, 2), {
+    tournament_matches_played_count: 7,
+    tournament_matches_scheduled_count: 2,
+    tournament_matches_committed_count: 9,
+    tpr_target_games: 10,
+    tournament_matches_remaining: 1,
+    is_tpr_target_reached: false,
   });
   assert.deepEqual(buildChallengeTournamentProgress(12, 10), {
     tournament_matches_played_count: 12,
+    tournament_matches_scheduled_count: 0,
+    tournament_matches_committed_count: 12,
     tpr_target_games: 10,
     tournament_matches_remaining: 0,
     is_tpr_target_reached: true,
   });
-  assert.deepEqual(buildChallengeTournamentProgress(12, null, false), {
+  assert.deepEqual(buildChallengeTournamentProgress(12, null, false, 1), {
     tournament_matches_played_count: 12,
+    tournament_matches_scheduled_count: 1,
+    tournament_matches_committed_count: 13,
     tpr_target_games: null,
     tournament_matches_remaining: null,
     is_tpr_target_reached: false,
   });
 });
 
-test("counts only scored Done matches in the linked tournament toward its TPR target", async (t) => {
+test("counts scored Done and Planned / In progress matches in the linked tournament toward its TPR target", async (t) => {
   const db = new sqlite3.Database(":memory:");
   t.after(() => close(db));
   await exec(db, `
@@ -292,12 +316,19 @@ test("counts only scored Done matches in the linked tournament toward its TPR ta
       dw2 INTEGER,
       deleted_at TEXT
     );
-    INSERT INTO tournaments VALUES ('RIVALS-1', 2);
+    INSERT INTO tournaments VALUES ('RIVALS-1', 4);
     INSERT INTO matches VALUES ('match-1', 'RIVALS-1', NULL);
     INSERT INTO duels VALUES
       ('direct-done', 'RIVALS-1', NULL, 'p1', 'p2', 'Done', 2, 0, NULL),
       ('match-done', NULL, 'match-1', 'p3', 'p1', 'done', 1, 2, NULL),
       ('planned', 'RIVALS-1', NULL, 'p1', 'p4', 'Planned', NULL, NULL, NULL),
+      ('in-progress', NULL, 'match-1', 'p8', 'p1', 'In progress', NULL, NULL, NULL),
+      ('draft', 'RIVALS-1', NULL, 'p1', 'p9', 'Draft', NULL, NULL, NULL),
+      ('requested-new-time', 'RIVALS-1', NULL, 'p1', 'p9', 'Requested new time', NULL, NULL, NULL),
+      ('cancelled', 'RIVALS-1', NULL, 'p1', 'p9', 'Cancelled', NULL, NULL, NULL),
+      ('deleted-planned', 'RIVALS-1', NULL, 'p1', 'p9', 'Planned', NULL, NULL, CURRENT_TIMESTAMP),
+      ('self-planned', 'RIVALS-1', NULL, 'p1', 'p1', 'Planned', NULL, NULL, NULL),
+      ('other-planned', 'RIVALS-2', NULL, 'p1', 'p9', 'Planned', NULL, NULL, NULL),
       ('unscored', 'RIVALS-1', NULL, 'p1', 'p5', 'Done', NULL, NULL, NULL),
       ('deleted', 'RIVALS-1', NULL, 'p1', 'p6', 'Done', 2, 1, CURRENT_TIMESTAMP),
       ('self-match', 'RIVALS-1', NULL, 'p1', 'p1', 'Done', 2, 1, NULL),
@@ -312,9 +343,25 @@ test("counts only scored Done matches in the linked tournament toward its TPR ta
     }),
     {
       tournament_matches_played_count: 2,
-      tpr_target_games: 2,
+      tournament_matches_scheduled_count: 2,
+      tournament_matches_committed_count: 4,
+      tpr_target_games: 4,
       tournament_matches_remaining: 0,
       is_tpr_target_reached: true,
+    }
+  );
+  assert.deepEqual(
+    await loadChallengeTournamentProgress(db, {
+      rivalsTournamentId: "rivals-1",
+      playerId: "p4",
+    }),
+    {
+      tournament_matches_played_count: 0,
+      tournament_matches_scheduled_count: 1,
+      tournament_matches_committed_count: 1,
+      tpr_target_games: 4,
+      tournament_matches_remaining: 3,
+      is_tpr_target_reached: false,
     }
   );
   assert.deepEqual(
@@ -324,6 +371,8 @@ test("counts only scored Done matches in the linked tournament toward its TPR ta
     }),
     {
       tournament_matches_played_count: 0,
+      tournament_matches_scheduled_count: 0,
+      tournament_matches_committed_count: 0,
       tpr_target_games: null,
       tournament_matches_remaining: null,
       is_tpr_target_reached: false,
@@ -336,20 +385,37 @@ test("counts only scored Done matches in the linked tournament toward its TPR ta
       {
         player_id: "p1",
         tournament_matches_played_count: 2,
+        tournament_matches_scheduled_count: 2,
         tournament_wins: 2,
         tournament_losses: 0,
       },
       {
         player_id: "p2",
         tournament_matches_played_count: 1,
+        tournament_matches_scheduled_count: 0,
         tournament_wins: 0,
         tournament_losses: 1,
       },
       {
         player_id: "p3",
         tournament_matches_played_count: 1,
+        tournament_matches_scheduled_count: 0,
         tournament_wins: 0,
         tournament_losses: 1,
+      },
+      {
+        player_id: "p4",
+        tournament_matches_played_count: 0,
+        tournament_matches_scheduled_count: 1,
+        tournament_wins: 0,
+        tournament_losses: 0,
+      },
+      {
+        player_id: "p8",
+        tournament_matches_played_count: 0,
+        tournament_matches_scheduled_count: 1,
+        tournament_wins: 0,
+        tournament_losses: 0,
       },
     ]
   );
@@ -814,6 +880,110 @@ test("closes remaining requests with a system comment when the tenth match fills
       cancellation_reason: "another_match_accepted",
     }
   );
+});
+
+test("closes a TPR-target player's pending requests across all weeks of the Rivals tournament", async (t) => {
+  const db = await createChallengeAcceptanceDatabase(t);
+  await exec(
+    db,
+    `
+      INSERT INTO challenge_periods (id, rivals_tournament_id, max_matches_per_player) VALUES
+        ('week-1', 'RIVALS-1', 2),
+        ('week-2', 'RIVALS-1', 2),
+        ('week-3', 'RIVALS-1', 2),
+        ('other-week', 'RIVALS-2', 2);
+      INSERT INTO challenge_requests (id, period_id, player_1_id, player_2_id, status) VALUES
+        ('accepted', 'week-1', 'A', 'B', 'accepted'),
+        ('a-sent-week-1', 'week-1', 'A', 'C', 'pending'),
+        ('a-received-week-2', 'week-2', 'D', 'A', 'pending'),
+        ('a-sent-week-3', 'week-3', 'A', 'E', 'pending'),
+        ('a-other-tournament', 'other-week', 'A', 'F', 'pending'),
+        ('b-sent-week-1', 'week-1', 'B', 'C', 'pending'),
+        ('b-received-week-2', 'week-2', 'D', 'B', 'pending');
+      INSERT INTO duels (
+        id,
+        challenge_period_id,
+        challenge_request_id,
+        source_type,
+        player_1_id,
+        player_2_id,
+        status
+      ) VALUES
+        ('duel-a-received-week-2', 'week-2', 'a-received-week-2', 'challenge', 'D', 'A', 'Requested new time'),
+        ('duel-a-sent-week-3', 'week-3', 'a-sent-week-3', 'challenge', 'A', 'E', 'Draft'),
+        ('duel-a-other-tournament', 'other-week', 'a-other-tournament', 'challenge', 'A', 'F', 'Draft'),
+        ('duel-b-received-week-2', 'week-2', 'b-received-week-2', 'challenge', 'D', 'B', 'Draft');
+    `
+  );
+
+  const result = await closeChallengePendingRequestsAfterAccept(db, {
+    periodId: "week-1",
+    rivalsTournamentId: "RIVALS-1",
+    acceptedRequestId: "accepted",
+    player1Id: "A",
+    player2Id: "B",
+    saturatedPlayerIds: ["A"],
+    tprTargetReachedPlayerIds: ["A"],
+    actorPlayerId: "B",
+  });
+
+  assert.deepEqual(result, {
+    auto_cancelled_request_ids: ["a-sent-week-1", "a-received-week-2", "a-sent-week-3"],
+    auto_cancelled_request_count: 3,
+    cancelled_duel_count: 2,
+  });
+  const tprComment = getChallengeAutoClosedComment("tpr_target_reached");
+  assert.equal(tprComment, "Automatically closed: tournament match limit (TPR target) reached.");
+  assert.deepEqual(
+    await all(db, "SELECT id, status, comment FROM challenge_requests ORDER BY id"),
+    [
+      { id: "a-other-tournament", status: "pending", comment: null },
+      { id: "a-received-week-2", status: "auto_cancelled", comment: tprComment },
+      { id: "a-sent-week-1", status: "auto_cancelled", comment: tprComment },
+      { id: "a-sent-week-3", status: "auto_cancelled", comment: tprComment },
+      { id: "accepted", status: "accepted", comment: null },
+      { id: "b-received-week-2", status: "pending", comment: null },
+      { id: "b-sent-week-1", status: "pending", comment: null },
+    ]
+  );
+  assert.deepEqual(
+    await all(db, "SELECT id, status, cancellation_reason FROM duels ORDER BY id"),
+    [
+      { id: "duel-a-other-tournament", status: "Draft", cancellation_reason: null },
+      { id: "duel-a-received-week-2", status: "Cancelled", cancellation_reason: "another_match_accepted" },
+      { id: "duel-a-sent-week-3", status: "Cancelled", cancellation_reason: "another_match_accepted" },
+      { id: "duel-b-received-week-2", status: "Draft", cancellation_reason: null },
+    ]
+  );
+});
+
+test("ignores TPR-target players when the period has no linked Rivals tournament", async (t) => {
+  const db = await createChallengeAcceptanceDatabase(t);
+  await exec(
+    db,
+    `
+      INSERT INTO challenge_periods (id, rivals_tournament_id, max_matches_per_player) VALUES
+        ('week-1', NULL, 2),
+        ('week-2', NULL, 2);
+      INSERT INTO challenge_requests (id, period_id, player_1_id, player_2_id, status) VALUES
+        ('accepted', 'week-1', 'A', 'B', 'accepted'),
+        ('a-sent-week-1', 'week-1', 'A', 'C', 'pending'),
+        ('a-sent-week-2', 'week-2', 'A', 'D', 'pending');
+    `
+  );
+
+  const result = await closeChallengePendingRequestsAfterAccept(db, {
+    periodId: "week-1",
+    rivalsTournamentId: null,
+    acceptedRequestId: "accepted",
+    player1Id: "A",
+    player2Id: "B",
+    saturatedPlayerIds: [],
+    tprTargetReachedPlayerIds: ["A"],
+    actorPlayerId: "B",
+  });
+
+  assert.equal(result.auto_cancelled_request_count, 0);
 });
 
 test("serializes simultaneous accepts at the N=1 match limit", async (t) => {

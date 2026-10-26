@@ -21,7 +21,7 @@ test("Challenge player UI locks actions and collapses action sections at the tou
   assert.match(html, /current_player_tpr_target_reached/);
   assert.match(html, /opponentAtTprTarget/);
   assert.match(html, /TPR target reached/);
-  assert.match(html, /already played \$\{target\}/);
+  assert.match(html, /already played or scheduled \$\{target\}/);
 });
 
 test("Open to match remains browseable after the current player reaches the TPR target", () => {
