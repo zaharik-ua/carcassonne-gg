@@ -22257,7 +22257,7 @@ app.get("/public/challenge-duels", async (req, res, next) => {
       cp.logo AS challenge_period_logo,
       cp.play_starts_at AS challenge_period_play_starts_at
     FROM duels d
-    JOIN challenge_periods cp
+    LEFT JOIN challenge_periods cp
       ON trim(COALESCE(cp.id, '')) = trim(COALESCE(d.challenge_period_id, ''))
     LEFT JOIN profiles p1
       ON trim(COALESCE(p1.id, '')) = trim(COALESCE(d.player_1_id, ''))
@@ -22325,7 +22325,7 @@ app.get("/public/challenge-duels", async (req, res, next) => {
         `
           SELECT COUNT(*) AS total
           FROM duels d
-          JOIN challenge_periods cp
+          LEFT JOIN challenge_periods cp
             ON trim(COALESCE(cp.id, '')) = trim(COALESCE(d.challenge_period_id, ''))
           LEFT JOIN profiles p1
             ON trim(COALESCE(p1.id, '')) = trim(COALESCE(d.player_1_id, ''))
@@ -22492,6 +22492,7 @@ app.get("/public/challenge-duels/filters", async (_req, res, next) => {
           play_starts_at
         FROM challenge_periods
         WHERE trim(COALESCE(id, '')) <> ''
+          AND lower(trim(COALESCE(status, ''))) <> 'cancelled'
         ORDER BY
           CASE WHEN play_starts_at IS NULL OR trim(play_starts_at) = '' OR datetime(play_starts_at) IS NULL THEN 1 ELSE 0 END ASC,
           datetime(play_starts_at) DESC,
