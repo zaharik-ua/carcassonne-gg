@@ -21259,6 +21259,7 @@ function publicMainPageMatchesHandler(req, res, next) {
                 metadata: row.metadata,
                 streams: (streamsByMatchId.get(String(row.id || "").trim()) || []).map((stream) => stream.link),
                 streamers: (streamsByMatchId.get(String(row.id || "").trim()) || []).map((stream) => stream.streamer_avatar),
+                streamer_names: (streamsByMatchId.get(String(row.id || "").trim()) || []).map((stream) => stream.streamer_short_name),
                 news_id: publishedNews?.id || null,
                 news_url: publishedNews?.url || "",
                 news_title: publishedNews?.title || "",
@@ -21309,6 +21310,7 @@ function publicMainPageMatchesHandler(req, res, next) {
                 games: gamesByDuelId.get(String(row.id || "").trim()) || [],
                 streams: (streamsByDuelId.get(String(row.id || "").trim()) || []).map((stream) => stream.link),
                 streamers: (streamsByDuelId.get(String(row.id || "").trim()) || []).map((stream) => stream.streamer_avatar),
+                streamer_names: (streamsByDuelId.get(String(row.id || "").trim()) || []).map((stream) => stream.streamer_short_name),
               })),
               duels: (duelRows || []).map((row) => ({
                 id: row.id,

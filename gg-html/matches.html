@@ -722,8 +722,8 @@ code {
     grid-template-columns: minmax(0, 1fr) minmax(76px, auto) minmax(0, 1fr);
     align-items: stretch;
     gap: 22px;
-    min-height: 142px;
-    padding: 18px 28px 14px;
+    min-height: 120px;
+    padding: 12px 28px 10px;
     box-sizing: border-box;
   }
 
@@ -733,13 +733,13 @@ code {
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    gap: 9px;
+    gap: 6px;
     text-align: center;
   }
 
   .main-event-competitor__logo {
-    width: 56px;
-    height: 56px;
+    width: 50px;
+    height: 50px;
     object-fit: contain;
   }
 
@@ -796,6 +796,22 @@ code {
   .main-event-center__info .match-rating .material-icons-round {
     font-size: 11px;
     line-height: 10px;
+  }
+
+  .main-event-center__badge {
+    max-width: 100%;
+    padding: 1px 6px;
+    border-radius: 3px;
+    background-color: #ee9a4b;
+    color: #fff;
+    font-size: 10px;
+    line-height: 13px;
+    font-weight: 600;
+    text-align: center;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    box-sizing: border-box;
   }
 
   .main-event-center__time {
@@ -860,24 +876,56 @@ code {
   }
 
   .main-event-actions__streams {
+    min-width: 0;
     display: inline-flex;
     align-items: center;
     justify-content: flex-end;
-    gap: 8px;
+    flex-wrap: wrap;
+    gap: 6px 12px;
     margin-left: auto;
+  }
+
+  .main-event-stream {
+    min-width: 0;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    color: #263647;
+    font-size: 12px;
+    line-height: 1.2;
+    font-weight: 600;
+    text-decoration: none;
+  }
+
+  a.main-event-stream:hover,
+  a.main-event-stream:focus-visible {
+    color: #0277BD;
+    outline: none;
+  }
+
+  a.main-event-stream:hover .stream-icon,
+  a.main-event-stream:focus-visible .stream-icon {
+    opacity: 1;
+  }
+
+  .main-event-stream__name {
+    max-width: 120px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   @media (max-width: 600px) {
     .main-event-stage {
       grid-template-columns: minmax(0, 1fr) 60px minmax(0, 1fr);
       gap: 8px;
-      min-height: 126px;
-      padding: 14px 8px 10px;
+      min-height: 108px;
+      padding: 10px 8px 8px;
     }
 
     .main-event-competitor__logo {
-      width: 44px;
-      height: 44px;
+      width: 40px;
+      height: 40px;
     }
 
     .main-event-competitor__name {
@@ -894,9 +942,18 @@ code {
       font-size: 11px;
     }
 
+    .main-event-center__badge {
+      white-space: normal;
+      overflow-wrap: anywhere;
+    }
+
     .main-event-actions {
       min-height: 38px;
       padding: 4px 8px;
+    }
+
+    .main-event-stream__name {
+      max-width: 80px;
     }
   }
 
@@ -2031,8 +2088,8 @@ function createRatingTooltipLegendRow({ label, type }) {
   return row;
 }
 
-function appendRoundBadge({ match, container, rightDiv, tournamentType }) {
-  if (!match || !container) return;
+function getRoundBadgeInfo(match, tournamentType) {
+  if (!match) return null;
   const typeValue = tournamentType || match.tournament_type;
   const stageValue = typeof match.stage === "string" ? match.stage.trim() : "";
   const dbBadgeValue = typeof match.badge_name === "string" ? match.badge_name.trim() : "";
@@ -2051,14 +2108,21 @@ function appendRoundBadge({ match, container, rightDiv, tournamentType }) {
     }
   }
 
-  if (!badgeText) return;
+  if (!badgeText) return null;
+  return { text: badgeText, color: badgeColor };
+}
+
+function appendRoundBadge({ match, container, rightDiv, tournamentType }) {
+  if (!container) return;
+  const badgeInfo = getRoundBadgeInfo(match, tournamentType);
+  if (!badgeInfo) return;
 
   const badge = document.createElement("div");
   badge.className = "playoff-round-badge";
-  if (badgeColor) {
-    badge.style.backgroundColor = badgeColor;
+  if (badgeInfo.color) {
+    badge.style.backgroundColor = badgeInfo.color;
   }
-  badge.textContent = badgeText;
+  badge.textContent = badgeInfo.text;
   container.appendChild(badge);
   if (rightDiv) {
     rightDiv.classList.add("under-badge");
@@ -2598,6 +2662,16 @@ function createMainEventElement(match, options = {}) {
   const rating = createMatchRatingElement(match);
   if (rating) centerInfo.appendChild(rating);
 
+  const badgeInfo = getRoundBadgeInfo(match, tournamentType);
+  if (badgeInfo) {
+    const badge = document.createElement("div");
+    badge.className = "main-event-center__badge";
+    if (badgeInfo.color) badge.style.backgroundColor = badgeInfo.color;
+    badge.textContent = badgeInfo.text;
+    badge.title = badgeInfo.text;
+    centerInfo.appendChild(badge);
+  }
+
   const time = document.createElement("div");
   time.className = "main-event-center__time";
   const dateObj = new Date(parseUtcTimestamp(match?.time));
@@ -2653,24 +2727,34 @@ function createMainEventElement(match, options = {}) {
   }
   if (!streamsOff && Array.isArray(match?.streamers)) {
     const streamUrls = Array.isArray(match?.streams) ? match.streams : [];
+    const streamerNames = Array.isArray(match?.streamer_names) ? match.streamer_names : [];
     match.streamers.forEach((iconUrl, index) => {
       const normalizedIconUrl = String(iconUrl || "").trim();
-      if (!normalizedIconUrl) return;
-      const icon = document.createElement("img");
-      icon.className = "stream-icon";
-      icon.src = normalizedIconUrl;
-      icon.alt = "Stream";
+      const streamerName = String(streamerNames[index] || "").trim();
+      if (!normalizedIconUrl && !streamerName) return;
       const streamUrl = String(streamUrls[index] || "").trim();
+      const stream = document.createElement(streamUrl ? "a" : "span");
+      stream.className = "main-event-stream";
       if (streamUrl) {
-        const link = document.createElement("a");
-        link.href = streamUrl;
-        link.target = "_blank";
-        link.rel = "noopener noreferrer";
-        link.appendChild(icon);
-        streamsWrap.appendChild(link);
-      } else {
-        streamsWrap.appendChild(icon);
+        stream.href = streamUrl;
+        stream.target = "_blank";
+        stream.rel = "noopener noreferrer";
       }
+      if (normalizedIconUrl) {
+        const icon = document.createElement("img");
+        icon.className = "stream-icon";
+        icon.src = normalizedIconUrl;
+        icon.alt = streamerName ? "" : "Stream";
+        stream.appendChild(icon);
+      }
+      if (streamerName) {
+        const name = document.createElement("span");
+        name.className = "main-event-stream__name";
+        name.textContent = streamerName;
+        stream.title = streamerName;
+        stream.appendChild(name);
+      }
+      streamsWrap.appendChild(stream);
     });
   }
 
@@ -4534,6 +4618,24 @@ function getChallengePlayerDetails(duel, side, playerDetailsById) {
   };
 }
 
+// Keep stream links, streamer icons and streamer names index-aligned.
+function normalizeStreamFields(source) {
+  const links = Array.isArray(source?.streams) ? source.streams : [];
+  const icons = Array.isArray(source?.streamers) ? source.streamers : [];
+  const names = Array.isArray(source?.streamer_names) ? source.streamer_names : [];
+  const result = { streams: [], streamers: [], streamer_names: [] };
+  const count = Math.max(links.length, icons.length);
+  for (let index = 0; index < count; index += 1) {
+    const link = String(links[index] || "").trim();
+    const icon = String(icons[index] || "").trim();
+    if (!link && !icon) continue;
+    result.streams.push(link);
+    result.streamers.push(icon);
+    result.streamer_names.push(String(names[index] || "").trim());
+  }
+  return result;
+}
+
 function adaptDbMainPageMatchesData(data, playerDetailsById = new Map()) {
   const result = {
     matches_today: [],
@@ -4630,12 +4732,7 @@ function adaptDbMainPageMatchesData(data, playerDetailsById = new Map()) {
       games: Array.isArray(duel?.games) ? duel.games.filter(Boolean) : [],
       rating: duel?.rating,
       gg_rating: duel?.gg_rating,
-      streams: Array.isArray(duel?.streams)
-        ? duel.streams.map((value) => String(value || "").trim()).filter(Boolean)
-        : [],
-      streamers: Array.isArray(duel?.streamers)
-        ? duel.streamers.map((value) => String(value || "").trim()).filter(Boolean)
-        : [],
+      ...normalizeStreamFields(duel),
       player1Details: getChallengePlayerDetails(duel, 1, playerDetailsById),
       player2Details: getChallengePlayerDetails(duel, 2, playerDetailsById),
       source_type: "challenge",
@@ -4700,12 +4797,7 @@ function adaptDbMainPageMatchesData(data, playerDetailsById = new Map()) {
       main_event: isMainEventMatch(match),
       badge_name: String(match?.badge_name || "").trim(),
       badge_color: String(match?.badge_color || "").trim(),
-      streams: Array.isArray(match?.streams)
-        ? match.streams.map((value) => String(value || "").trim()).filter(Boolean)
-        : [],
-      streamers: Array.isArray(match?.streamers)
-        ? match.streamers.map((value) => String(value || "").trim()).filter(Boolean)
-        : [],
+      ...normalizeStreamFields(match),
       news_id: match?.news_id ?? null,
       news_url: String(match?.news_url || "").trim(),
       news_title: String(match?.news_title || "").trim(),
