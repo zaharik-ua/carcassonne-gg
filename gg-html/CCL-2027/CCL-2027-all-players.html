@@ -323,6 +323,45 @@
     return;
   }
 
+  // Same as players/player-card.html: profiles keep the BGA avatar hash, not a URL.
+  function buildBgaAvatarUrl(playerId, avatar) {
+    const playerIdText = String(playerId || "").trim();
+    const avatarText = String(avatar || "").trim();
+    if (!avatarText) return "";
+
+    if (/^https?:\/\//i.test(avatarText)) {
+      // Repair saved BGA photo URLs that use the old 100-million folder boundary.
+      return avatarText.replace(
+        /^(https?:\/\/x\.boardgamearena\.net\/data\/avatar\/)\d+\/\d+\/\d+\/(\d+)(_\d+\.[a-z0-9]+)(?=[?#]|$)/i,
+        (_match, base, photoPlayerId, imageSuffix) => {
+          const id = Number(photoPlayerId);
+          return `${base}${Math.floor(id / 1000000000)}/${Math.floor(id / 1000000)}/${Math.floor(id / 1000)}/${photoPlayerId}${imageSuffix}`;
+        }
+      );
+    }
+
+    if (avatarText === "x00000") {
+      return "https://x.boardgamearena.net/data/avatar/default_184.jpg";
+    }
+
+    const defaultMatch = avatarText.match(/^_def_(\d+)$/);
+    if (defaultMatch) {
+      const defaultAvatarId = defaultMatch[1].padStart(4, "0");
+      return `https://x.boardgamearena.net/data/avatar/defaults/default-${defaultAvatarId}.jpg`;
+    }
+
+    if (!playerIdText) return "";
+    if (!/^\d+$/.test(playerIdText)) return "";
+
+    const playerIdNumber = Number(playerIdText);
+    if (!Number.isFinite(playerIdNumber)) return "";
+
+    const firstFolder = String(Math.floor(playerIdNumber / 1000000000));
+    const secondFolder = String(Math.floor(playerIdNumber / 1000000));
+    const thirdFolder = String(Math.floor(playerIdNumber / 1000));
+
+    return `https://x.boardgamearena.net/data/avatar/${firstFolder}/${secondFolder}/${thirdFolder}/${playerIdText}_184.jpg?h=${encodeURIComponent(avatarText)}`;
+  }
   function formatEloDate(value) {
     const date = new Date(String(value || "").trim());
     if (!value || !Number.isFinite(date.getTime())) return "";
@@ -510,18 +549,17 @@
       playerTd.classList.add("player-col");
       const playerWrap = document.createElement("div");
       playerWrap.className = "players-name-wrap";
-      if (entry.avatar) {
+      const avatarUrl = buildBgaAvatarUrl(entry.player_id, entry.avatar);
+      if (avatarUrl) {
         const avatarImg = document.createElement("img");
-        avatarImg.src = entry.avatar;
+        avatarImg.src = avatarUrl;
         avatarImg.className = "player-logo";
         avatarImg.alt = entry.player || "";
         playerWrap.appendChild(avatarImg);
       }
       if (entry.player_id) {
         const playerLink = document.createElement("a");
-        playerLink.href = `https://boardgamearena.com/player?id=${encodeURIComponent(entry.player_id)}`;
-        playerLink.target = "_blank";
-        playerLink.rel = "noopener";
+        playerLink.href = `https://carcassonne.gg/player/?id=${encodeURIComponent(entry.player_id)}`;
         playerLink.textContent = entry.player || entry.player_id;
         playerWrap.appendChild(playerLink);
       } else {

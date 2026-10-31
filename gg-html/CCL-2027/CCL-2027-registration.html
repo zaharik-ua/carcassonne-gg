@@ -1,0 +1,780 @@
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+
+<!-- СТИЛІ -->
+<style>
+  :root {
+    --main-bg-color: #15375c;
+    --hover-bg-color: #0e2c4d;
+    --accent-text-color: #fff;
+    --muted: #666;
+    --border: #e0e0e0;
+  }
+
+  body {
+    font-family: 'Montserrat', sans-serif;
+    margin: 0;
+    color: #222;
+  }
+
+  .reg-wrap {
+    display: grid;
+    gap: 10px;
+    padding: 2px;
+    max-width: 520px;
+  }
+
+  .reg-btn {
+    border: 1px solid #c8ced8;
+    border-radius: 4px;
+    padding: 7px 14px;
+    font: inherit;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    line-height: 1.2;
+    background: #eef2f6;
+    color: #333;
+  }
+
+  .reg-btn-primary {
+    background-color: var(--main-bg-color);
+    border-color: var(--main-bg-color);
+    color: var(--accent-text-color);
+  }
+
+  .reg-btn-primary:hover,
+  .reg-btn-primary:focus-visible {
+    background-color: var(--hover-bg-color);
+    border-color: var(--hover-bg-color);
+  }
+
+  .reg-btn:disabled {
+    cursor: not-allowed;
+    opacity: 0.6;
+  }
+
+  .reg-start {
+    justify-self: start;
+  }
+
+  .reg-card {
+    background: #fff;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    box-shadow: 1.4px 1.4px 2px #b2b2b2;
+    padding: 12px;
+    display: grid;
+    gap: 10px;
+    font-size: 14px;
+    line-height: 1.4;
+  }
+
+  .reg-title {
+    font-size: 16px;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    gap: 7px;
+  }
+
+  .reg-row {
+    display: grid;
+    gap: 2px;
+    min-width: 0;
+  }
+
+  .reg-row label {
+    font-size: 12px;
+    font-weight: 600;
+    color: #333;
+  }
+
+  .reg-row input {
+    width: 100%;
+    border: 1px solid #c8ced8;
+    border-radius: 4px;
+    height: 32px;
+    padding: 4px 8px;
+    font: inherit;
+    font-size: 14px;
+    box-sizing: border-box;
+  }
+
+  .reg-row input:focus {
+    outline: none;
+    border-color: #9ea7b3;
+  }
+
+  .reg-hint {
+    font-size: 12px;
+    color: var(--muted);
+  }
+
+  .reg-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .reg-actions .reg-btn-primary {
+    margin-left: auto;
+  }
+
+  .reg-error {
+    color: #c62828;
+    font-size: 13px;
+    font-weight: 600;
+  }
+
+  .reg-error:empty {
+    display: none;
+  }
+
+  .reg-card a {
+    color: #0277BD;
+    text-decoration: none;
+  }
+
+  .reg-card a:hover {
+    text-decoration: underline;
+  }
+
+  .reg-captains {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    gap: 6px;
+  }
+
+  .reg-captain {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+  }
+
+  .reg-captain-name {
+    color: var(--muted);
+    font-size: 13px;
+  }
+
+  .country-flag {
+    height: 18px;
+    width: 22px;
+    object-fit: cover;
+    flex-shrink: 0;
+  }
+
+  .player-logo {
+    height: 20px;
+    width: 20px;
+    border: 0.5px solid #444;
+    object-fit: contain;
+    border-radius: 2px;
+    flex-shrink: 0;
+  }
+
+  .reg-success {
+    display: flex;
+    gap: 10px;
+    align-items: flex-start;
+  }
+
+  .reg-success i {
+    color: #2e7d32;
+    font-size: 20px;
+    margin-top: 1px;
+  }
+
+  /* Dropdown with search, as in the player hub. The menu stays in the flow so the iframe does not clip it. */
+  .cp-dd {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    min-width: 0;
+  }
+
+  .cp-dd-btn {
+    all: unset;
+    box-sizing: border-box;
+    width: 100%;
+    min-width: 0;
+    height: 32px;
+    border: 1px solid #c8ced8;
+    border-radius: 4px;
+    background: #fff;
+    color: #2f3947;
+    font-size: 14px;
+    padding: 4px 8px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    cursor: pointer;
+  }
+
+  .cp-dd-btn:hover,
+  .cp-dd-btn:focus-visible,
+  .cp-dd-btn.open {
+    border-color: #9ea7b3;
+  }
+
+  .cp-dd-btn-content {
+    display: inline-flex;
+    align-items: center;
+    flex: 1 1 auto;
+    gap: 6px;
+    min-width: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .cp-dd-placeholder {
+    color: #999;
+  }
+
+  .cp-dd-flag {
+    width: 16px;
+    height: auto;
+    border-radius: 2px;
+    object-fit: cover;
+    flex-shrink: 0;
+  }
+
+  .cp-dd-chevron {
+    color: #6f7785;
+    font-size: 10px;
+    transition: transform 0.18s ease;
+  }
+
+  .cp-dd-btn.open .cp-dd-chevron {
+    transform: rotate(180deg);
+  }
+
+  .cp-dd-menu {
+    margin-top: 4px;
+    max-height: 0;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    background: #fff;
+    border: 0 solid #d5dbe4;
+    border-radius: 4px;
+    opacity: 0;
+    transition: opacity 0.16s ease, max-height 0.16s ease;
+  }
+
+  .cp-dd-menu.open {
+    border-width: 1px;
+    box-shadow: 0 8px 18px rgba(15, 28, 48, 0.14);
+    opacity: 1;
+    overflow-y: auto;
+    overflow-x: hidden;
+  }
+
+  .cp-dd-search {
+    position: sticky;
+    top: 0;
+    flex: 0 0 auto;
+    padding: 6px 8px;
+    border-bottom: 1px solid #edf1f6;
+    background: #fff;
+  }
+
+  .cp-dd-search input {
+    width: 100%;
+    height: 28px;
+    border: 1px solid #c8ced8;
+    border-radius: 4px;
+    padding: 4px 8px;
+    font: inherit;
+    font-size: 13px;
+    box-sizing: border-box;
+  }
+
+  .cp-dd-option {
+    all: unset;
+    box-sizing: border-box;
+    flex: 0 0 auto;
+    width: 100%;
+    padding: 5px 8px;
+    border-top: 1px solid #edf1f6;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 13px;
+    color: #2f3947;
+    line-height: 1.2;
+    white-space: nowrap;
+    overflow: hidden;
+    cursor: pointer;
+  }
+
+  .cp-dd-search + .cp-dd-option {
+    border-top: none;
+  }
+
+  .cp-dd-option:hover,
+  .cp-dd-option:focus-visible {
+    background: #f5f5f5;
+  }
+
+  .cp-dd-option.active {
+    background: #e4f0fb;
+  }
+
+  .cp-dd-option-other {
+    font-style: italic;
+  }
+
+  .cp-dd-empty {
+    padding: 8px 10px;
+    font-size: 13px;
+    color: #6b7280;
+  }
+</style>
+
+<!-- HTML -->
+<div class="reg-wrap" id="cclRegistration">
+  <button type="button" class="reg-btn reg-btn-primary reg-start" id="regStart">Registration</button>
+  <div id="regPanel" hidden></div>
+</div>
+
+<!-- СКРИПТ -->
+<script>
+(function () {
+  const API_BASE = window.AUTH_BASE_URL || "https://api.carcassonne.gg";
+  const TOURNAMENT_ID = "CCL-2027";
+  const REGISTRATION_URL = `${API_BASE}/public/ccl/${encodeURIComponent(TOURNAMENT_ID)}/registration`;
+  const REGISTRATIONS_URL = `${API_BASE}/public/ccl/${encodeURIComponent(TOURNAMENT_ID)}/registrations`;
+  const MY_TOURNAMENTS_URL = "https://carcassonne.gg/player-hub/my-tournaments/";
+  const PLAYERS_URL = "https://carcassonne.gg/ccl-2027-players/";
+  const OTHER_COUNTRY = "__other__";
+
+  const startButton = document.getElementById("regStart");
+  const panel = document.getElementById("regPanel");
+
+  let data = null;
+  let loadError = "";
+  let panelOpen = false;
+  let selectedCountry = "";
+  let openDropdown = null;
+
+  function el(tag, className, textContent) {
+    const node = document.createElement(tag);
+    if (className) node.className = className;
+    if (textContent !== undefined) node.textContent = textContent;
+    return node;
+  }
+
+  // Same as CCL-2027-all-players.html: profiles keep the BGA avatar hash, not a URL.
+  function buildBgaAvatarUrl(playerId, avatar) {
+    const playerIdText = String(playerId || "").trim();
+    const avatarText = String(avatar || "").trim();
+    if (!avatarText) return "";
+    if (/^https?:\/\//i.test(avatarText)) return avatarText;
+    if (avatarText === "x00000") return "https://x.boardgamearena.net/data/avatar/default_184.jpg";
+    const defaultMatch = avatarText.match(/^_def_(\d+)$/);
+    if (defaultMatch) {
+      return `https://x.boardgamearena.net/data/avatar/defaults/default-${defaultMatch[1].padStart(4, "0")}.jpg`;
+    }
+    if (!/^\d+$/.test(playerIdText)) return "";
+    const id = Number(playerIdText);
+    const folders = [1000000000, 1000000, 1000].map((size) => String(Math.floor(id / size))).join("/");
+    return `https://x.boardgamearena.net/data/avatar/${folders}/${playerIdText}_184.jpg?h=${encodeURIComponent(avatarText)}`;
+  }
+
+  function findAssociation(id) {
+    const key = String(id || "").toUpperCase();
+    return (data?.associations || []).find((row) => String(row.id).toUpperCase() === key) || null;
+  }
+
+  // Leaves the iframe: the whole page goes to the link.
+  function navigateTop(url) {
+    try {
+      window.top.location.href = url;
+    } catch (_error) {
+      window.open(url, "_top");
+    }
+  }
+
+  function topLink(href, label) {
+    const link = el("a", "", label);
+    link.href = href;
+    link.target = "_top";
+    return link;
+  }
+
+  function createFlag(association, className) {
+    if (!association?.flag) return null;
+    const img = el("img", className);
+    img.src = association.flag;
+    img.alt = "";
+    return img;
+  }
+
+  function createCountryDropdown(onChange) {
+    const options = (data?.associations || []).map((row) => ({ value: row.id, label: row.name, association: row }));
+    options.push({ value: OTHER_COUNTRY, label: "Other country", other: true });
+
+    const root = el("div", "cp-dd");
+    const button = el("button", "cp-dd-btn");
+    button.type = "button";
+    const buttonContent = el("span", "cp-dd-btn-content");
+    button.append(buttonContent, el("span", "cp-dd-chevron", "▾"));
+
+    const menu = el("div", "cp-dd-menu");
+    const searchWrap = el("div", "cp-dd-search");
+    const searchInput = el("input");
+    searchInput.type = "text";
+    searchInput.placeholder = "Type to filter...";
+    searchWrap.appendChild(searchInput);
+    menu.appendChild(searchWrap);
+
+    const appendOptionContent = (target, option) => {
+      const flag = createFlag(option.association, "cp-dd-flag");
+      if (flag) target.appendChild(flag);
+      target.appendChild(el("span", "", option.label));
+    };
+
+    const renderButton = () => {
+      buttonContent.innerHTML = "";
+      const option = options.find((row) => row.value === selectedCountry);
+      if (option) appendOptionContent(buttonContent, option);
+      else buttonContent.appendChild(el("span", "cp-dd-placeholder", "Select your country"));
+    };
+
+    const visibleOptions = () => {
+      const query = searchInput.value.trim().toLowerCase();
+      // "Other country" stays available whatever is typed.
+      return options.filter((option) => option.other || !query || option.label.toLowerCase().includes(query));
+    };
+
+    const fitMenu = () => {
+      menu.style.maxHeight = `${Math.min(menu.scrollHeight, 300)}px`;
+    };
+
+    const select = (option) => {
+      selectedCountry = option.value;
+      renderButton();
+      api.close();
+      onChange(option);
+    };
+
+    const renderMenu = () => {
+      menu.querySelectorAll(".cp-dd-option,.cp-dd-empty").forEach((node) => node.remove());
+      const rows = visibleOptions();
+      if (rows.length === 1 && searchInput.value.trim()) menu.appendChild(el("div", "cp-dd-empty", "Nothing found."));
+      rows.forEach((option) => {
+        const optionButton = el("button", "cp-dd-option" + (option.other ? " cp-dd-option-other" : ""));
+        optionButton.type = "button";
+        optionButton.classList.toggle("active", option.value === selectedCountry);
+        appendOptionContent(optionButton, option);
+        optionButton.addEventListener("click", (event) => {
+          event.stopPropagation();
+          select(option);
+        });
+        menu.appendChild(optionButton);
+      });
+    };
+
+    const api = {
+      root,
+      close() {
+        menu.classList.remove("open");
+        menu.style.maxHeight = "0px";
+        button.classList.remove("open");
+        if (openDropdown === api) openDropdown = null;
+      },
+      open() {
+        searchInput.value = "";
+        renderMenu();
+        menu.classList.add("open");
+        button.classList.add("open");
+        fitMenu();
+        openDropdown = api;
+        if (window.matchMedia("(min-width: 600px)").matches) {
+          try {
+            searchInput.focus({ preventScroll: true });
+          } catch (_error) {
+            searchInput.focus();
+          }
+        }
+      },
+    };
+
+    button.addEventListener("click", (event) => {
+      event.stopPropagation();
+      if (menu.classList.contains("open")) api.close();
+      else api.open();
+    });
+    searchInput.addEventListener("click", (event) => event.stopPropagation());
+    searchInput.addEventListener("input", () => {
+      renderMenu();
+      fitMenu();
+    });
+    searchInput.addEventListener("keydown", (event) => {
+      if (event.key === "Escape") {
+        api.close();
+        button.focus();
+      } else if (event.key === "Enter") {
+        event.preventDefault();
+        const first = visibleOptions()[0];
+        if (first) select(first);
+      }
+    });
+
+    root.append(button, menu);
+    renderButton();
+    return api;
+  }
+
+  document.addEventListener("click", () => {
+    if (openDropdown) openDropdown.close();
+  });
+
+  function showPanel(...children) {
+    panel.innerHTML = "";
+    const card = el("div", "reg-card");
+    card.append(...children.filter(Boolean));
+    panel.appendChild(card);
+    panel.hidden = false;
+    return card;
+  }
+
+  function renderCountryStep() {
+    if (loadError) {
+      showPanel(el("div", "reg-error", loadError));
+      return;
+    }
+    if (!data) {
+      showPanel(el("div", "reg-hint", "Loading..."));
+      return;
+    }
+
+    const nextButton = el("button", "reg-btn reg-btn-primary", "Next");
+    nextButton.type = "button";
+    nextButton.disabled = !selectedCountry;
+    const dropdown = createCountryDropdown(() => {
+      nextButton.disabled = !selectedCountry;
+    });
+    nextButton.addEventListener("click", goNext);
+
+    const row = el("div", "reg-row");
+    row.append(el("label", "", "Country"), dropdown.root);
+    const actions = el("div", "reg-actions");
+    actions.appendChild(nextButton);
+    showPanel(el("div", "reg-title", "CCL 2027 registration"), row, actions);
+  }
+
+  function goNext() {
+    if (selectedCountry === OTHER_COUNTRY) {
+      renderPlayerForm(null);
+      return;
+    }
+    const association = findAssociation(selectedCountry);
+    if (!association) return;
+    const captainOf = String(data.viewer?.captain_association_id || "").toUpperCase();
+    if (captainOf && captainOf === String(association.id).toUpperCase()) {
+      navigateTop(MY_TOURNAMENTS_URL);
+      return;
+    }
+    if (association.captains?.length) renderCaptains(association);
+    else renderPlayerForm(association);
+  }
+
+  function backButton() {
+    const button = el("button", "reg-btn", "Back");
+    button.type = "button";
+    button.addEventListener("click", renderCountryStep);
+    return button;
+  }
+
+  function countryTitle(prefix, association, countryName) {
+    const title = el("div", "reg-title");
+    title.appendChild(el("span", "", prefix));
+    const flag = createFlag(association, "country-flag");
+    if (flag) title.appendChild(flag);
+    title.appendChild(el("span", "", association?.name || countryName));
+    return title;
+  }
+
+  function renderCaptains(association) {
+    const intro = el("div", "", `Players from ${association.name} are registered by the association captains:`);
+
+    const list = el("ul", "reg-captains");
+    association.captains.forEach((captain) => {
+      const item = el("li", "reg-captain");
+      const avatarUrl = buildBgaAvatarUrl(captain.player_id, captain.avatar);
+      if (avatarUrl) {
+        const avatar = el("img", "player-logo");
+        avatar.src = avatarUrl;
+        avatar.alt = "";
+        item.appendChild(avatar);
+      }
+      item.appendChild(topLink(
+        `https://carcassonne.gg/player/?id=${encodeURIComponent(captain.player_id)}`,
+        captain.bga_nickname || captain.player_id
+      ));
+      if (captain.name) item.appendChild(el("span", "reg-captain-name", captain.name));
+      list.appendChild(item);
+    });
+
+    const playersNote = el("div", "", "You can also view the list of already registered players here: ");
+    playersNote.appendChild(topLink(PLAYERS_URL, "Players"));
+
+    const actions = el("div", "reg-actions");
+    actions.appendChild(backButton());
+    showPanel(countryTitle("Registration:", association), intro, list, playersNote, actions);
+  }
+
+  function createInputRow(labelText, { hint = "", maxLength = 100, placeholder = "", autocomplete = "off" } = {}) {
+    const row = el("div", "reg-row");
+    const inputId = `reg-${Math.random().toString(36).slice(2)}`;
+    const label = el("label", "", labelText);
+    label.htmlFor = inputId;
+    const input = el("input");
+    input.id = inputId;
+    input.type = "text";
+    input.maxLength = maxLength;
+    input.placeholder = placeholder;
+    input.autocomplete = autocomplete;
+    row.append(label, input);
+    if (hint) row.appendChild(el("div", "reg-hint", hint));
+    return { row, input };
+  }
+
+  function renderPlayerForm(association) {
+    const form = el("form");
+    form.style.display = "grid";
+    form.style.gap = "10px";
+    form.noValidate = true;
+
+    const country = association ? null : createInputRow("Country", { maxLength: 80, placeholder: "Your country" });
+    const nickname = createInputRow("BGA account", {
+      maxLength: 64,
+      hint: "Copy your nickname exactly as it is on Board Game Arena. Otherwise admins will not be able to find and add you.",
+    });
+    const realName = createInputRow("Real name", { maxLength: 100, autocomplete: "name" });
+    const contact = createInputRow("Other contact information", {
+      maxLength: 200,
+      hint: "WhatsApp, Telegram, Discord or Email.",
+    });
+    const error = el("div", "reg-error");
+
+    const submit = el("button", "reg-btn reg-btn-primary", "Register");
+    submit.type = "submit";
+    const actions = el("div", "reg-actions");
+    actions.append(backButton(), submit);
+
+    [country, nickname, realName, contact].filter(Boolean).forEach((field) => form.appendChild(field.row));
+    form.append(error, actions);
+
+    form.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const body = {
+        association_id: association?.id || "",
+        country_name: country ? country.input.value.trim() : "",
+        bga_nickname: nickname.input.value.trim(),
+        real_name: realName.input.value.trim(),
+        contact: contact.input.value.trim(),
+      };
+      const missing = [
+        [country, body.country_name, "Enter your country."],
+        [nickname, body.bga_nickname, "Enter your BGA account."],
+        [realName, body.real_name, "Enter your real name."],
+        [contact, body.contact, "Enter your contact information."],
+      ].find(([field, value]) => field && !value);
+      if (missing) {
+        error.textContent = missing[2];
+        missing[0].input.focus();
+        return;
+      }
+
+      error.textContent = "";
+      submit.disabled = true;
+      submit.textContent = "Registering...";
+      try {
+        const response = await fetch(REGISTRATIONS_URL, {
+          method: "POST",
+          credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        });
+        const result = await response.json().catch(() => ({}));
+        if (!response.ok || !result.ok) {
+          // The country turned out to have captains (e.g. typed as "other country").
+          if (response.status === 409 && Array.isArray(result.captains) && result.captains.length) {
+            const known = findAssociation(result.association_id);
+            if (known) {
+              renderCaptains(known);
+              return;
+            }
+          }
+          throw new Error(result.message || "Registration failed. Please try again.");
+        }
+        renderSuccess(association, body);
+      } catch (requestError) {
+        error.textContent = requestError.message || "Registration failed. Please try again.";
+        submit.disabled = false;
+        submit.textContent = "Register";
+      }
+    });
+
+    showPanel(countryTitle("Player registration:", association, "Other country"), form);
+    (country || nickname).input.focus({ preventScroll: true });
+  }
+
+  function renderSuccess(association, body) {
+    const success = el("div", "reg-success");
+    success.appendChild(el("i", "fa-solid fa-circle-check"));
+    const textWrap = el("div");
+    textWrap.appendChild(el("div", "reg-title", `Thank you, ${body.bga_nickname}!`));
+    textWrap.appendChild(el(
+      "div",
+      "",
+      "Your registration has been received. Admins will invite you to the qualification tournament "
+        + `for all players from ${association ? "your association" : "your country"} who want to take part.`
+    ));
+    success.appendChild(textWrap);
+
+    const playersNote = el("div", "reg-hint", "Registered players: ");
+    playersNote.appendChild(topLink(PLAYERS_URL, "Players"));
+    showPanel(success, playersNote);
+    startButton.hidden = true;
+  }
+
+  startButton.addEventListener("click", () => {
+    panelOpen = !panelOpen;
+    if (panelOpen) renderCountryStep();
+    else panel.hidden = true;
+  });
+
+  fetch(REGISTRATION_URL, { credentials: "include" })
+    .then((response) => {
+      if (!response.ok) throw new Error("Failed to load registration data");
+      return response.json();
+    })
+    .then((result) => {
+      if (!result?.ok || !Array.isArray(result.associations)) throw new Error("Failed to load registration data");
+      data = result;
+    })
+    .catch((error) => {
+      console.error("❌ Failed to load CCL registration", error);
+      loadError = "❌ Failed to load registration data. Please reload the page.";
+    })
+    .finally(() => {
+      if (panelOpen && !panel.querySelector("form")) renderCountryStep();
+    });
+
+  // Lets the parent page fit the iframe to the content, if it listens.
+  if (window.parent !== window && "ResizeObserver" in window) {
+    new ResizeObserver(() => {
+      window.parent.postMessage({ type: "ccl-registration:height", height: document.documentElement.scrollHeight }, "*");
+    }).observe(document.body);
+  }
+})();
+</script>

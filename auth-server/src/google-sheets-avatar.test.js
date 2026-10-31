@@ -101,7 +101,7 @@ test("blank cells make no requests and avatar URLs match the site's existing bui
       "https://x.boardgamearena.net/data/avatar/0/100/100272/100272877_184.jpg?h=n61jaaNUiQ", file);
     checked++;
   }
-  assert.equal(checked, 12);
+  assert.equal(checked, 13);
 });
 
 test("the first avatar folder changes at one billion, not one hundred million", () => {

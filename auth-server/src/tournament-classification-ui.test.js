@@ -227,15 +227,25 @@ for (const page of ["admin", "my"]) {
     assert.equal("category" in unknown.requests[0].payload, false);
   });
   test(`${page}: filters use the new classification and reset category when type changes`, async () => {
-    const context = vm.createContext({ document: { createElement: (tag) => new Element(tag) } });
+    const context = vm.createContext({ document: { createElement: (tag) => new Element(tag) }, openTournamentDropdown: null });
     load(context, page, ["getTournamentClassification", "filterTournamentsByClassification", "createTournamentFilters"]);
+    if (page === "my") load(context, page, ["createTournamentDropdown"]);
     const rows = TOURNAMENT_CATEGORIES.map((entry) => tournament(entry));
     const filters = { type: "Teams", category: "WTCOC" };
     assert.equal(context.filterTournamentsByClassification(rows, filters).length, 1);
     const root = context.createTournamentFilters(rows, filters, () => {});
-    const [type, category] = root.querySelectorAll("select");
-    assert.equal(category.options.some((option) => option.value === "Rivals"), false);
-    type.value = "Individuals"; await type.fire("change");
+    if (page === "my") {
+      // My Tournaments uses the styled dropdowns.
+      const { type, category } = root.dropdowns;
+      const categoryValues = category.root.querySelectorAll(".cp-dd-option").map((option) => option.dataset.value);
+      assert.equal(categoryValues.includes("Rivals"), false);
+      assert.equal(categoryValues.includes("WTCOC"), true);
+      type.setValue("Individuals", true);
+    } else {
+      const [type, category] = root.querySelectorAll("select");
+      assert.equal(category.options.some((option) => option.value === "Rivals"), false);
+      type.value = "Individuals"; await type.fire("change");
+    }
     assert.equal(filters.category, "");
     assert.equal(context.filterTournamentsByClassification(rows, filters).length, 5);
   });

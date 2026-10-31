@@ -342,6 +342,23 @@ test("qualification Elo, results, league Elo and pots work end to end", async (t
     [["Q1", 1690, "manual", null]]
   );
   assert.deepEqual(await all(db, "SELECT seed FROM ccl_stage_entries WHERE seed IS NOT NULL"), []);
+
+  // An empty value clears the Elo of the stage.
+  const clearedElo = await api.call("PATCH /ccl/slots/:id/stages/:stage/elo", {
+    user: USERS.admin,
+    params: { id: slots.arQ1.id, stage: "Q1" },
+    body: { elo: "" },
+  });
+  assert.equal(clearedElo.status, 200, JSON.stringify(clearedElo.body));
+  assert.deepEqual(
+    clearedElo.body.slot.entries.map((entry) => [entry.stage, entry.elo, entry.elo_source, entry.fixed_at, entry.elo_fixed]),
+    [["Q1", null, null, null, false]]
+  );
+  assert.equal((await api.call("PATCH /ccl/slots/:id/stages/:stage/elo", {
+    user: USERS.admin,
+    params: { id: slots.arQ1.id, stage: "Q1" },
+    body: { elo: "1690" },
+  })).status, 200);
   assert.equal((await api.call("PATCH /ccl/slots/:id/stages/:stage/elo", {
     user: USERS.admin,
     params: { id: slots.arQ1.id, stage: "Main" },

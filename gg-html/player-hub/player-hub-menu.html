@@ -581,6 +581,12 @@
     const hasTournamentAdminAccess = isAdminUser || managedTournaments.some((tournament) => (
       String(tournament?.access_role || "").trim().toLowerCase() === "admin"
     ));
+    // CCL association captains manage their slots in My Tournaments (the server gives them the captain role).
+    const hasCclCaptainAccess = managedTournaments.some((tournament) => {
+      const { type, category } = getTournamentClassification(tournament);
+      return type === "Individuals" && String(category || "").trim().toLowerCase() === "ccl"
+        && String(tournament?.access_role || "").trim().toLowerCase() === "captain";
+    });
 
     const items = tournaments
       .filter((tournament) => canSeeTournament(tournament, {
@@ -603,7 +609,7 @@
           return isAdminUser || inPersonTournaments.length > 0;
         }
         if (item.view === "my-tournaments") {
-          return hasTournamentAdminAccess;
+          return hasTournamentAdminAccess || hasCclCaptainAccess;
         }
         if (item.view === "nationals") {
           return isAdminUser;

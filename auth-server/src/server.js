@@ -101,6 +101,10 @@ import { ensureGameReplaysSchema as ensureGameReplaysSchemaForDb } from "./bga-r
 import { ensureCclSchema } from "./ccl-schema.js";
 import { registerCclRoutes } from "./ccl-routes.js";
 import { CCL_DEADLINE_FIELDS, isCclTournament } from "./ccl-slots.js";
+import {
+  ensureTournamentRegistrationsSchema,
+  registerTournamentRegistrationRoutes,
+} from "./tournament-registrations.js";
 import { registerBgaReplayAdminRoutes } from "./bga-replay-admin.js";
 import { loadPublicGamesByDuelIds } from "./bga-replay-public.js";
 import { ensureMatchIdReferenceSync } from "./match-id-sync.js";
@@ -6811,6 +6815,9 @@ function ensureTournamentPlayersSchema() {
   ensureCclSchema(db).catch((error) => {
     console.error("Failed to ensure tournament_players / CCL schema", error);
   });
+  ensureTournamentRegistrationsSchema(db).catch((error) => {
+    console.error("Failed to ensure tournament_registrations schema", error);
+  });
 }
 
 function ensureStandingsSchema() {
@@ -8415,6 +8422,13 @@ registerBgaReplayAdminRoutes(app, {
 registerCclRoutes(app, {
   db,
   requireAuthenticated,
+  getAuditActor,
+  logAuditEvent,
+});
+
+registerTournamentRegistrationRoutes(app, {
+  db,
+  requireTrustedJsonRequest,
   getAuditActor,
   logAuditEvent,
 });

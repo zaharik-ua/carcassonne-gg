@@ -692,9 +692,10 @@ export function registerCclRoutes(app, {
     if (!actor.isAdmin) throw requestError(403, "Forbidden");
     const stage = normalizeCclStage(req.params.stage);
     if (!stage) throw requestError(400, `stage must be one of ${CCL_STAGES.join(", ")}`);
-    if (!text(slot.player_id)) throw requestError(400, "The slot has no player");
     const elo = normalizeCclManualElo(req.body?.elo);
     if (elo.error) throw requestError(400, elo.error);
+    const clear = elo.value === null;
+    if (!clear && !text(slot.player_id)) throw requestError(400, "The slot has no player");
     const entry = await dbGet(db, "SELECT * FROM ccl_stage_entries WHERE slot_id = ? AND stage = ?", [slot.id, stage]);
     if (!entry) throw requestError(404, `The slot does not take part in ${stage}`);
 
@@ -702,23 +703,32 @@ export function registerCclRoutes(app, {
       await resetPhaseSeeds(db, tournament.id, [getCclStagePhase(stage)]);
       await dbRun(
         db,
-        `
-          UPDATE ccl_stage_entries
-          SET player_id = ?, elo = ?, elo_source = 'manual', seed = NULL, fixed_at = ?, fixed_by = ?,
-              updated_at = CURRENT_TIMESTAMP
-          WHERE slot_id = ? AND stage = ?
-        `,
-        [text(slot.player_id), elo.value, now().toISOString(), actorLabel(req.user), slot.id, stage]
+        clear
+          ? `
+            UPDATE ccl_stage_entries
+            SET player_id = NULL, elo = NULL, elo_source = NULL, seed = NULL, fixed_at = NULL, fixed_by = NULL,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE slot_id = ? AND stage = ?
+          `
+          : `
+            UPDATE ccl_stage_entries
+            SET player_id = ?, elo = ?, elo_source = 'manual', seed = NULL, fixed_at = ?, fixed_by = ?,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE slot_id = ? AND stage = ?
+          `,
+        clear
+          ? [slot.id, stage]
+          : [text(slot.player_id), elo.value, now().toISOString(), actorLabel(req.user), slot.id, stage]
       );
     });
     audit(req, {
-      event_type: "ccl_elo.manual",
+      event_type: clear ? "ccl_elo.cleared" : "ccl_elo.manual",
       entity_type: "ccl_stage_entry",
       action: "update",
       record_id: `${slot.id}|${stage}`,
       changes: {
         elo: { old: entry.elo ?? null, new: elo.value },
-        elo_source: { old: entry.elo_source || null, new: "manual" },
+        elo_source: { old: entry.elo_source || null, new: clear ? null : "manual" },
       },
       metadata: { tournament_id: tournament.id, player_id: text(slot.player_id) },
     });

@@ -190,7 +190,9 @@ test("rated Elo excludes missing values and the initial 1500", () => {
   assert.equal(getCclRatedElo(null), null);
   assert.equal(getCclRatedElo(""), null);
   assert.deepEqual(normalizeCclManualElo("1725.5"), { value: 1725.5 });
-  assert.ok(normalizeCclManualElo("").error);
+  assert.deepEqual(normalizeCclManualElo(""), { value: null });
+  assert.deepEqual(normalizeCclManualElo(null), { value: null });
+  assert.ok(normalizeCclManualElo("abc").error);
   assert.ok(normalizeCclManualElo(-1).error);
 });
 

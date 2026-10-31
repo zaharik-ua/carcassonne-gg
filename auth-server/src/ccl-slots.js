@@ -250,9 +250,11 @@ export function buildCclEloAssignments({ slots, phase, profilesById }) {
   return { assignments, skipped };
 }
 
+// Empty value = clear the Elo of the stage (not set); otherwise a positive number.
 export function normalizeCclManualElo(value) {
+  if (value === null || value === undefined || text(value) === "") return { value: null };
   const elo = Number(value);
-  if (text(value) === "" || !Number.isFinite(elo) || elo <= 0) {
+  if (!Number.isFinite(elo) || elo <= 0) {
     return { error: "Manual Elo must be a positive number" };
   }
   return { value: elo };
