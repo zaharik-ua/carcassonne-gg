@@ -98,6 +98,9 @@ import {
   createRequireTournamentAdmin,
 } from "./tournament-admin-access.js";
 import { ensureGameReplaysSchema as ensureGameReplaysSchemaForDb } from "./bga-replay-schema.js";
+import { ensureCclSchema } from "./ccl-schema.js";
+import { registerCclRoutes } from "./ccl-routes.js";
+import { CCL_DEADLINE_FIELDS, isCclTournament } from "./ccl-slots.js";
 import { registerBgaReplayAdminRoutes } from "./bga-replay-admin.js";
 import { loadPublicGamesByDuelIds } from "./bga-replay-public.js";
 import { ensureMatchIdReferenceSync } from "./match-id-sync.js";
@@ -3124,6 +3127,14 @@ function getTournamentAccessProfileId(user) {
 }
 
 function loadTournamentAccessForUser(tournamentId, user, done) {
+  resolveCclCaptainAssociationId(user)
+    .then((cclCaptainAssociationId) => (
+      loadTournamentAccessForUserWithCcl(tournamentId, user, cclCaptainAssociationId, done)
+    ))
+    .catch((error) => done(error));
+}
+
+function loadTournamentAccessForUserWithCcl(tournamentId, user, cclCaptainAssociationId, done) {
   const [rawTournamentId, normalizedTournamentId] = getTournamentLookupVariants(tournamentId);
   if (!rawTournamentId) {
     done(null, null);
@@ -3168,6 +3179,9 @@ function loadTournamentAccessForUser(tournamentId, user, done) {
         COALESCE(t.tpr_benchmark_percentile, 0.75) AS tpr_benchmark_percentile,
         t.current_tpr_benchmark,
         t.tpr_calculated_at,
+        t.ccl_main_registration_ends_at,
+        t.ccl_q12_registration_ends_at,
+        t.ccl_q3_registration_ends_at,
         CASE
           WHEN ? = 1 THEN ?
           WHEN ? > 0 AND EXISTS (
@@ -3190,11 +3204,12 @@ function loadTournamentAccessForUser(tournamentId, user, done) {
             WHERE upper(trim(tt.tournament_id)) = upper(trim(t.id))
               AND trim(tt.captain_id) = trim(?)
           ) THEN ?
+          WHEN ${cclCaptainSlotSql("t")} THEN ?
           ELSE NULL
         END AS access_role,
         CASE
           WHEN ? = 1 THEN 1
-          WHEN COALESCE(${tournamentAccessTypeSql("t")}, ?) = ? THEN 1
+          WHEN COALESCE(${tournamentAccessTypeSql("t")}, ?) = ? AND NOT ${cclTournamentSql("t")} THEN 1
           WHEN ? > 0 AND EXISTS (
             SELECT 1
             FROM tournament_access_users tau
@@ -3208,6 +3223,8 @@ function loadTournamentAccessForUser(tournamentId, user, done) {
             WHERE upper(trim(tt.tournament_id)) = upper(trim(t.id))
               AND trim(tt.captain_id) = trim(?)
           ) THEN 1
+          WHEN ${cclCaptainSlotSql("t")} THEN 1
+          WHEN ${cclParticipantSql("t")} THEN 1
           ELSE 0
         END AS has_access,
         CASE
@@ -3225,7 +3242,9 @@ function loadTournamentAccessForUser(tournamentId, user, done) {
           FROM tournament_teams tt
           WHERE upper(trim(tt.tournament_id)) = upper(trim(t.id))
             AND trim(tt.captain_id) = trim(?)
-        ) AS captain_team_ids_csv
+        ) AS captain_team_ids_csv,
+        CASE WHEN ${cclCaptainSlotSql("t")} THEN upper(trim(?)) END AS ccl_captain_association_id,
+        CASE WHEN ${cclParticipantSql("t")} THEN 1 ELSE 0 END AS ccl_participant
       FROM tournaments t
       WHERE ${buildTournamentLookupWhereClause("t.id")}
       LIMIT 1
@@ -3245,6 +3264,9 @@ function loadTournamentAccessForUser(tournamentId, user, done) {
       profileId,
       profileId,
       TOURNAMENT_ACCESS_ROLES.CAPTAIN,
+      cclCaptainAssociationId,
+      cclCaptainAssociationId,
+      TOURNAMENT_ACCESS_ROLES.CAPTAIN,
       isAdmin ? 1 : 0,
       TOURNAMENT_ACCESS_TYPES.FRIENDLY,
       TOURNAMENT_ACCESS_TYPES.FRIENDLY,
@@ -3252,8 +3274,17 @@ function loadTournamentAccessForUser(tournamentId, user, done) {
       userId,
       profileId,
       profileId,
+      cclCaptainAssociationId,
+      cclCaptainAssociationId,
+      profileId,
+      profileId,
       userId,
       userId,
+      profileId,
+      cclCaptainAssociationId,
+      cclCaptainAssociationId,
+      cclCaptainAssociationId,
+      profileId,
       profileId,
       rawTournamentId,
       normalizedTournamentId || rawTournamentId,
@@ -3300,13 +3331,80 @@ function loadTournamentAccessForUser(tournamentId, user, done) {
         tpr_benchmark_percentile: Math.min(1, Math.max(0, bountyTprNumber(row.tpr_benchmark_percentile, 0.75))),
         current_tpr_benchmark: bountyTprNumber(row.current_tpr_benchmark),
         tpr_calculated_at: row.tpr_calculated_at || null,
+        ...pickCclDeadlines(row),
         access_role: row.access_role ? normalizeTournamentAccessRole(row.access_role) : null,
         has_access: Number(row.has_access) === 1,
         access_via_access_users: Number(row.access_via_access_users) === 1,
-        captain_team_ids: normalizeTournamentCaptainTeamIds(row.captain_team_ids_csv),
+        ccl_participant: Number(row.ccl_participant) === 1,
+        captain_team_ids: normalizeTournamentCaptainTeamIds(
+          `${row.captain_team_ids_csv || ""}|${row.ccl_captain_association_id || ""}`
+        ),
       });
     }
   );
+}
+
+// CCL captains: team captains whose association has a slot in the tournament (CCL design 3.1).
+async function resolveCclCaptainAssociationId(user) {
+  if (Number(user?.team_captain) !== 1) return "";
+  return (await resolveAssociationId(user?.association)) || "";
+}
+
+// Two parameters: the captain's canonical association id, twice.
+function cclCaptainSlotSql(tournamentAlias) {
+  return `
+    (trim(?) <> '' AND EXISTS (
+      SELECT 1
+      FROM tournament_players tp_ccl
+      WHERE upper(trim(tp_ccl.tournament_id)) = upper(trim(${tournamentAlias}.id))
+        AND tp_ccl.entry_stage IS NOT NULL
+        AND upper(trim(COALESCE(tp_ccl.association_id, ''))) = upper(trim(?))
+    ))
+  `;
+}
+
+// No parameters. CCL tournaments are not open to everyone like other Friendly ones.
+function cclTournamentSql(tournamentAlias) {
+  return `(${tournamentTypeSql(tournamentAlias)} = 'Individuals' AND ${tournamentCategorySql(tournamentAlias)} = 'CCL')`;
+}
+
+// Two parameters: the user's profile id, twice. True when the player holds a slot.
+function cclParticipantSql(tournamentAlias) {
+  return `
+    (trim(?) <> '' AND EXISTS (
+      SELECT 1
+      FROM tournament_players tp_part
+      WHERE upper(trim(tp_part.tournament_id)) = upper(trim(${tournamentAlias}.id))
+        AND tp_part.entry_stage IS NOT NULL
+        AND trim(COALESCE(tp_part.player_id, '')) = trim(?)
+    ))
+  `;
+}
+
+// Access users (tournament admins and captains) exist for official team events and for CCL.
+function supportsTournamentAccessUsers(subtype, type, category) {
+  return subtype === TOURNAMENT_ACCESS_TYPES.OFFICIAL || isCclTournament({ type, category });
+}
+
+function pickCclDeadlines(row) {
+  return Object.fromEntries(CCL_DEADLINE_FIELDS.map((field) => [field, row?.[field] || null]));
+}
+
+// Tournament form: CCL stage deadlines; a PATCH keeps the fields it omits.
+function resolveCclDeadlinesInput(body, currentRow = null) {
+  const values = {};
+  for (const field of CCL_DEADLINE_FIELDS) {
+    if (!Object.prototype.hasOwnProperty.call(body || {}, field)) {
+      values[field] = currentRow?.[field] || null;
+      continue;
+    }
+    const value = normalizeUtcTimestamp(body[field]);
+    if (normalizeNullableText(body[field]) && !value) {
+      return { error: `${field} must be a valid date and time` };
+    }
+    values[field] = value;
+  }
+  return { values };
 }
 
 function normalizeTournamentCaptainTeamIds(value) {
@@ -3466,7 +3564,10 @@ function loadTournamentRowById(tournamentId, includeAccessUsers, done) {
         COALESCE(tpr_smoothing, 0.5) AS tpr_smoothing,
         COALESCE(tpr_benchmark_percentile, 0.75) AS tpr_benchmark_percentile,
         current_tpr_benchmark,
-        tpr_calculated_at
+        tpr_calculated_at,
+        ccl_main_registration_ends_at,
+        ccl_q12_registration_ends_at,
+        ccl_q3_registration_ends_at
       FROM tournaments
       WHERE ${buildTournamentLookupWhereClause("id")}
       LIMIT 1
@@ -6440,6 +6541,9 @@ function ensureTournamentsSchema() {
       tpr_benchmark_percentile REAL NOT NULL DEFAULT 0.75 CHECK (tpr_benchmark_percentile >= 0 AND tpr_benchmark_percentile <= 1),
       current_tpr_benchmark REAL,
       tpr_calculated_at TEXT,
+      ccl_main_registration_ends_at TEXT,
+      ccl_q12_registration_ends_at TEXT,
+      ccl_q3_registration_ends_at TEXT,
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
       updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
     )
@@ -6481,6 +6585,9 @@ function ensureTournamentsSchema() {
       addColumnIfMissing(columns, "tournaments", "tpr_benchmark_percentile", "REAL NOT NULL DEFAULT 0.75");
       addColumnIfMissing(columns, "tournaments", "current_tpr_benchmark", "REAL");
       addColumnIfMissing(columns, "tournaments", "tpr_calculated_at", "TEXT");
+      addColumnIfMissing(columns, "tournaments", "ccl_main_registration_ends_at", "TEXT");
+      addColumnIfMissing(columns, "tournaments", "ccl_q12_registration_ends_at", "TEXT");
+      addColumnIfMissing(columns, "tournaments", "ccl_q3_registration_ends_at", "TEXT");
       addColumnIfMissing(columns, "tournaments", "created_at", "TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP");
       addColumnIfMissing(columns, "tournaments", "updated_at", "TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP");
       // Classification is managed only by explicit migrations and type/category API writes.
@@ -6700,57 +6807,9 @@ function ensureTournamentTeamsSchema() {
 }
 
 function ensureTournamentPlayersSchema() {
-  db.run(`
-    CREATE TABLE IF NOT EXISTS tournament_players (
-      id TEXT PRIMARY KEY COLLATE NOCASE,
-      tournament_id TEXT NOT NULL COLLATE NOCASE,
-      team_id TEXT NOT NULL COLLATE NOCASE,
-      player_id TEXT NOT NULL,
-      captain BOOLEAN NOT NULL DEFAULT 0 CHECK (captain IN (0, 1)),
-      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-      UNIQUE (tournament_id, team_id, player_id),
-      FOREIGN KEY (tournament_id) REFERENCES tournaments(id) ON DELETE CASCADE,
-      FOREIGN KEY (team_id) REFERENCES teams(id),
-      FOREIGN KEY (player_id) REFERENCES profiles(id),
-      FOREIGN KEY (tournament_id, team_id)
-        REFERENCES tournament_teams(tournament_id, team_id)
-        ON DELETE CASCADE
-    )
-  `, (createErr) => {
-    if (createErr) {
-      console.error("Failed to ensure tournament_players schema", createErr);
-      return;
-    }
-    db.all("PRAGMA table_info(tournament_players)", (pragmaErr, columns) => {
-      if (pragmaErr) {
-        console.error("Failed to inspect tournament_players schema", pragmaErr);
-        return;
-      }
-      if (!Array.isArray(columns) || columns.length === 0) return;
-      addColumnIfMissing(columns, "tournament_players", "tournament_id", "TEXT");
-      addColumnIfMissing(columns, "tournament_players", "team_id", "TEXT");
-      addColumnIfMissing(columns, "tournament_players", "player_id", "TEXT");
-      addColumnIfMissing(columns, "tournament_players", "captain", "BOOLEAN NOT NULL DEFAULT 0");
-      addColumnIfMissing(columns, "tournament_players", "created_at", "TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP");
-      addColumnIfMissing(columns, "tournament_players", "updated_at", "TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP");
-      db.run(
-        "CREATE UNIQUE INDEX IF NOT EXISTS idx_tournament_players_tournament_team_player ON tournament_players(tournament_id COLLATE NOCASE, team_id COLLATE NOCASE, player_id)",
-        (indexErr) => {
-          if (indexErr) {
-            console.error("Failed to ensure tournament_players tournament/team/player index", indexErr);
-          }
-        }
-      );
-      db.run(
-        "CREATE INDEX IF NOT EXISTS idx_tournament_players_player_id ON tournament_players(player_id)",
-        (indexErr) => {
-          if (indexErr) {
-            console.error("Failed to ensure tournament_players player index", indexErr);
-          }
-        }
-      );
-    });
+  // The CCL module owns tournament_players: it creates the table or upgrades it for CCL slots.
+  ensureCclSchema(db).catch((error) => {
+    console.error("Failed to ensure tournament_players / CCL schema", error);
   });
 }
 
@@ -8351,6 +8410,13 @@ registerBgaReplayAdminRoutes(app, {
   getAuditActor,
   logAuditEvent,
   retryReplayError: retryBgaReplayError,
+});
+
+registerCclRoutes(app, {
+  db,
+  requireAuthenticated,
+  getAuditActor,
+  logAuditEvent,
 });
 
 registerDuelGameBgaResultRoutes(app, {
@@ -13911,6 +13977,12 @@ app.get("/public/tournaments/:id", (req, res, next) => {
 });
 
 app.get("/tournaments", (req, res, next) => {
+  resolveCclCaptainAssociationId(req.user)
+    .then((cclCaptainAssociationId) => listTournamentsForRequest(req, res, next, cclCaptainAssociationId))
+    .catch(next);
+});
+
+function listTournamentsForRequest(req, res, next, cclCaptainAssociationId) {
   const includeAccessUsers = Number(req.user?.admin) === 1;
   const userId = getTournamentAccessUserId(req.user);
   const currentProfileId = getTournamentAccessProfileId(req.user);
@@ -13923,7 +13995,8 @@ app.get("/tournaments", (req, res, next) => {
     ? ""
     : includeMyTournamentsScope
       ? `
-        WHERE ? > 0
+        WHERE (
+          ? > 0
           AND EXISTS (
             SELECT 1
             FROM tournament_access_users tau_filter
@@ -13932,13 +14005,15 @@ app.get("/tournaments", (req, res, next) => {
               AND tau_filter.user_id = ?
               AND COALESCE(NULLIF(lower(trim(tau_filter.role)), ''), ?) = ?
           )
+        )
+        OR ${cclCaptainSlotSql("t")}
       `
     : `
       WHERE
         (
           COALESCE(NULLIF(trim(t.player_hub_visibility), ''), ?) = ?
           AND (
-            COALESCE(${tournamentAccessTypeSql("t")}, ?) = ?
+            (COALESCE(${tournamentAccessTypeSql("t")}, ?) = ? AND NOT ${cclTournamentSql("t")})
           OR (? > 0 AND EXISTS (
             SELECT 1
             FROM tournament_access_users tau_filter
@@ -13952,6 +14027,7 @@ app.get("/tournaments", (req, res, next) => {
             WHERE upper(trim(tt_filter.tournament_id)) = upper(trim(t.id))
               AND trim(tt_filter.captain_id) = trim(?)
           ))
+          OR ${cclParticipantSql("t")}
           )
         )
         ${includeNewsEditorScope ? `
@@ -14003,6 +14079,9 @@ app.get("/tournaments", (req, res, next) => {
         COALESCE(t.tpr_benchmark_percentile, 0.75) AS tpr_benchmark_percentile,
         t.current_tpr_benchmark,
         t.tpr_calculated_at,
+        t.ccl_main_registration_ends_at,
+        t.ccl_q12_registration_ends_at,
+        t.ccl_q3_registration_ends_at,
         CASE
           WHEN ? = 1 THEN ?
           WHEN ? > 0 AND EXISTS (
@@ -14025,6 +14104,7 @@ app.get("/tournaments", (req, res, next) => {
             WHERE upper(trim(tt_role.tournament_id)) = upper(trim(t.id))
               AND trim(tt_role.captain_id) = trim(?)
           ) THEN ?
+          WHEN ${cclCaptainSlotSql("t")} THEN ?
           ELSE NULL
         END AS access_role,
         (
@@ -14057,7 +14137,9 @@ app.get("/tournaments", (req, res, next) => {
           FROM tournament_teams tt_current
           WHERE upper(trim(tt_current.tournament_id)) = upper(trim(t.id))
             AND trim(tt_current.captain_id) = trim(?)
-        ) AS captain_team_ids_csv
+        ) AS captain_team_ids_csv,
+        CASE WHEN ${cclCaptainSlotSql("t")} THEN upper(trim(?)) END AS ccl_captain_association_id,
+        CASE WHEN ${cclParticipantSql("t")} THEN 1 ELSE 0 END AS ccl_participant
       FROM tournaments t
       ${visibilitySql}
       ORDER BY t.id COLLATE NOCASE ASC
@@ -14078,8 +14160,16 @@ app.get("/tournaments", (req, res, next) => {
           currentProfileId,
           currentProfileId,
           TOURNAMENT_ACCESS_ROLES.CAPTAIN,
+          cclCaptainAssociationId,
+          cclCaptainAssociationId,
+          TOURNAMENT_ACCESS_ROLES.CAPTAIN,
           userId,
           userId,
+          currentProfileId,
+          cclCaptainAssociationId,
+          cclCaptainAssociationId,
+          cclCaptainAssociationId,
+          currentProfileId,
           currentProfileId,
         ]
       : [
@@ -14097,8 +14187,16 @@ app.get("/tournaments", (req, res, next) => {
           currentProfileId,
           currentProfileId,
           TOURNAMENT_ACCESS_ROLES.CAPTAIN,
+          cclCaptainAssociationId,
+          cclCaptainAssociationId,
+          TOURNAMENT_ACCESS_ROLES.CAPTAIN,
           userId,
           userId,
+          currentProfileId,
+          cclCaptainAssociationId,
+          cclCaptainAssociationId,
+          cclCaptainAssociationId,
+          currentProfileId,
           currentProfileId,
         ].concat(
           includeMyTournamentsScope
@@ -14107,6 +14205,8 @@ app.get("/tournaments", (req, res, next) => {
                 userId,
                 TOURNAMENT_ACCESS_ROLES.CAPTAIN,
                 TOURNAMENT_ACCESS_ROLES.ADMIN,
+                cclCaptainAssociationId,
+                cclCaptainAssociationId,
               ]
             : [
                 TOURNAMENT_PLAYER_HUB_VISIBILITY.VISIBLE,
@@ -14115,6 +14215,8 @@ app.get("/tournaments", (req, res, next) => {
                 TOURNAMENT_ACCESS_TYPES.FRIENDLY,
                 userId,
                 userId,
+                currentProfileId,
+                currentProfileId,
                 currentProfileId,
                 currentProfileId,
               ].concat(includeNewsEditorScope
@@ -14193,9 +14295,13 @@ app.get("/tournaments", (req, res, next) => {
                 tpr_benchmark_percentile: Math.min(1, Math.max(0, bountyTprNumber(row.tpr_benchmark_percentile, 0.75))),
                 current_tpr_benchmark: bountyTprNumber(row.current_tpr_benchmark),
                 tpr_calculated_at: row.tpr_calculated_at || null,
+                ...pickCclDeadlines(row),
                 access_role: row.access_role ? normalizeTournamentAccessRole(row.access_role) : null,
                 access_via_access_users: Number(row.access_via_access_users) === 1,
-                captain_team_ids: normalizeTournamentCaptainTeamIds(row.captain_team_ids_csv),
+                ccl_participant: Number(row.ccl_participant) === 1,
+                captain_team_ids: normalizeTournamentCaptainTeamIds(
+                  `${row.captain_team_ids_csv || ""}|${row.ccl_captain_association_id || ""}`
+                ),
                 challenge_periods: challengePeriodsByTournamentId.get(String(row.id || "").trim().toUpperCase()) || [],
               };
               if (includeAccessUsers) {
@@ -14223,7 +14329,7 @@ app.get("/tournaments", (req, res, next) => {
       );
     }
   );
-});
+}
 
 app.post("/tournaments", requireAdmin, async (req, res) => {
   const id = normalizeNullableText(req.body?.id);
@@ -14235,6 +14341,10 @@ app.post("/tournaments", requireAdmin, async (req, res) => {
   const registrationEndsAt = normalizeUtcTimestamp(req.body?.registration_ends_at);
   if (normalizeNullableText(req.body?.registration_ends_at) && !registrationEndsAt) {
     return res.status(400).json({ ok: false, message: "registration_ends_at must be a valid date and time" });
+  }
+  const cclDeadlines = resolveCclDeadlinesInput(req.body);
+  if (cclDeadlines.error) {
+    return res.status(400).json({ ok: false, message: cclDeadlines.error });
   }
   const isTest = normalizeBooleanInt(req.body?.is_test);
   const about = String(req.body?.about || "").trim() || null;
@@ -14321,7 +14431,7 @@ app.post("/tournaments", requireAdmin, async (req, res) => {
       }
 
       return validateTournamentAccessUserIds(
-        subtype === TOURNAMENT_ACCESS_TYPES.OFFICIAL ? requestedAccessUsers : [],
+        supportsTournamentAccessUsers(subtype, tournamentType, category) ? requestedAccessUsers : [],
         (validateErr, accessUsers) => {
           if (validateErr) {
             return res.status(400).json({ ok: false, message: validateErr.message || "Invalid tournament access users" });
@@ -14358,10 +14468,13 @@ app.post("/tournaments", requireAdmin, async (req, res) => {
                   tpr_target_games,
                   tpr_smoothing,
                   tpr_benchmark_percentile,
+                  ccl_main_registration_ends_at,
+                  ccl_q12_registration_ends_at,
+                  ccl_q3_registration_ends_at,
                   created_at,
                   updated_at
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
               `,
               [
                 id,
@@ -14390,6 +14503,7 @@ app.post("/tournaments", requireAdmin, async (req, res) => {
                 tprTargetGames,
                 tprSmoothing,
                 tprBenchmarkPercentile,
+                ...CCL_DEADLINE_FIELDS.map((field) => cclDeadlines.values[field]),
               ],
               (insertErr) => {
                 if (insertErr) {
@@ -14503,6 +14617,10 @@ app.patch("/tournaments/:id", requireTournamentAdmin, async (req, res) => {
         tournamentType,
         req.body?.lineup_type ?? currentRow.lineup_type
       );
+      const cclDeadlines = resolveCclDeadlinesInput(req.body, currentRow);
+      if (cclDeadlines.error) {
+        return res.status(400).json({ ok: false, message: cclDeadlines.error });
+      }
       const registrationEndsAt = hasRegistrationEndsAtUpdate
         ? requestedRegistrationEndsAt
         : currentRow.registration_ends_at;
@@ -14550,7 +14668,7 @@ app.patch("/tournaments/:id", requireTournamentAdmin, async (req, res) => {
       } = normalizeTournamentStageSettings(req.body, currentRow);
 
       return validateTournamentAccessUserIds(
-        subtype === TOURNAMENT_ACCESS_TYPES.OFFICIAL ? requestedAccessUsers : [],
+        supportsTournamentAccessUsers(subtype, tournamentType, category) ? requestedAccessUsers : [],
         (validateErr, accessUsers) => {
           if (validateErr) {
             return res.status(400).json({ ok: false, message: validateErr.message || "Invalid tournament access users" });
@@ -14588,6 +14706,9 @@ app.patch("/tournaments/:id", requireTournamentAdmin, async (req, res) => {
                   tpr_target_games = ?,
                   tpr_smoothing = ?,
                   tpr_benchmark_percentile = ?,
+                  ccl_main_registration_ends_at = ?,
+                  ccl_q12_registration_ends_at = ?,
+                  ccl_q3_registration_ends_at = ?,
                   updated_at = CURRENT_TIMESTAMP
                 WHERE ${buildTournamentLookupWhereClause("id")}
               `,
@@ -14618,6 +14739,7 @@ app.patch("/tournaments/:id", requireTournamentAdmin, async (req, res) => {
                 tprTargetGames,
                 tprSmoothing,
                 tprBenchmarkPercentile,
+                ...CCL_DEADLINE_FIELDS.map((field) => cclDeadlines.values[field]),
                 rawTournamentId,
                 normalizedTournamentId || rawTournamentId,
               ],

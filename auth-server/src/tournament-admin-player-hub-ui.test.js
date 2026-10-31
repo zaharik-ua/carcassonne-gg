@@ -19,7 +19,7 @@ test("My Tournaments loads the assigned-admin scope and keeps Access users globa
     /canManageAccessUsers[\s\S]*?requestTournamentJson\(USER_OPTIONS_URL[\s\S]*?Promise\.resolve\(\{ users: \[\] \}\)/
   );
   assert.match(myTournamentsHtml, /if \(canManageAccessUsers\) form\.appendChild\(accessUsersEditor\.root\)/);
-  assert.match(myTournamentsHtml, /if \(canManageAccessUsers && isOfficial\) \{[\s\S]*?payload\.access_users/);
+  assert.match(myTournamentsHtml, /if \(canManageAccessUsers && supportsAccessUsers\) \{[\s\S]*?payload\.access_users/);
   assert.match(myTournamentsHtml, /canUploadSource: tournamentEditorCache\.isGlobalAdmin/);
   assert.match(myTournamentsHtml, /isAdmin: tournamentEditorCache\.isGlobalAdmin/);
 

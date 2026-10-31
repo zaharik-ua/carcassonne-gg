@@ -6,6 +6,7 @@ import sqlite3 from "sqlite3";
 import { normalizeTournamentLineupType, resolveTournamentTextPatch } from "./tournament-update.js";
 import { normalizeTournamentRankColors, resolveTournamentRankColorsPatch } from "./tournament-rank-colors.js";
 import { resolveTournamentClassificationInput } from "./tournament-classification.js";
+import { CCL_DEADLINE_FIELDS, isCclTournament } from "./ccl-slots.js";
 
 const expected = { stages: { "Stage 1": {
   rankColors: { 1: "blue", 2: "blue", 3: "green", 4: "green" },
@@ -93,7 +94,11 @@ async function createApi(t) {
     TOURNAMENT_TYPES: { TEAMS: "Teams", INDIVIDUALS: "Individuals" },
     TOURNAMENT_ACCESS_TYPES: { FRIENDLY: "Friendly", OFFICIAL: "Official" },
     TOURNAMENT_LINEUP_SIZE_TYPES: { FIXED: 1 },
+    CCL_DEADLINE_FIELDS,
+    supportsTournamentAccessUsers: (subtype, type, category) => subtype === "Official" || isCclTournament({ type, category }),
   });
+  const cclDeadlinesStart = server.indexOf("function resolveCclDeadlinesInput(");
+  vm.runInContext(server.slice(cclDeadlinesStart, server.indexOf("\n}", cclDeadlinesStart) + 2), context);
   vm.runInContext(server.slice(server.indexOf('app.get("/public/tournaments/:id",'), server.indexOf('app.get("/tournaments",')), context);
   vm.runInContext(server.slice(server.indexOf('app.post("/tournaments",'), server.indexOf('app.get("/tournament-teams",')), context);
   return (method, body = {}) => new Promise((resolve, reject) => {

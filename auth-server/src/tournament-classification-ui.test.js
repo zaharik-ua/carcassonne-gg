@@ -22,6 +22,12 @@ function pageFunction(page, name) {
 function load(context, page, names) {
   for (const name of names) vm.runInContext(pageFunction(page, name), context);
 }
+function pageConst(page, name) {
+  const source = pages[page];
+  const start = source.indexOf(`  const ${name} = `);
+  assert.ok(start >= 0, `${page}.${name} must exist`);
+  return vm.runInNewContext(source.slice(start, source.indexOf("\n  ];", start) + 4).replace(`const ${name} =`, "(") + ")");
+}
 
 // Enough DOM to execute real form event handlers and the styled category dropdown.
 class Element {
@@ -87,6 +93,7 @@ function contextForForm(page, tournament, { globalAdmin = true, mode = "edit" } 
     return editor;
   };
   const contentEl = new Element();
+  const cclSections = [];
   const request = async (url, options) => {
     if (options.method !== "GET") requests.push({ url, method: options.method, payload: JSON.parse(options.body) });
     return { tournament_teams: [{ team_id: "UA", captain_id: "player" }] };
@@ -112,6 +119,8 @@ function contextForForm(page, tournament, { globalAdmin = true, mode = "edit" } 
     sectionForm: new Element(), contentEl, closeInlineForm() {}, setStatus() {}, loadSectionData() {}, renderSection() {},
     initMyTournamentsPage() {}, tournamentEditorCache: { isGlobalAdmin: globalAdmin },
     renderMyTournamentsList() {},
+    CCL_DEADLINES: page === "my" ? pageConst("my", "CCL_DEADLINES") : [],
+    createCclPlayersSection: (value) => { cclSections.push(value.id); return new Element(); },
   });
   load(context, page, ["getTournamentClassification", "getTournamentCategoryValues"]);
   if (page === "admin") {
@@ -124,7 +133,7 @@ function contextForForm(page, tournament, { globalAdmin = true, mode = "edit" } 
     load(context, page, ["openTournamentForm"]);
   } else load(context, page, ["renderMyTournamentEditForm"]);
   return {
-    context, fields, requests, editors,
+    context, fields, requests, editors, cclSections,
     async open() {
       if (page === "admin") await context.openTournamentForm(mode, mode === "create" ? null : tournament, new Element());
       else context.renderMyTournamentEditForm(tournament, { categories: catalog, icons: [], users: [], teams: [], profiles: [], tournamentTeams: [], standings: [], canManageAccessUsers: globalAdmin });
@@ -173,8 +182,14 @@ for (const page of ["admin", "my"]) {
       assert.equal(patch.payload.type, entry.type); assert.equal(patch.payload.category, entry.name);
       for (const name of ["tournament_type", "team_type", "subtype", "access_type"]) assert.equal(name in patch.payload, false);
       assert.equal(patch.payload.player_hub_visibility, "Hidden");
-      assert.equal("access_users" in patch.payload, entry.mode === "official");
-      if (entry.mode === "official") assert.deepEqual(patch.payload.access_users, tournament(entry).access_users);
+      // My Tournaments also manages CCL tournament admins through access users.
+      const isMyCcl = page === "my" && entry.name === "CCL";
+      assert.equal("access_users" in patch.payload, entry.mode === "official" || isMyCcl);
+      if (entry.mode === "official" || isMyCcl) assert.deepEqual(patch.payload.access_users, tournament(entry).access_users);
+      for (const name of ["ccl_main_registration_ends_at", "ccl_q12_registration_ends_at", "ccl_q3_registration_ends_at"]) {
+        assert.equal(name in patch.payload, isMyCcl, `${entry.name}: ${name}`);
+      }
+      if (page === "my") assert.deepEqual(ui.cclSections, isMyCcl ? [tournament(entry).id] : []);
       assert.equal(ui.requests.some((request) => request.url === "/tournament-teams"), ["official", "friendly"].includes(entry.mode));
       if (!["official", "friendly"].includes(entry.mode)) {
         for (const name of ["lineup_size", "lineup_size_type", "team_size"]) assert.equal(name in patch.payload, false);

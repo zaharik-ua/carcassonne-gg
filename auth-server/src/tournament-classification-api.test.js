@@ -5,6 +5,8 @@ import vm from "node:vm";
 import sqlite3 from "sqlite3";
 import * as classification from "./tournament-classification.js";
 import { ensureCategoriesSchema } from "./categories.js";
+import { ensureCclSchema } from "./ccl-schema.js";
+import { CCL_DEADLINE_FIELDS, isCclTournament } from "./ccl-slots.js";
 import { canManageTournamentAccessUsers, createRequireTournamentAdmin } from "./tournament-admin-access.js";
 import { normalizeTournamentLineupType, resolveTournamentTextPatch } from "./tournament-update.js";
 import { normalizeTournamentRankColors, resolveTournamentRankColorsPatch } from "./tournament-rank-colors.js";
@@ -34,13 +36,15 @@ async function api(t) {
     `CREATE TABLE tournament_access_users (tournament_entity_type TEXT DEFAULT 'tournament', tournament_id TEXT,
       user_id INTEGER, role TEXT, created_at TEXT DEFAULT CURRENT_TIMESTAMP, updated_at TEXT DEFAULT CURRENT_TIMESTAMP)`,
     "CREATE TABLE tournament_teams (tournament_id TEXT, team_id TEXT, captain_id TEXT)",
+    "CREATE TABLE associations (code TEXT, name TEXT, flag TEXT)",
     `CREATE TABLE challenge_periods (id TEXT, rivals_tournament_id TEXT, name TEXT, logo TEXT, status TEXT,
       play_starts_at TEXT, play_ends_at TEXT)`,
   ]) await run(sql);
   await ensureCategoriesSchema(db);
+  await ensureCclSchema(db);
   const handlers = new Map();
   const context = vm.createContext({
-    ...classification, db,
+    ...classification, db, CCL_DEADLINE_FIELDS, isCclTournament,
     app: Object.fromEntries(["get", "post", "patch"].map((method) => [method, (path, ...callbacks) => handlers.set(`${method} ${path}`, callbacks)])),
     canManageTournamentAccessUsers, requireTournamentAdmin: createRequireTournamentAdmin({ db }),
     normalizeTournamentLineupType, resolveTournamentTextPatch,
@@ -62,7 +66,8 @@ async function api(t) {
     "isValidTournamentTeamSize", "normalizeTournamentTeamSize", "normalizeTournamentFormat", "normalizeTournamentStageFormat",
     "normalizeTournamentStageSettings", "getTournamentLookupVariants", "buildTournamentLookupWhereClause", "getTournamentAccessUserId",
     "getTournamentAccessProfileId", "normalizeTournamentCaptainTeamIds", "validateTournamentAccessUserIds", "replaceTournamentAccessUsers",
-    "loadTournamentAccessForUser", "loadTournamentRowById", "canClosedTournamentCaptainAccessMatch", "resolveChallengePeriodRivalsTournamentId",
+    "loadTournamentAccessForUser", "loadTournamentAccessForUserWithCcl", "resolveCclCaptainAssociationId",
+    "resolveAssociationId", "cclCaptainSlotSql", "cclTournamentSql", "cclParticipantSql", "supportsTournamentAccessUsers", "pickCclDeadlines", "resolveCclDeadlinesInput", "loadTournamentRowById", "canClosedTournamentCaptainAccessMatch", "resolveChallengePeriodRivalsTournamentId",
   ]) vm.runInContext(serverFunction(name), context);
   const start = source.indexOf('app.get("/tournaments",');
   vm.runInContext(source.slice(start, source.indexOf('app.get("/tournament-teams",', start)), context);
@@ -225,6 +230,51 @@ test("official access, assigned captains, Friendly access and hidden visibility 
   const ownVisible = (await request("get", { user: captain })).data.tournaments;
   assert.deepEqual(ownVisible.map((row) => row.id), ["cup", "Friendly-Matches"]);
   assert.equal((await access("hidden", captain)).has_access, true);
+});
+
+test("CCL captains get captain access through a slot of their association", async (t) => {
+  const { request, access, run } = await api(t);
+  const created = await request("post", { body: {
+    id: "CCL-2027", name: "CCL 2027", type: "Individuals", category: "CCL",
+    ccl_q12_registration_ends_at: "2026-11-11T23:59:00Z", ccl_main_registration_ends_at: "",
+  } });
+  assert.equal(created.status, 200, JSON.stringify(created));
+  assert.equal(created.data.tournament.ccl_q12_registration_ends_at, "2026-11-11T23:59:00.000Z");
+  const patched = await request("patch", { id: "CCL-2027", body: { ccl_q3_registration_ends_at: "2026-11-20T23:59:00Z" } });
+  assert.equal(patched.data.tournament.ccl_q12_registration_ends_at, "2026-11-11T23:59:00.000Z");
+  assert.equal(patched.data.tournament.ccl_q3_registration_ends_at, "2026-11-20T23:59:00.000Z");
+  assert.equal((await request("patch", { id: "CCL-2027", body: { ccl_q3_registration_ends_at: "soon" } })).status, 400);
+
+  // This harness keeps a simplified tournament_teams table; foreign keys stay off as on the server.
+  await run("PRAGMA foreign_keys = OFF");
+  await run("INSERT INTO associations VALUES ('UA', 'Ukraine', NULL), ('DE', 'Germany', NULL)");
+  await run("INSERT INTO tournament_players (id, tournament_id, association_id, entry_stage) VALUES ('slot-1', 'CCL-2027', 'UA', 'Q1')");
+  const own = await access("ccl-2027", captain);
+  assert.equal(own.access_role, "captain");
+  assert.deepEqual(Array.from(own.captain_team_ids), ["UA"]);
+  assert.equal(own.ccl_q3_registration_ends_at, "2026-11-20T23:59:00.000Z");
+  assert.equal((await access("CCL-2027", otherCaptain)).access_role, null);
+  assert.equal((await access("CCL-2027", { ...captain, team_captain: 0 })).access_role, null);
+
+  const mine = (await request("get", { user: captain, query: { scope: "my-tournaments" } })).data.tournaments;
+  assert.deepEqual(mine.map((row) => [row.id, row.access_role, row.captain_team_ids]), [["CCL-2027", "captain", ["UA"]]]);
+  assert.deepEqual((await request("get", { user: otherCaptain, query: { scope: "my-tournaments" } })).data.tournaments, []);
+
+  // Player Hub Tournaments: CCL is open to admins and to players holding a slot, not to everyone.
+  assert.deepEqual((await request("get", { user: captain })).data.tournaments, []);
+  assert.equal((await access("CCL-2027", otherCaptain)).has_access, false);
+  await run("INSERT INTO tournament_players (id, tournament_id, association_id, entry_stage, player_id) VALUES ('slot-2', 'CCL-2027', 'DE', 'Q2', 'other')");
+  const participant = await access("CCL-2027", otherCaptain);
+  assert.equal(participant.has_access, true);
+  assert.equal(participant.ccl_participant, true);
+  const listed = (await request("get", { user: otherCaptain })).data.tournaments;
+  assert.deepEqual(listed.map((row) => [row.id, row.ccl_participant]), [["CCL-2027", true]]);
+  assert.deepEqual(
+    (await request("get", { user: tournamentAdmin, query: { scope: "my-tournaments" } })).data.tournaments.map((row) => row.id),
+    []
+  );
+  await request("patch", { id: "CCL-2027", body: { access_users: [{ user_id: 2, role: "admin" }] } });
+  assert.deepEqual((await request("get", { user: tournamentAdmin })).data.tournaments.map((row) => row.id), ["CCL-2027"]);
 });
 
 test("Rivals patches retain TPR settings and linked Challenges after legacy columns are removed", async (t) => {
