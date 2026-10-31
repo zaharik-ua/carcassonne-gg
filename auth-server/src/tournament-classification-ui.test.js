@@ -241,6 +241,16 @@ for (const page of ["admin", "my"]) {
   });
 }
 
+test("My Tournaments lists CCL tournaments for association captains only", () => {
+  const context = vm.createContext({});
+  load(context, "my", ["getTournamentClassification", "isCclCaptainTournament"]);
+  const ccl = { id: "CCL-2027", type: "Individuals", category: "CCL" };
+  assert.equal(context.isCclCaptainTournament({ ...ccl, access_role: "captain" }), true);
+  assert.equal(context.isCclCaptainTournament({ ...ccl, access_role: "admin" }), false);
+  assert.equal(context.isCclCaptainTournament({ ...ccl, access_role: null }), false);
+  assert.equal(context.isCclCaptainTournament({ id: "ETCOC", type: "Teams", category: "ETCOC", access_role: "captain" }), false);
+});
+
 test("assigned tournament admins preserve global-only access assignments", async () => {
   const ui = contextForForm("my", tournament(TOURNAMENT_CATEGORIES[0]), { globalAdmin: false });
   await ui.open(); await ui.submit();

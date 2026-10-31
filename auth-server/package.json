@@ -10,6 +10,7 @@
     "reset:match-lineups-time-change": "node src/reset-match-lineups-after-time-change.js",
     "migrate:tournament-classification": "node src/migrate-tournament-classification.js",
     "cleanup:tournament-classification": "node src/cleanup-tournament-classification.js",
+    "import:ccl-slots": "node src/import-ccl-slots.js",
     "test": "node --test src/*.test.js"
   },
   "dependencies": {

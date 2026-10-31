@@ -1907,6 +1907,16 @@
     border-top: 1px solid #e5e7eb;
   }
 
+  .cp-ccl.cp-ccl--standalone {
+    margin-top: 0;
+    padding-top: 0;
+    border-top: 0;
+  }
+
+  .cp-ccl-closed-row td {
+    background: #fafbfc;
+  }
+
   .cp-ccl-body {
     display: grid;
     gap: 18px;
@@ -8516,8 +8526,10 @@
       const editButton = document.createElement("button");
       editButton.type = "button";
       editButton.className = "cp-edit-btn";
-      editButton.textContent = "Edit";
-      editButton.addEventListener("click", () => openMyTournamentEditor(item));
+      const canEdit = tournamentEditorCache.isGlobalAdmin
+        || String(item?.access_role || "").trim().toLowerCase() === "admin";
+      editButton.textContent = canEdit ? "Edit" : "Players";
+      editButton.addEventListener("click", () => (canEdit ? openMyTournamentEditor(item) : openCclCaptainView(item)));
       actions.appendChild(editButton);
 
       row.appendChild(main);
@@ -8580,6 +8592,50 @@
     }
   }
 
+  // A captain of an association with a slot in the CCL tournament (the server sets this role).
+  function isCclCaptainTournament(tournament) {
+    return getTournamentClassification(tournament).isCcl
+      && String(tournament?.access_role || "").trim().toLowerCase() === "captain";
+  }
+
+  async function openCclCaptainView(tournament) {
+    clearFilters();
+    setPageHeading(String(tournament?.name || tournament?.id || "CCL"));
+    countEl.textContent = String(tournament?.id || "");
+    hintEl.textContent = "";
+    addButtonEl.classList.add("cp-hidden");
+    contentEl.className = "captain-alert";
+    contentEl.textContent = "Loading slots...";
+
+    try {
+      const [profilesData, associationsData] = await Promise.all([
+        requestTournamentJson(PROFILES_PUBLIC_URL, { method: "GET" }),
+        requestTournamentJson(ASSOCIATIONS_URL, { method: "GET" }),
+      ]);
+      const wrap = document.createElement("div");
+      wrap.className = "cp-edit-form";
+      const actions = document.createElement("div");
+      actions.className = "cp-edit-actions";
+      const backButton = document.createElement("button");
+      backButton.type = "button";
+      backButton.className = "cp-btn cp-btn-secondary";
+      backButton.textContent = "Back to tournaments";
+      backButton.addEventListener("click", () => renderMyTournamentsList(tournamentEditorCache.tournaments));
+      actions.appendChild(backButton);
+      wrap.appendChild(actions);
+      wrap.appendChild(createCclPlayersSection(tournament, {
+        profiles: Array.isArray(profilesData?.profiles) ? profilesData.profiles : [],
+        associations: Array.isArray(associationsData?.associations) ? associationsData.associations : [],
+      }, { standalone: true }));
+      contentEl.className = "";
+      contentEl.innerHTML = "";
+      contentEl.appendChild(wrap);
+    } catch (error) {
+      contentEl.className = "captain-alert";
+      contentEl.textContent = error?.message || "Failed to load CCL slots.";
+    }
+  }
+
   const CCL_URL = `${AUTH_BASE}/ccl`;
   const CCL_STAGES = ["Main", "Q1", "Q2", "Q3"];
   const CCL_QUALIFICATION_STAGES = ["Q1", "Q2", "Q3"];
@@ -8632,23 +8688,21 @@
     return node;
   }
 
-  // Admin section of a CCL tournament: slots, draws (Elo and pots) and qualification results.
-  // Every action is saved through /ccl/... right away, independently of the tournament form.
-  function createCclPlayersSection(tournament, references) {
+  // CCL players of a tournament. Admins get slots, draws (Elo and pots) and qualification results;
+  // captains get the slots of their association. Every action is saved through /ccl/... right away.
+  function createCclPlayersSection(tournament, references, options = {}) {
     const tournamentId = String(tournament?.id || "").trim();
     const encodedTournamentId = encodeURIComponent(tournamentId);
     const el = createCclElement;
     const key = (value) => String(value ?? "").trim().toUpperCase();
 
-    const root = el("section", "cp-tournament-section cp-ccl");
+    const root = el("section", `cp-tournament-section cp-ccl${options.standalone ? " cp-ccl--standalone" : ""}`);
     const head = el("div", "cp-tournament-section-head");
     const headText = el("div");
-    headText.appendChild(el("div", "cp-tournament-section-title", "CCL players"));
-    headText.appendChild(el(
-      "div",
-      "cp-tournament-section-hint",
-      "Changes in this section are saved immediately. Stage deadlines are in the advanced settings."
-    ));
+    const title = el("div", "cp-tournament-section-title", "CCL players");
+    const hint = el("div", "cp-tournament-section-hint");
+    headText.appendChild(title);
+    headText.appendChild(hint);
     head.appendChild(headText);
     const status = el("div", "cp-edit-error");
     const body = el("div", "cp-ccl-body");
@@ -9269,17 +9323,129 @@
       return block;
     };
 
+    // ---- Captain: slots of the own association until the stage deadline ----
+    const captainDrafts = new Map();
+    const getCaptainDraft = (slot) => {
+      if (captainDrafts.has(slot.id)) return captainDrafts.get(slot.id);
+      const entry = getSlotEntry(slot, slot.entry_stage);
+      return {
+        player_id: slot.player_id || "",
+        name: entry?.qualified_by_name || "",
+        link: entry?.qualified_by_link || "",
+      };
+    };
+    const getCaptainChanges = (slot, draft) => {
+      const entry = getSlotEntry(slot, slot.entry_stage);
+      const changes = {};
+      if ((draft.player_id || "") !== (slot.player_id || "")) changes.player_id = draft.player_id || null;
+      if (draft.name.trim() !== (entry?.qualified_by_name || "")) changes.qualified_by_name = draft.name.trim();
+      if (draft.link.trim() !== (entry?.qualified_by_link || "")) changes.qualified_by_link = draft.link.trim();
+      return changes;
+    };
+    const saveCaptainSlot = (slot) => {
+      const draft = getCaptainDraft(slot);
+      if (!draft.name.trim()) {
+        setStatus("Qualified by is required.");
+        return;
+      }
+      const changes = getCaptainChanges(slot, draft);
+      if (!Object.keys(changes).length) return;
+      run(async () => {
+        await send(`/slots/${encodeURIComponent(slot.id)}`, "PATCH", changes);
+        captainDrafts.delete(slot.id);
+        return "Slot saved.";
+      }, "Failed to save the slot.");
+    };
+    const renderCaptainSlots = () => {
+      const block = el("div", "cp-ccl-block");
+      const slots = data.slots.slice()
+        .sort((left, right) => CCL_STAGES.indexOf(left.entry_stage) - CCL_STAGES.indexOf(right.entry_stage));
+      if (!slots.length) {
+        block.appendChild(el("div", "cp-tournament-config-empty", "Your association has no slots in this tournament."));
+        return block;
+      }
+      const stagesByName = new Map((data.tournament?.stages || []).map((stage) => [stage.stage, stage]));
+      const { wrap, tbody } = createTable(["Stage", "Qualified by", "Player", "Deadline", ""]);
+      slots.forEach((slot) => {
+        const stageInfo = stagesByName.get(slot.entry_stage);
+        const isOpen = stageInfo?.registration_open !== false;
+        const deadline = stageInfo?.registration_ends_at ? formatNewsDateTime(stageInfo.registration_ends_at) : "";
+        const row = el("tr");
+        if (!isOpen) row.className = "cp-ccl-closed-row";
+        addCell(row, slot.entry_stage, "cp-ccl-strong");
+
+        if (isOpen) {
+          const draft = getCaptainDraft(slot);
+          let saveButton = null;
+          const refresh = () => {
+            captainDrafts.set(slot.id, draft);
+            saveButton.disabled = busy || !Object.keys(getCaptainChanges(slot, draft)).length;
+          };
+          const qualifiedBy = el("div", "cp-ccl-stack");
+          qualifiedBy.appendChild(createInput(draft.name, "Qualified by", (value) => {
+            draft.name = value;
+            refresh();
+          }));
+          qualifiedBy.appendChild(createInput(draft.link, "Link (optional)", (value) => {
+            draft.link = value;
+            refresh();
+          }, { type: "url" }));
+          addCell(row, qualifiedBy);
+          const player = el("div", "cp-ccl-stack");
+          player.appendChild(createDropdown(
+            draft.player_id,
+            getPlayerOptions(slot, slot.association_id),
+            (value) => {
+              draft.player_id = value;
+              refresh();
+            },
+            { searchable: true }
+          ).root);
+          if (slot.league_status) player.appendChild(createStatusChip(slot.league_status));
+          addCell(row, player);
+          addCell(row, deadline || "Not set");
+          saveButton = createButton(
+            "Save",
+            () => saveCaptainSlot(slot),
+            "primary",
+            !Object.keys(getCaptainChanges(slot, draft)).length
+          );
+          const actions = el("div", "cp-ccl-actions");
+          actions.appendChild(saveButton);
+          addCell(row, actions);
+        } else {
+          addCell(row, createQualifiedBy(getSlotEntry(slot, slot.entry_stage)));
+          const player = el("div", "cp-ccl-player");
+          player.appendChild(el("span", slot.player_id ? "" : "cp-ccl-muted", getSlotPlayerLabel(slot) || "—"));
+          if (slot.league_status) player.appendChild(createStatusChip(slot.league_status));
+          addCell(row, player);
+          addCell(row, deadline ? `Closed ${deadline}` : "Closed");
+          addCell(row, "");
+        }
+        tbody.appendChild(row);
+      });
+      block.appendChild(wrap);
+      return block;
+    };
+
     const render = () => {
       if (openTournamentDropdown && body.contains(openTournamentDropdown.root)) openTournamentDropdown.close();
       body.innerHTML = "";
       if (!data) {
+        hint.textContent = "";
         body.appendChild(el("div", "cp-tournament-config-empty", loadError || "Loading CCL slots..."));
         return;
       }
       if (!data.can_manage) {
-        body.appendChild(el("div", "cp-tournament-config-empty", "Only tournament admins can manage CCL slots here."));
+        const associationName = getAssociationName(data.captain_association_id);
+        title.textContent = associationName ? `${associationName} — CCL slots` : "CCL slots";
+        hint.textContent = "Choose a player for each slot and say how the place was won before the stage deadline. "
+          + "A player can take only one slot. Changes are saved with the Save button of the row.";
+        body.appendChild(renderCaptainSlots());
         return;
       }
+      title.textContent = "CCL players";
+      hint.textContent = "Changes in this section are saved immediately. Stage deadlines are in the advanced settings.";
       body.appendChild(renderDraws());
       body.appendChild(renderSlots());
       body.appendChild(renderAddSlot());
@@ -9974,6 +10140,7 @@
         ? tournamentsData.tournaments
         : []).filter((tournament) => (
           isGlobalAdmin || String(tournament?.access_role || "").trim().toLowerCase() === "admin"
+          || isCclCaptainTournament(tournament)
         ));
       if (!isGlobalAdmin && !tournaments.length) {
         renderStaticInfoSection("My Tournaments", [
