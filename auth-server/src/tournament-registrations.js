@@ -17,15 +17,21 @@ const TOURNAMENT_REGISTRATIONS_SQL = `
     status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'approved', 'rejected')),
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    deleted_at TEXT,
     -- A known association, or a country that has no association yet.
     CHECK (association_id IS NOT NULL OR trim(COALESCE(country_name, '')) <> ''),
     FOREIGN KEY (tournament_id) REFERENCES tournaments(id) ON DELETE CASCADE
   );
-  -- One request per BGA account in a tournament.
-  CREATE UNIQUE INDEX IF NOT EXISTS idx_tournament_registrations_nickname
-    ON tournament_registrations(tournament_id COLLATE NOCASE, bga_nickname COLLATE NOCASE);
   CREATE INDEX IF NOT EXISTS idx_tournament_registrations_status
     ON tournament_registrations(tournament_id COLLATE NOCASE, status);
+`;
+
+// One active request per BGA account in a tournament; a deleted request does not block a new one.
+const TOURNAMENT_REGISTRATIONS_INDEXES_SQL = `
+  DROP INDEX IF EXISTS idx_tournament_registrations_nickname;
+  CREATE UNIQUE INDEX IF NOT EXISTS idx_tournament_registrations_active_nickname
+    ON tournament_registrations(tournament_id COLLATE NOCASE, bga_nickname COLLATE NOCASE)
+    WHERE deleted_at IS NULL;
 `;
 
 // Same canonical association id as resolveAssociationId in server.js.
@@ -60,8 +66,14 @@ function requestError(status, message, extra = {}) {
   return Object.assign(new Error(message), { status, extra });
 }
 
+// Repeatable: creates the table or adds deleted_at to the first version of it.
 export async function ensureTournamentRegistrationsSchema(db) {
   await dbExec(db, TOURNAMENT_REGISTRATIONS_SQL);
+  const columns = await dbAll(db, "PRAGMA table_info(tournament_registrations)");
+  if (!columns.some((column) => column.name === "deleted_at")) {
+    await dbExec(db, "ALTER TABLE tournament_registrations ADD COLUMN deleted_at TEXT");
+  }
+  await dbExec(db, TOURNAMENT_REGISTRATIONS_INDEXES_SQL);
 }
 
 // Associations with their captains (profiles.team_captain = 1), keyed by canonical id.
@@ -188,6 +200,7 @@ export function registerTournamentRegistrationRoutes(app, {
         FROM tournament_registrations r
         LEFT JOIN associations a ON upper(${ASSOCIATION_ID_SQL}) = upper(trim(r.association_id))
         WHERE upper(trim(r.tournament_id)) = upper(trim(?))
+          AND r.deleted_at IS NULL
         ORDER BY r.created_at DESC, r.id DESC
       `,
       [tournament.id]
@@ -196,6 +209,34 @@ export function registerTournamentRegistrationRoutes(app, {
       ok: true,
       registrations: rows.map((row) => ({ ...row, association_flag: row.association_flag || null })),
     });
+  }));
+
+  // Tournament admins: soft delete, the row stays for the history.
+  app.delete("/ccl/registrations/:id", requireAuthenticated, handle("Failed to delete CCL registration", async (req, res) => {
+    const id = Number(req.params.id);
+    const [registration] = Number.isInteger(id) && id > 0
+      ? await dbAll(db, "SELECT * FROM tournament_registrations WHERE id = ? AND deleted_at IS NULL", [id])
+      : [];
+    const tournament = registration ? await loadCclTournament(db, registration.tournament_id) : null;
+    if (!tournament) throw requestError(404, "Registration not found");
+    if (!(await hasTournamentAdminAccess(db, req.user, tournament.id))) throw requestError(403, "Forbidden");
+    await dbRun(
+      db,
+      "UPDATE tournament_registrations SET deleted_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+      [id]
+    );
+    if (typeof logAuditEvent === "function") {
+      logAuditEvent({
+        ...getAuditActor(req.user),
+        event_type: "tournament_registration.deleted",
+        entity_type: "tournament_registration",
+        action: "delete",
+        record_id: String(id),
+        changes: { deleted: { old: false, new: true } },
+        metadata: { tournament_id: tournament.id, bga_nickname: registration.bga_nickname },
+      }, () => {});
+    }
+    return res.json({ ok: true, deleted_registration_id: id });
   }));
 
   // Public: players of countries without captains register themselves.

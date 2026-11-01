@@ -8844,7 +8844,8 @@
   // Self-registrations from the CCL registration form (countries without captains). Admins only, read-only for now.
   function createCclRegistrationsSection(tournament) {
     const el = createCclElement;
-    const root = el("section", "cp-tournament-section cp-ccl");
+    // cp-ccl--admin: the compact white table of the CCL players section.
+    const root = el("section", "cp-tournament-section cp-ccl cp-ccl--admin");
     const head = el("div", "cp-tournament-section-head");
     const headText = el("div");
     const title = el("div", "cp-tournament-section-title", "Registrations");
@@ -8855,10 +8856,14 @@
       "Players from countries without captains who registered through the CCL registration form."
     ));
     head.appendChild(headText);
+    const status = el("div", "cp-edit-error");
     const body = el("div", "cp-ccl-body");
     root.appendChild(head);
+    root.appendChild(status);
     root.appendChild(body);
     body.textContent = "Loading registrations...";
+    const registrationsUrl = `${CCL_URL}/${encodeURIComponent(String(tournament?.id || "").trim())}/registrations`;
+    let busy = false;
 
     const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
     // SQLite keeps "YYYY-MM-DD HH:MM:SS" in UTC.
@@ -8884,7 +8889,42 @@
       return wrap;
     };
 
-    requestTournamentJson(`${CCL_URL}/${encodeURIComponent(String(tournament?.id || "").trim())}/registrations`, { method: "GET" })
+    const setStatus = (message, success = false) => {
+      status.textContent = String(message || "");
+      status.className = success ? "cp-edit-success" : "cp-edit-error";
+    };
+    // Soft delete: the server keeps the row with deleted_at.
+    const deleteRegistration = async (registration) => {
+      const country = registration.association_name || registration.country_name || "";
+      if (busy || !window.confirm(`Delete the registration of ${registration.bga_nickname}${country ? ` (${country})` : ""}?`)) return;
+      busy = true;
+      setStatus("");
+      body.querySelectorAll("button").forEach((button) => { button.disabled = true; });
+      try {
+        await requestTournamentJson(`${CCL_URL}/registrations/${encodeURIComponent(registration.id)}`, { method: "DELETE" });
+        setStatus("Registration deleted.", true);
+      } catch (error) {
+        setStatus(getCclErrorMessage(error, "Failed to delete the registration."));
+      } finally {
+        busy = false;
+        load();
+      }
+    };
+    const createDeleteButton = (registration) => {
+      const button = el("button", "cp-btn cp-btn-danger cp-ccl-icon-btn");
+      button.type = "button";
+      button.title = "Delete registration";
+      button.setAttribute("aria-label", "Delete registration");
+      const icon = el("i", "fa-solid fa-trash-can");
+      icon.setAttribute("aria-hidden", "true");
+      button.appendChild(icon);
+      button.addEventListener("click", () => deleteRegistration(registration));
+      const actions = el("div", "cp-ccl-actions");
+      actions.appendChild(button);
+      return actions;
+    };
+
+    const load = () => requestTournamentJson(registrationsUrl, { method: "GET" })
       .then((data) => {
         const registrations = Array.isArray(data?.registrations) ? data.registrations : [];
         title.textContent = `Registrations (${registrations.length})`;
@@ -8896,7 +8936,7 @@
         const wrap = el("div", "cp-ccl-table-wrap");
         const table = el("table", "cp-ccl-table cp-ccl-table--registrations");
         const headRow = el("tr");
-        ["Association", "Player (BGA)", "Name", "Contacts", "Registered"].forEach((label) => {
+        ["Association", "Player (BGA)", "Name", "Contacts", "Registered", ""].forEach((label) => {
           headRow.appendChild(el("th", "", label));
         });
         const thead = el("thead");
@@ -8910,6 +8950,7 @@
             registration.real_name || "—",
             registration.contact || "—",
             formatCreatedAt(registration.created_at),
+            createDeleteButton(registration),
           ];
           cells.forEach((content, index) => {
             const cell = el("td", index === 3 ? "cp-ccl-registration-contact" : "");
@@ -8928,6 +8969,7 @@
         body.innerHTML = "";
         body.appendChild(el("div", "cp-edit-error", getCclErrorMessage(error, "Failed to load registrations.")));
       });
+    load();
     return root;
   }
 

@@ -85,7 +85,7 @@ async function createDatabase(t) {
 function createApi(db) {
   const routes = new Map();
   const app = {};
-  for (const method of ["get", "post"]) {
+  for (const method of ["get", "post", "delete"]) {
     app[method] = (routePath, ...handlers) => routes.set(`${method.toUpperCase()} ${routePath}`, handlers.at(-1));
   }
   const audit = [];
@@ -241,4 +241,59 @@ test("tournament admins list registrations newest first; others cannot", async (
     params: { tournamentId: "ETCOC-2026" },
   });
   assert.equal(notCcl.status, 404);
+});
+
+test("tournament admins soft-delete registrations; the player can register again", async (t) => {
+  const db = await createDatabase(t);
+  const api = createApi(db);
+  const created = await register(api, { ...PLAYER, association_id: "AR" });
+  const id = String(created.body.registration.id);
+  const remove = (user, registrationId = id) => api.call("DELETE /ccl/registrations/:id", {
+    user,
+    params: { id: registrationId },
+  });
+
+  assert.equal((await remove(USERS.captainUa)).status, 403);
+  assert.equal((await remove(USERS.tournamentAdmin)).status, 200);
+  assert.equal((await remove(USERS.admin)).status, 404);
+  assert.equal((await remove(USERS.admin, "abc")).status, 404);
+
+  const rows = await all(db, "SELECT deleted_at FROM tournament_registrations WHERE id = ?", [id]);
+  assert.ok(rows[0].deleted_at);
+  const list = await api.call("GET /ccl/:tournamentId/registrations", { user: USERS.admin });
+  assert.deepEqual(list.body.registrations, []);
+  assert.equal(api.audit.at(-1).event_type, "tournament_registration.deleted");
+  assert.equal((await register(api, { ...PLAYER, association_id: "AR" })).status, 201);
+});
+
+test("the first version of the table gets deleted_at and the partial unique index", async (t) => {
+  const db = new sqlite3.Database(":memory:");
+  t.after(() => close(db));
+  await exec(db, `
+    CREATE TABLE tournament_registrations (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      tournament_id TEXT NOT NULL COLLATE NOCASE,
+      association_id TEXT COLLATE NOCASE,
+      country_name TEXT,
+      bga_nickname TEXT NOT NULL,
+      real_name TEXT NOT NULL,
+      contact TEXT NOT NULL,
+      user_id INTEGER,
+      player_id TEXT,
+      status TEXT NOT NULL DEFAULT 'pending',
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE UNIQUE INDEX idx_tournament_registrations_nickname
+      ON tournament_registrations(tournament_id COLLATE NOCASE, bga_nickname COLLATE NOCASE);
+    INSERT INTO tournament_registrations (tournament_id, country_name, bga_nickname, real_name, contact)
+      VALUES ('CCL-2027', 'Peru', 'kiwi', 'K', 'mail');
+  `);
+  await ensureTournamentRegistrationsSchema(db);
+  await ensureTournamentRegistrationsSchema(db);
+  assert.ok((await all(db, "PRAGMA table_info(tournament_registrations)")).some((column) => column.name === "deleted_at"));
+  assert.deepEqual(
+    (await all(db, "PRAGMA index_list(tournament_registrations)")).map((index) => index.name).sort(),
+    ["idx_tournament_registrations_active_nickname", "idx_tournament_registrations_status"]
+  );
 });
