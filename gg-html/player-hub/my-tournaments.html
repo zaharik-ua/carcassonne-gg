@@ -1956,6 +1956,12 @@
     margin-top: -2px;
   }
 
+  .cp-ccl-email-hint {
+    color: #667085;
+    font-size: 11px;
+    line-height: 1.35;
+  }
+
   .cp-ccl-field-error {
     grid-column: 2;
     margin-top: -3px;
@@ -9066,7 +9072,8 @@
       ...(payload ? { body: JSON.stringify(payload) } : {}),
     });
     // Runs one action, then reloads the slots so every block shows the server state.
-    const run = async (work, fallback) => {
+    // onError may show the error itself (e.g. under a field) and return true.
+    const run = async (work, fallback, onError = null) => {
       if (busy) return;
       busy = true;
       setStatus("");
@@ -9076,7 +9083,7 @@
         await load();
         if (message) setStatus(message, true);
       } catch (error) {
-        setStatus(getCclErrorMessage(error, fallback));
+        if (!onError?.(error)) setStatus(getCclErrorMessage(error, fallback));
         await load().catch(() => {});
       } finally {
         busy = false;
@@ -9770,7 +9777,9 @@
       return /^Associations\s+\d+\s*-\s*\d+$/i.test(name) ? name : "";
     };
     const captainDrafts = new Map();
+    // Field errors per slot: { qualified_by_name, player_login_email }.
     const captainErrors = new Map();
+    const getCaptainErrors = (slot) => captainErrors.get(slot.id) || {};
     const getCaptainDraft = (slot) => {
       if (captainDrafts.has(slot.id)) return captainDrafts.get(slot.id);
       const entry = getSlotEntry(slot, slot.entry_stage);
@@ -9778,8 +9787,12 @@
         player_id: slot.player_id || "",
         name: getAllotmentPlaceholder(entry) ? "" : entry?.qualified_by_name || "",
         link: entry?.qualified_by_link || "",
+        email: "",
       };
     };
+    // A chosen player without a Login Email needs one before the slot is saved.
+    const needsLoginEmail = (draft) => !!draft.player_id
+      && (data.players_without_login_email || []).some((id) => String(id).trim() === String(draft.player_id).trim());
     const getCaptainChanges = (slot, draft) => {
       const entry = getSlotEntry(slot, slot.entry_stage);
       const changes = {};
@@ -9788,16 +9801,26 @@
       const name = draft.name.trim() || getAllotmentPlaceholder(entry);
       if (name !== (entry?.qualified_by_name || "")) changes.qualified_by_name = name;
       if (draft.link.trim() !== (entry?.qualified_by_link || "")) changes.qualified_by_link = draft.link.trim();
+      if (needsLoginEmail(draft) && draft.email.trim()) changes.player_login_email = draft.email.trim();
       return changes;
     };
     const saveCaptainSlot = (slot) => {
       const draft = getCaptainDraft(slot);
       // With a player chosen, the captain must say how the player qualified ("Associations n-m" does not count).
       const allotment = getAllotmentPlaceholder(getSlotEntry(slot, slot.entry_stage));
+      const errors = {};
       if (!draft.name.trim() && (draft.player_id || !allotment)) {
-        captainErrors.set(slot.id, draft.player_id
+        errors.qualified_by_name = draft.player_id
           ? "Enter the tournament through which the player qualified."
-          : "Qualified by is required.");
+          : "Qualified by is required.";
+      }
+      if (needsLoginEmail(draft)) {
+        const email = draft.email.trim();
+        if (!email) errors.player_login_email = "Enter the player's Login Email.";
+        else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) errors.player_login_email = "Enter a valid email address.";
+      }
+      if (Object.keys(errors).length) {
+        captainErrors.set(slot.id, errors);
         setStatus("");
         render();
         return;
@@ -9809,7 +9832,12 @@
         await send(`/slots/${encodeURIComponent(slot.id)}`, "PATCH", changes);
         captainDrafts.delete(slot.id);
         return "Slot saved.";
-      }, "Failed to save the slot.");
+      }, "Failed to save the slot.", (error) => {
+        // Server checks of the Login Email (e.g. already used) go under the field too.
+        if (error?.data?.field !== "player_login_email") return false;
+        captainErrors.set(slot.id, { player_login_email: error.message });
+        return true;
+      });
     };
     const renderCaptainSlots = () => {
       const block = el("div", "cp-ccl-block");
@@ -9837,21 +9865,28 @@
             captainDrafts.set(slot.id, draft);
             saveButton.disabled = busy || !Object.keys(getCaptainChanges(slot, draft)).length;
           };
+          const errors = getCaptainErrors(slot);
+          const errorNodes = {};
+          // A field error sits under its field and goes away once the field is edited.
+          const appendError = (target, field) => {
+            if (!errors[field]) return;
+            errorNodes[field] = el("span", "cp-ccl-field-error", errors[field]);
+            target.appendChild(errorNodes[field]);
+          };
+          const clearError = (field) => {
+            delete errors[field];
+            errorNodes[field]?.remove();
+          };
           const qualifiedBy = el("div", "cp-ccl-stack");
           const allotment = getAllotmentPlaceholder(getSlotEntry(slot, slot.entry_stage));
-          let qualifiedByError = null;
           const qualifiedByInput = createInput(draft.name, allotment || "Qualified by", (value) => {
             draft.name = value;
-            captainErrors.delete(slot.id);
-            qualifiedByError?.remove();
+            clearError("qualified_by_name");
             refresh();
           });
           if (allotment) qualifiedByInput.title = "Enter the tournament through which the player qualified";
           qualifiedBy.appendChild(qualifiedByInput);
-          if (captainErrors.has(slot.id)) {
-            qualifiedByError = el("span", "cp-ccl-field-error", captainErrors.get(slot.id));
-            qualifiedBy.appendChild(qualifiedByError);
-          }
+          appendError(qualifiedBy, "qualified_by_name");
           qualifiedBy.appendChild(createInput(draft.link, "Link (optional)", (value) => {
             draft.link = value;
             refresh();
@@ -9863,10 +9898,26 @@
             getPlayerOptions(slot, slot.association_id),
             (value) => {
               draft.player_id = value;
-              refresh();
+              clearError("player_login_email");
+              captainDrafts.set(slot.id, draft);
+              // Shows or hides the Login Email field for the new player.
+              render();
             },
             { searchable: true }
           ).root);
+          if (needsLoginEmail(draft)) {
+            player.appendChild(createInput(draft.email, "Player's Login Email", (value) => {
+              draft.email = value;
+              clearError("player_login_email");
+              refresh();
+            }, { type: "email" }));
+            appendError(player, "player_login_email");
+            player.appendChild(el(
+              "span",
+              "cp-ccl-email-hint",
+              "The player has no Login Email. They will sign in to carcassonne.gg with it to arrange tournament matches."
+            ));
+          }
           if (slot.league_status) player.appendChild(createStatusChip(slot.league_status));
           addCell(row, player);
           addCell(row, deadline);

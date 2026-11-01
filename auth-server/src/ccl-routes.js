@@ -114,6 +114,36 @@ export async function resolveCclActor(db, user, tournament) {
   return { isAdmin, captainAssociationId: association?.id || null };
 }
 
+// Login Email: the profiles.email a player signs in with to arrange tournament matches.
+const LOGIN_EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+async function loadProfileLoginEmail(db, playerId) {
+  const row = await dbGet(
+    db,
+    "SELECT trim(COALESCE(email, '')) AS email FROM profiles WHERE trim(id) = ? AND deleted_at IS NULL LIMIT 1",
+    [text(playerId)]
+  );
+  return text(row?.email);
+}
+
+// Profiles of the association (profiles.association holds its code or name) that have no Login Email.
+async function loadPlayersWithoutLoginEmail(db, associationId) {
+  const association = await resolveCclAssociation(db, associationId);
+  if (!association) return [];
+  const rows = await dbAll(
+    db,
+    `
+      SELECT trim(id) AS id
+      FROM profiles
+      WHERE deleted_at IS NULL
+        AND trim(COALESCE(email, '')) = ''
+        AND (upper(trim(COALESCE(association, ''))) = upper(?) OR lower(trim(COALESCE(association, ''))) = lower(?))
+    `,
+    [association.id, text(association.name)]
+  );
+  return rows.map((row) => text(row.id)).filter(Boolean);
+}
+
 async function loadSlots(db, tournamentId) {
   return dbAll(
     db,
@@ -336,6 +366,9 @@ export function registerCclRoutes(app, {
       },
       can_manage: actor.isAdmin,
       captain_association_id: actor.captainAssociationId,
+      players_without_login_email: actor.isAdmin
+        ? []
+        : await loadPlayersWithoutLoginEmail(db, actor.captainAssociationId),
       phases,
       slots: visibleSlots.map((slot) => formatSlot(slot, state)),
     });
@@ -456,6 +489,34 @@ export function registerCclRoutes(app, {
     });
     if (error) throw requestError(400, error);
 
+    // A captain gives the Login Email of a chosen player who has none; it is saved to the profile.
+    const loginEmail = text(changes.player_login_email);
+    delete changes.player_login_email;
+    let newLoginEmail = null;
+    if (playerId && !(await loadProfileLoginEmail(db, playerId))) {
+      if (!loginEmail && !actor.isAdmin) {
+        throw requestError(400, "Enter the player's Login Email", { field: "player_login_email" });
+      }
+      if (loginEmail) {
+        if (!LOGIN_EMAIL_PATTERN.test(loginEmail) || loginEmail.length > 254) {
+          throw requestError(400, "Enter a valid email address", { field: "player_login_email" });
+        }
+        const taken = await dbGet(
+          db,
+          `
+            SELECT id FROM profiles
+            WHERE lower(trim(COALESCE(email, ''))) = lower(?) AND trim(id) <> ? AND deleted_at IS NULL
+            LIMIT 1
+          `,
+          [loginEmail, playerId]
+        );
+        if (taken) {
+          throw requestError(409, "This email is already used by another player's profile", { field: "player_login_email" });
+        }
+        newLoginEmail = loginEmail;
+      }
+    }
+
     const nextSlot = {
       association_id: has(changes, "association_id") ? text(changes.association_id) || null : slot.association_id || null,
       entry_stage: has(changes, "entry_stage") ? normalizeCclStage(changes.entry_stage) : slot.entry_stage,
@@ -533,6 +594,13 @@ export function registerCclRoutes(app, {
         );
       }
       await resetPhaseSeeds(db, tournament.id, phasesToReset);
+      if (newLoginEmail) {
+        await dbRun(
+          db,
+          "UPDATE profiles SET email = ? WHERE trim(id) = ? AND trim(COALESCE(email, '')) = '' AND deleted_at IS NULL",
+          [newLoginEmail, playerId]
+        );
+      }
     });
 
     audit(req, {
@@ -548,6 +616,7 @@ export function registerCclRoutes(app, {
         tournament_id: tournament.id,
         reset_pots: [...new Set(phasesToReset)],
         elo_refreshed_stages: eloRefreshStages,
+        ...(newLoginEmail ? { player_login_email_set: playerId } : {}),
       },
     });
     const state = await loadTournamentState(db, tournament);

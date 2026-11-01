@@ -59,6 +59,7 @@ async function createDatabase(t) {
       association TEXT,
       gg_elo REAL,
       gg_rating_position INTEGER,
+      email TEXT,
       deleted_at TEXT
     );
     CREATE TABLE teams (id TEXT PRIMARY KEY);
@@ -80,13 +81,13 @@ async function createDatabase(t) {
       ('ETCOC-2026', 'ETCOC 2026', 'Teams', 'ETCOC', NULL, NULL, NULL);
     INSERT INTO associations (code, name, flag) VALUES
       ('AR', 'Argentina', 'ar.png'), ('UA', 'Ukraine', 'ua.png'), ('DE', 'Germany', 'de.png');
-    INSERT INTO profiles (id, bga_nickname, association, gg_elo, gg_rating_position) VALUES
-      ('juan', 'Juan123', 'AR', 1810, 3),
-      ('pablo', 'pablo_ar', 'Argentina', 1500, NULL),
-      ('leo', 'Leo_ar', 'AR', 1700.5, 9),
-      ('olena', 'Olena', 'UA', 1755, 5),
-      ('taras', 'taras', 'UA', NULL, NULL),
-      ('max', 'Max', 'DE', 1600, 20);
+    INSERT INTO profiles (id, bga_nickname, association, gg_elo, gg_rating_position, email) VALUES
+      ('juan', 'Juan123', 'AR', 1810, 3, 'juan@example.com'),
+      ('pablo', 'pablo_ar', 'Argentina', 1500, NULL, 'pablo@example.com'),
+      ('leo', 'Leo_ar', 'AR', 1700.5, 9, 'leo@example.com'),
+      ('olena', 'Olena', 'UA', 1755, 5, 'olena@example.com'),
+      ('taras', 'taras', 'UA', NULL, NULL, 'taras@example.com'),
+      ('max', 'Max', 'DE', 1600, 20, 'max@example.com');
     INSERT INTO tournament_access_users VALUES ('tournament', 'CCL-2027', 2, 'admin');
   `);
   await ensureCclSchema(db);
@@ -250,6 +251,38 @@ test("captains see and fill only their association's slots before the stage dead
   const updated = api.audit.find((entry) => entry.event_type === "ccl_slot.updated" && entry.actor_user_id === 3);
   assert.deepEqual(updated.changes.player_id, { old: null, new: "pablo" });
   assert.deepEqual(updated.changes.qualified_by_name, { old: "Association ranking", new: "Argentina Online 2026" });
+});
+
+test("captains give the Login Email of a chosen player who has none", async (t) => {
+  const db = await createDatabase(t);
+  await exec(db, "INSERT INTO profiles (id, bga_nickname, association) VALUES ('diego', 'Diego', 'Argentina')");
+  const api = createApi(db);
+  const [arQ1] = await createSlot(api, { association_id: "AR", entry_stage: "Q1", qualified_by_name: "Association ranking" });
+  const [arQ2] = await createSlot(api, { association_id: "AR", entry_stage: "Q2", qualified_by_name: "Association ranking" });
+
+  assert.deepEqual((await getSlots(api, USERS.captainAr)).body.players_without_login_email, ["diego"]);
+  assert.deepEqual((await getSlots(api, USERS.admin)).body.players_without_login_email, []);
+
+  for (const [body, status, message] of [
+    [{ player_id: "diego" }, 400, /Login Email/],
+    [{ player_id: "diego", player_login_email: "not-an-email" }, 400, /valid email/],
+    [{ player_id: "diego", player_login_email: "JUAN@example.com" }, 409, /already used/],
+  ]) {
+    const response = await patchSlot(api, USERS.captainAr, arQ1.id, body);
+    assert.equal(response.status, status, JSON.stringify(response.body));
+    assert.match(response.body.message, message);
+    assert.equal(response.body.field, "player_login_email");
+  }
+
+  const saved = await patchSlot(api, USERS.captainAr, arQ1.id, { player_id: "diego", player_login_email: " diego@example.com " });
+  assert.equal(saved.status, 200, JSON.stringify(saved.body));
+  assert.equal((await all(db, "SELECT email FROM profiles WHERE id = 'diego'"))[0].email, "diego@example.com");
+  assert.deepEqual((await getSlots(api, USERS.captainAr)).body.players_without_login_email, []);
+
+  // A player who already has a Login Email keeps it; the field is ignored.
+  const other = await patchSlot(api, USERS.captainAr, arQ2.id, { player_id: "leo", player_login_email: "new@example.com" });
+  assert.equal(other.status, 200, JSON.stringify(other.body));
+  assert.equal((await all(db, "SELECT email FROM profiles WHERE id = 'leo'"))[0].email, "leo@example.com");
 });
 
 test("admins assign associations, move stages and delete slots with their stage entries", async (t) => {

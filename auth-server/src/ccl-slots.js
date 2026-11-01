@@ -30,7 +30,7 @@ const DEADLINE_COLUMNS = Object.freeze({
 });
 // Tournament form fields holding the stage deadlines (Q1 and Q2 share one).
 export const CCL_DEADLINE_FIELDS = Object.freeze([...new Set(Object.values(DEADLINE_COLUMNS))]);
-const CAPTAIN_SLOT_FIELDS = new Set(["player_id", "qualified_by_name", "qualified_by_link"]);
+const CAPTAIN_SLOT_FIELDS = new Set(["player_id", "qualified_by_name", "qualified_by_link", "player_login_email"]);
 const ADMIN_SLOT_FIELDS = new Set([...CAPTAIN_SLOT_FIELDS, "association_id", "entry_stage"]);
 
 const text = (value) => String(value ?? "").trim();
