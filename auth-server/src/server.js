@@ -8428,6 +8428,7 @@ registerCclRoutes(app, {
 
 registerTournamentRegistrationRoutes(app, {
   db,
+  requireAuthenticated,
   requireTrustedJsonRequest,
   getAuditActor,
   logAuditEvent,

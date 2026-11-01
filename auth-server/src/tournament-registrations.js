@@ -1,4 +1,5 @@
 import { loadCclTournament, resolveCclAssociation } from "./ccl-routes.js";
+import { hasTournamentAdminAccess } from "./tournament-admin-access.js";
 
 // Self-registration requests of players for a tournament (CCL first, other tournaments later).
 // Admins review them and invite the player; the row itself never creates a slot.
@@ -126,6 +127,9 @@ export function normalizeRegistrationInput(body) {
 
 export function registerTournamentRegistrationRoutes(app, {
   db,
+  requireAuthenticated = (req, res, next) => (
+    req.user ? next() : res.status(401).json({ ok: false, message: "Unauthorized" })
+  ),
   requireTrustedJsonRequest = (_req, _res, next) => next(),
   getAuditActor = () => ({}),
   logAuditEvent = null,
@@ -169,6 +173,28 @@ export function registerTournamentRegistrationRoutes(app, {
         player_id: text(req.user?.player_id) || null,
         captain_association_id: captainAssociationId,
       },
+    });
+  }));
+
+  // Tournament admins: every request, newest first.
+  app.get("/ccl/:tournamentId/registrations", requireAuthenticated, handle("Failed to load CCL registrations", async (req, res) => {
+    const tournament = await loadTournament(req.params.tournamentId);
+    if (!(await hasTournamentAdminAccess(db, req.user, tournament.id))) throw requestError(403, "Forbidden");
+    const rows = await dbAll(
+      db,
+      `
+        SELECT r.id, r.association_id, a.name AS association_name, a.flag AS association_flag, r.country_name,
+               r.bga_nickname, r.real_name, r.contact, r.user_id, r.player_id, r.status, r.created_at
+        FROM tournament_registrations r
+        LEFT JOIN associations a ON upper(${ASSOCIATION_ID_SQL}) = upper(trim(r.association_id))
+        WHERE upper(trim(r.tournament_id)) = upper(trim(?))
+        ORDER BY r.created_at DESC, r.id DESC
+      `,
+      [tournament.id]
+    );
+    return res.json({
+      ok: true,
+      registrations: rows.map((row) => ({ ...row, association_flag: row.association_flag || null })),
     });
   }));
 

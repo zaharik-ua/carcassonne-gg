@@ -1906,6 +1906,14 @@
     border-top: 1px solid #e5e7eb;
   }
 
+  .cp-ccl-table--registrations td {
+    vertical-align: middle;
+  }
+
+  .cp-ccl-registration-contact {
+    word-break: break-word;
+  }
+
   .cp-ccl.cp-ccl--standalone {
     margin-top: 0;
     padding-top: 0;
@@ -1941,6 +1949,11 @@
     grid-template-columns: 96px minmax(0, 420px);
     align-items: center;
     gap: 6px 10px;
+  }
+
+  .cp-ccl-stack .cp-ccl-field-error {
+    grid-column: auto;
+    margin-top: -2px;
   }
 
   .cp-ccl-field-error {
@@ -1991,6 +2004,10 @@
 
   .cp-ccl-table td.cp-ccl-phase-actions {
     vertical-align: middle;
+  }
+
+  .cp-ccl-players-link {
+    font-weight: 500;
   }
 
   .cp-ccl-deadline {
@@ -2168,6 +2185,22 @@
   .cp-ccl-field--action .cp-btn {
     height: 30px;
     padding: 0 14px;
+  }
+
+  /* Admin view: compact white tables. */
+  .cp-ccl--admin .cp-ccl-icon-btn {
+    font-size: 10px;
+    width: 20px;
+    height: 20px;
+  }
+
+  .cp-ccl--admin .cp-ccl-table th,
+  .cp-ccl--admin .cp-ccl-table td {
+    padding: 3px 8px;
+  }
+
+  .cp-ccl--admin .cp-ccl-table td {
+    background: #fff;
   }
 
   @media (max-width: 800px) {
@@ -8808,6 +8841,96 @@
     return node;
   }
 
+  // Self-registrations from the CCL registration form (countries without captains). Admins only, read-only for now.
+  function createCclRegistrationsSection(tournament) {
+    const el = createCclElement;
+    const root = el("section", "cp-tournament-section cp-ccl");
+    const head = el("div", "cp-tournament-section-head");
+    const headText = el("div");
+    const title = el("div", "cp-tournament-section-title", "Registrations");
+    headText.appendChild(title);
+    headText.appendChild(el(
+      "div",
+      "cp-tournament-section-hint",
+      "Players from countries without captains who registered through the CCL registration form."
+    ));
+    head.appendChild(headText);
+    const body = el("div", "cp-ccl-body");
+    root.appendChild(head);
+    root.appendChild(body);
+    body.textContent = "Loading registrations...";
+
+    const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    // SQLite keeps "YYYY-MM-DD HH:MM:SS" in UTC.
+    const formatCreatedAt = (value) => {
+      const raw = String(value || "").trim();
+      return formatCclDateTimeInZone(/^\d{4}-\d{2}-\d{2} /.test(raw) ? `${raw.replace(" ", "T")}Z` : raw, timeZone) || raw;
+    };
+    const createCountry = (registration) => {
+      const wrap = el("span", "cp-ccl-association");
+      const flag = toApiAbsoluteUrl(registration.association_flag || "");
+      if (flag) {
+        const image = el("img", "cp-dd-flag");
+        image.src = flag;
+        image.alt = "";
+        wrap.appendChild(image);
+      }
+      if (registration.association_id) {
+        wrap.appendChild(el("span", "", registration.association_name || registration.association_id));
+      } else {
+        wrap.appendChild(el("span", "", registration.country_name || "—"));
+        wrap.appendChild(el("span", "cp-ccl-muted", "(other)"));
+      }
+      return wrap;
+    };
+
+    requestTournamentJson(`${CCL_URL}/${encodeURIComponent(String(tournament?.id || "").trim())}/registrations`, { method: "GET" })
+      .then((data) => {
+        const registrations = Array.isArray(data?.registrations) ? data.registrations : [];
+        title.textContent = `Registrations (${registrations.length})`;
+        body.innerHTML = "";
+        if (!registrations.length) {
+          body.appendChild(el("div", "cp-ccl-muted", "No registrations yet."));
+          return;
+        }
+        const wrap = el("div", "cp-ccl-table-wrap");
+        const table = el("table", "cp-ccl-table cp-ccl-table--registrations");
+        const headRow = el("tr");
+        ["Association", "Player (BGA)", "Name", "Contacts", "Registered"].forEach((label) => {
+          headRow.appendChild(el("th", "", label));
+        });
+        const thead = el("thead");
+        thead.appendChild(headRow);
+        const tbody = el("tbody");
+        registrations.forEach((registration) => {
+          const row = el("tr");
+          const cells = [
+            createCountry(registration),
+            el("span", "cp-ccl-strong", registration.bga_nickname || "—"),
+            registration.real_name || "—",
+            registration.contact || "—",
+            formatCreatedAt(registration.created_at),
+          ];
+          cells.forEach((content, index) => {
+            const cell = el("td", index === 3 ? "cp-ccl-registration-contact" : "");
+            if (content instanceof Node) cell.appendChild(content);
+            else cell.textContent = String(content);
+            row.appendChild(cell);
+          });
+          tbody.appendChild(row);
+        });
+        table.appendChild(thead);
+        table.appendChild(tbody);
+        wrap.appendChild(table);
+        body.appendChild(wrap);
+      })
+      .catch((error) => {
+        body.innerHTML = "";
+        body.appendChild(el("div", "cp-edit-error", getCclErrorMessage(error, "Failed to load registrations.")));
+      });
+    return root;
+  }
+
   // CCL players of a tournament. Admins get slots, draws (Elo and pots) and qualification results;
   // captains get the slots of their association. Every action is saved through /ccl/... right away.
   function createCclPlayersSection(tournament, references, options = {}) {
@@ -9598,13 +9721,20 @@
       wrap.appendChild(el("div", "cp-ccl-deadline-zone", `(${timeZone})`));
       return wrap;
     };
+    // "Associations 5-12" is how a slot was allotted, not how the player qualified:
+    // the captain sees it as a placeholder and replaces it with the tournament name.
+    const getAllotmentPlaceholder = (entry) => {
+      const name = String(entry?.qualified_by_name || "").trim();
+      return /^Associations\s+\d+\s*-\s*\d+$/i.test(name) ? name : "";
+    };
     const captainDrafts = new Map();
+    const captainErrors = new Map();
     const getCaptainDraft = (slot) => {
       if (captainDrafts.has(slot.id)) return captainDrafts.get(slot.id);
       const entry = getSlotEntry(slot, slot.entry_stage);
       return {
         player_id: slot.player_id || "",
-        name: entry?.qualified_by_name || "",
+        name: getAllotmentPlaceholder(entry) ? "" : entry?.qualified_by_name || "",
         link: entry?.qualified_by_link || "",
       };
     };
@@ -9612,16 +9742,25 @@
       const entry = getSlotEntry(slot, slot.entry_stage);
       const changes = {};
       if ((draft.player_id || "") !== (slot.player_id || "")) changes.player_id = draft.player_id || null;
-      if (draft.name.trim() !== (entry?.qualified_by_name || "")) changes.qualified_by_name = draft.name.trim();
+      // An empty field over an "Associations n-m" placeholder keeps the stored value.
+      const name = draft.name.trim() || getAllotmentPlaceholder(entry);
+      if (name !== (entry?.qualified_by_name || "")) changes.qualified_by_name = name;
       if (draft.link.trim() !== (entry?.qualified_by_link || "")) changes.qualified_by_link = draft.link.trim();
       return changes;
     };
     const saveCaptainSlot = (slot) => {
       const draft = getCaptainDraft(slot);
-      if (!draft.name.trim()) {
-        setStatus("Qualified by is required.");
+      // With a player chosen, the captain must say how the player qualified ("Associations n-m" does not count).
+      const allotment = getAllotmentPlaceholder(getSlotEntry(slot, slot.entry_stage));
+      if (!draft.name.trim() && (draft.player_id || !allotment)) {
+        captainErrors.set(slot.id, draft.player_id
+          ? "Enter the tournament through which the player qualified."
+          : "Qualified by is required.");
+        setStatus("");
+        render();
         return;
       }
+      captainErrors.delete(slot.id);
       const changes = getCaptainChanges(slot, draft);
       if (!Object.keys(changes).length) return;
       run(async () => {
@@ -9657,10 +9796,20 @@
             saveButton.disabled = busy || !Object.keys(getCaptainChanges(slot, draft)).length;
           };
           const qualifiedBy = el("div", "cp-ccl-stack");
-          qualifiedBy.appendChild(createInput(draft.name, "Qualified by", (value) => {
+          const allotment = getAllotmentPlaceholder(getSlotEntry(slot, slot.entry_stage));
+          let qualifiedByError = null;
+          const qualifiedByInput = createInput(draft.name, allotment || "Qualified by", (value) => {
             draft.name = value;
+            captainErrors.delete(slot.id);
+            qualifiedByError?.remove();
             refresh();
-          }));
+          });
+          if (allotment) qualifiedByInput.title = "Enter the tournament through which the player qualified";
+          qualifiedBy.appendChild(qualifiedByInput);
+          if (captainErrors.has(slot.id)) {
+            qualifiedByError = el("span", "cp-ccl-field-error", captainErrors.get(slot.id));
+            qualifiedBy.appendChild(qualifiedByError);
+          }
           qualifiedBy.appendChild(createInput(draft.link, "Link (optional)", (value) => {
             draft.link = value;
             refresh();
@@ -9700,6 +9849,12 @@
         tbody.appendChild(row);
       });
       block.appendChild(wrap);
+      const playersPath = `${tournamentId.toLowerCase()}-players`;
+      const playersNote = el("div", "cp-tournament-section-hint", "You can see the list of registered players here: ");
+      const playersLink = el("a", "cp-ccl-players-link", "Players");
+      playersLink.href = `https://carcassonne.gg/${encodeURIComponent(playersPath)}/`;
+      playersNote.appendChild(playersLink);
+      block.appendChild(playersNote);
       return block;
     };
 
@@ -9714,11 +9869,11 @@
       if (!data.can_manage) {
         const associationName = getAssociationName(data.captain_association_id);
         title.textContent = associationName ? `${associationName} — CCL slots` : "CCL slots";
-        hint.textContent = "Choose a player for each slot and say how the place was won before the stage deadline. "
-          + "A player can take only one slot. Changes are saved with the Save button of the row.";
+        hint.textContent = "Choose a player for each slot before the stage deadline. A player can take only one slot.";
         body.appendChild(renderCaptainSlots());
         return;
       }
+      root.classList.add("cp-ccl--admin");
       title.textContent = "CCL players";
       hint.textContent = "Changes in this section are saved immediately. Stage deadlines are in the advanced settings.";
       body.appendChild(renderDraws());
@@ -10381,6 +10536,7 @@
     contentEl.appendChild(form);
     if (initialClassification.isCcl && tournamentId) {
       contentEl.appendChild(createCclPlayersSection(tournament, references));
+      contentEl.appendChild(createCclRegistrationsSection(tournament));
     }
   }
 

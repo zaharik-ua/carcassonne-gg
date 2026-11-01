@@ -25,6 +25,8 @@ function close(db) {
 }
 
 const USERS = {
+  admin: { id: 1, admin: 1 },
+  tournamentAdmin: { id: 2, admin: 0 },
   captainUa: { id: 4, team_captain: 1, association: "Ukraine", player_id: "olena" },
   captainDe: { id: 6, team_captain: 1, association: "DE", player_id: "max" },
   playerUa: { id: 7, team_captain: 0, association: "UA", player_id: "taras" },
@@ -56,6 +58,13 @@ async function createDatabase(t) {
       team_captain INTEGER NOT NULL DEFAULT 0,
       deleted_at TEXT
     );
+    CREATE TABLE tournament_access_users (
+      tournament_entity_type TEXT,
+      tournament_id TEXT,
+      user_id INTEGER,
+      role TEXT
+    );
+    INSERT INTO tournament_access_users VALUES ('tournament', 'CCL-2027', 2, 'admin');
     INSERT INTO tournaments VALUES
       ('CCL-2027', 'Carcassonne Champions League 2027', 'Individuals', 'CCL'),
       ('ETCOC-2026', 'ETCOC 2026', 'Teams', 'ETCOC');
@@ -208,4 +217,28 @@ test("normalizeRegistrationInput trims fields and requires a country", () => {
     association_id: "",
   });
   assert.equal(normalizeRegistrationInput(PLAYER).error, "Country is required");
+});
+
+test("tournament admins list registrations newest first; others cannot", async (t) => {
+  const db = await createDatabase(t);
+  const api = createApi(db);
+  assert.equal((await register(api, { ...PLAYER, association_id: "AR" })).status, 201);
+  assert.equal((await register(api, { ...PLAYER, bga_nickname: "kiwi", country_name: "New Zealand" })).status, 201);
+
+  const list = (user) => api.call("GET /ccl/:tournamentId/registrations", { user });
+  for (const user of [USERS.admin, USERS.tournamentAdmin]) {
+    const response = await list(user);
+    assert.equal(response.status, 200, JSON.stringify(response.body));
+    assert.deepEqual(
+      response.body.registrations.map((row) => [row.bga_nickname, row.association_name, row.association_flag, row.country_name]),
+      [["kiwi", null, null, "New Zealand"], ["Leo AR", "Argentina", "ar.png", null]]
+    );
+    assert.equal(response.body.registrations[1].contact, "Telegram @leo");
+  }
+  assert.equal((await list(USERS.captainUa)).status, 403);
+  const notCcl = await api.call("GET /ccl/:tournamentId/registrations", {
+    user: USERS.admin,
+    params: { tournamentId: "ETCOC-2026" },
+  });
+  assert.equal(notCcl.status, 404);
 });
