@@ -14,7 +14,10 @@ const TOURNAMENT_REGISTRATIONS_SQL = `
     contact TEXT NOT NULL CHECK (trim(contact) <> ''),
     user_id INTEGER,
     player_id TEXT,
+    -- pending: new, approved: processed (invited to a qualifier), rejected.
     status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'approved', 'rejected')),
+    -- The qualifier tournament the admins chose for the player.
+    qualifier_link TEXT,
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
     deleted_at TEXT,
@@ -66,14 +69,41 @@ function requestError(status, message, extra = {}) {
   return Object.assign(new Error(message), { status, extra });
 }
 
-// Repeatable: creates the table or adds deleted_at to the first version of it.
+// Columns added after the first version of the table.
+const LATER_COLUMNS = ["deleted_at", "qualifier_link"];
+const REGISTRATION_STATUSES = ["pending", "approved", "rejected"];
+const QUALIFIER_LINK_MAX = 500;
+
+// Repeatable: creates the table or adds the later columns to an older version of it.
 export async function ensureTournamentRegistrationsSchema(db) {
   await dbExec(db, TOURNAMENT_REGISTRATIONS_SQL);
-  const columns = await dbAll(db, "PRAGMA table_info(tournament_registrations)");
-  if (!columns.some((column) => column.name === "deleted_at")) {
-    await dbExec(db, "ALTER TABLE tournament_registrations ADD COLUMN deleted_at TEXT");
+  const columns = new Set((await dbAll(db, "PRAGMA table_info(tournament_registrations)")).map((column) => column.name));
+  for (const column of LATER_COLUMNS.filter((name) => !columns.has(name))) {
+    await dbExec(db, `ALTER TABLE tournament_registrations ADD COLUMN ${column} TEXT`);
   }
   await dbExec(db, TOURNAMENT_REGISTRATIONS_INDEXES_SQL);
+}
+
+// Partial update from the admin list: status and/or qualifier_link.
+export function normalizeRegistrationUpdate(body) {
+  const value = {};
+  if (Object.prototype.hasOwnProperty.call(body || {}, "status")) {
+    value.status = text(body.status).toLowerCase();
+    if (!REGISTRATION_STATUSES.includes(value.status)) {
+      return { error: `status must be one of ${REGISTRATION_STATUSES.join(", ")}` };
+    }
+  }
+  if (Object.prototype.hasOwnProperty.call(body || {}, "qualifier_link")) {
+    value.qualifier_link = String(body.qualifier_link ?? "").trim() || null;
+    if (value.qualifier_link && !/^https?:\/\/\S+$/i.test(value.qualifier_link)) {
+      return { error: "qualifier_link must be an http(s) link" };
+    }
+    if (value.qualifier_link?.length > QUALIFIER_LINK_MAX) {
+      return { error: `qualifier_link must be at most ${QUALIFIER_LINK_MAX} characters` };
+    }
+  }
+  if (!Object.keys(value).length) return { error: "Nothing to update" };
+  return { value };
 }
 
 // Associations with their captains (profiles.team_captain = 1), keyed by canonical id.
@@ -196,7 +226,7 @@ export function registerTournamentRegistrationRoutes(app, {
       db,
       `
         SELECT r.id, r.association_id, a.name AS association_name, a.flag AS association_flag, r.country_name,
-               r.bga_nickname, r.real_name, r.contact, r.user_id, r.player_id, r.status, r.created_at
+               r.bga_nickname, r.real_name, r.contact, r.user_id, r.player_id, r.status, r.qualifier_link, r.created_at
         FROM tournament_registrations r
         LEFT JOIN associations a ON upper(${ASSOCIATION_ID_SQL}) = upper(trim(r.association_id))
         WHERE upper(trim(r.tournament_id)) = upper(trim(?))
@@ -211,15 +241,48 @@ export function registerTournamentRegistrationRoutes(app, {
     });
   }));
 
-  // Tournament admins: soft delete, the row stays for the history.
-  app.delete("/ccl/registrations/:id", requireAuthenticated, handle("Failed to delete CCL registration", async (req, res) => {
-    const id = Number(req.params.id);
+  // An active registration of a CCL tournament the user administers.
+  const loadAdminRegistration = async (user, registrationId) => {
+    const id = Number(registrationId);
     const [registration] = Number.isInteger(id) && id > 0
       ? await dbAll(db, "SELECT * FROM tournament_registrations WHERE id = ? AND deleted_at IS NULL", [id])
       : [];
     const tournament = registration ? await loadCclTournament(db, registration.tournament_id) : null;
     if (!tournament) throw requestError(404, "Registration not found");
-    if (!(await hasTournamentAdminAccess(db, req.user, tournament.id))) throw requestError(403, "Forbidden");
+    if (!(await hasTournamentAdminAccess(db, user, tournament.id))) throw requestError(403, "Forbidden");
+    return { id, registration, tournament };
+  };
+
+  // Tournament admins: status and the qualifier link.
+  app.patch("/ccl/registrations/:id", requireAuthenticated, handle("Failed to update CCL registration", async (req, res) => {
+    const { id, registration, tournament } = await loadAdminRegistration(req.user, req.params.id);
+    const input = normalizeRegistrationUpdate(req.body);
+    if (input.error) throw requestError(400, input.error);
+    const fields = Object.keys(input.value);
+    await dbRun(
+      db,
+      `UPDATE tournament_registrations SET ${fields.map((field) => `${field} = ?`).join(", ")}, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
+      [...fields.map((field) => input.value[field]), id]
+    );
+    if (typeof logAuditEvent === "function") {
+      logAuditEvent({
+        ...getAuditActor(req.user),
+        event_type: "tournament_registration.updated",
+        entity_type: "tournament_registration",
+        action: "update",
+        record_id: String(id),
+        changes: Object.fromEntries(fields
+          .filter((field) => (registration[field] ?? null) !== input.value[field])
+          .map((field) => [field, { old: registration[field] ?? null, new: input.value[field] }])),
+        metadata: { tournament_id: tournament.id, bga_nickname: registration.bga_nickname },
+      }, () => {});
+    }
+    return res.json({ ok: true, registration: { id, status: registration.status, qualifier_link: registration.qualifier_link ?? null, ...input.value } });
+  }));
+
+  // Tournament admins: soft delete, the row stays for the history.
+  app.delete("/ccl/registrations/:id", requireAuthenticated, handle("Failed to delete CCL registration", async (req, res) => {
+    const { id, registration, tournament } = await loadAdminRegistration(req.user, req.params.id);
     await dbRun(
       db,
       "UPDATE tournament_registrations SET deleted_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE id = ?",

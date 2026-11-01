@@ -85,7 +85,7 @@ async function createDatabase(t) {
 function createApi(db) {
   const routes = new Map();
   const app = {};
-  for (const method of ["get", "post", "delete"]) {
+  for (const method of ["get", "post", "patch", "delete"]) {
     app[method] = (routePath, ...handlers) => routes.set(`${method.toUpperCase()} ${routePath}`, handlers.at(-1));
   }
   const audit = [];
@@ -291,9 +291,44 @@ test("the first version of the table gets deleted_at and the partial unique inde
   `);
   await ensureTournamentRegistrationsSchema(db);
   await ensureTournamentRegistrationsSchema(db);
-  assert.ok((await all(db, "PRAGMA table_info(tournament_registrations)")).some((column) => column.name === "deleted_at"));
+  const columns = (await all(db, "PRAGMA table_info(tournament_registrations)")).map((column) => column.name);
+  assert.ok(columns.includes("deleted_at") && columns.includes("qualifier_link"));
   assert.deepEqual(
     (await all(db, "PRAGMA index_list(tournament_registrations)")).map((index) => index.name).sort(),
     ["idx_tournament_registrations_active_nickname", "idx_tournament_registrations_status"]
   );
+});
+
+test("tournament admins set the status and the qualifier link", async (t) => {
+  const db = await createDatabase(t);
+  const api = createApi(db);
+  const created = await register(api, { ...PLAYER, association_id: "AR" });
+  const id = String(created.body.registration.id);
+  const update = (user, body, registrationId = id) => api.call("PATCH /ccl/registrations/:id", {
+    user,
+    params: { id: registrationId },
+    body,
+  });
+
+  const saved = await update(USERS.tournamentAdmin, { status: "Approved", qualifier_link: " https://boardgamearena.com/tournament?id=1 " });
+  assert.equal(saved.status, 200, JSON.stringify(saved.body));
+  assert.deepEqual(saved.body.registration, {
+    id: Number(id),
+    status: "approved",
+    qualifier_link: "https://boardgamearena.com/tournament?id=1",
+  });
+  const list = await api.call("GET /ccl/:tournamentId/registrations", { user: USERS.admin });
+  assert.equal(list.body.registrations[0].status, "approved");
+  assert.equal(list.body.registrations[0].qualifier_link, "https://boardgamearena.com/tournament?id=1");
+  assert.deepEqual(api.audit.at(-1).changes, {
+    status: { old: "pending", new: "approved" },
+    qualifier_link: { old: null, new: "https://boardgamearena.com/tournament?id=1" },
+  });
+
+  assert.equal((await update(USERS.admin, { qualifier_link: "" })).body.registration.qualifier_link, null);
+  for (const body of [{}, { status: "done" }, { qualifier_link: "javascript:alert(1)" }, { qualifier_link: `https://x.y/${"a".repeat(500)}` }]) {
+    assert.equal((await update(USERS.admin, body)).status, 400, JSON.stringify(body));
+  }
+  assert.equal((await update(USERS.captainUa, { status: "rejected" })).status, 403);
+  assert.equal((await update(USERS.admin, { status: "rejected" }, "999")).status, 404);
 });

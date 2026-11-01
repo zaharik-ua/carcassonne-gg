@@ -181,6 +181,11 @@
     align-items: flex-start;
   }
 
+  .reg-success-text {
+    display: grid;
+    gap: 8px;
+  }
+
   .reg-success i {
     color: #2e7d32;
     font-size: 20px;
@@ -732,13 +737,21 @@
     const success = el("div", "reg-success");
     success.appendChild(el("i", "fa-solid fa-circle-check"));
     const textWrap = el("div");
-    textWrap.appendChild(el("div", "reg-title", `Thank you, ${body.bga_nickname}!`));
+    textWrap.className = "reg-success-text";
+    textWrap.appendChild(el("div", "reg-title", `Thank you, ${body.bga_nickname}! 🎉`));
+    textWrap.appendChild(el("div", "", "Your registration has been received."));
     textWrap.appendChild(el(
       "div",
       "",
-      "Your registration has been received. Admins will invite you to the qualification tournament "
-        + `for all players from ${association ? "your association" : "your country"} who want to take part.`
+      `The qualification tournament for players from ${association ? "your association" : "your country"} `
+        + "will take place on Board Game Arena from November 11 to 17."
     ));
+    const contacts = el("div", "", "Tournament admins will contact you and send you an invitation to the tournament. "
+      + "If you have any questions, feel free to contact us at ");
+    const email = el("a", "", "carcassonne.gg@gmail.com");
+    email.href = "mailto:carcassonne.gg@gmail.com";
+    contacts.appendChild(email);
+    textWrap.appendChild(contacts);
     success.appendChild(textWrap);
     showPanel(success);
     startButton.hidden = true;

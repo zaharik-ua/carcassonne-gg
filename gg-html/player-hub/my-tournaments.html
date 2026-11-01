@@ -1910,8 +1910,59 @@
     vertical-align: middle;
   }
 
-  .cp-ccl-registration-contact {
-    word-break: break-word;
+  .cp-ccl-table--registrations td:last-child {
+    width: 1%;
+  }
+
+  .cp-ccl-table--registrations .cp-ccl-stack .cp-dd {
+    min-width: 0;
+  }
+
+  .cp-ccl-registration-filter.cp-dd {
+    width: 160px;
+    flex: 0 0 auto;
+  }
+
+  a.cp-ccl-icon-btn {
+    box-sizing: border-box;
+    text-decoration: none;
+  }
+
+  .cp-ccl-table tr.cp-ccl-registration-details td {
+    border-top-style: dashed;
+  }
+
+  .cp-ccl-registration-details-list {
+    display: grid;
+    grid-template-columns: max-content minmax(0, 1fr);
+    gap: 2px 12px;
+    margin: 2px 0;
+    font-size: 12px;
+  }
+
+  .cp-ccl-registration-details-list dt {
+    color: #667085;
+    font-weight: 600;
+  }
+
+  .cp-ccl-registration-details-list dd {
+    margin: 0;
+    overflow-wrap: anywhere;
+  }
+
+  .cp-ccl-chip--registration-pending {
+    background: #e4f0fb;
+    color: #1a5d96;
+  }
+
+  .cp-ccl-chip--registration-approved {
+    background: #e3f6ec;
+    color: #177245;
+  }
+
+  .cp-ccl-chip--registration-rejected {
+    background: #fdecec;
+    color: #a12a2a;
   }
 
   .cp-ccl.cp-ccl--standalone {
@@ -8847,7 +8898,14 @@
     return node;
   }
 
-  // Self-registrations from the CCL registration form (countries without captains). Admins only, read-only for now.
+  // DB values of tournament_registrations.status and their labels.
+  const CCL_REGISTRATION_STATUSES = [
+    { value: "pending", label: "New" },
+    { value: "approved", label: "Processed" },
+    { value: "rejected", label: "Rejected" },
+  ];
+
+  // Self-registrations from the CCL registration form (countries without captains). Admins only.
   function createCclRegistrationsSection(tournament) {
     const el = createCclElement;
     // cp-ccl--admin: the compact white table of the CCL players section.
@@ -8869,13 +8927,67 @@
     root.appendChild(body);
     body.textContent = "Loading registrations...";
     const registrationsUrl = `${CCL_URL}/${encodeURIComponent(String(tournament?.id || "").trim())}/registrations`;
+    let registrations = null;
     let busy = false;
+    let statusFilter = "";
+    let editDraft = null;
+    const openDetails = new Set();
 
+    const statusFilterDropdown = createTournamentDropdown(
+      "",
+      [{ value: "", label: "All statuses" }].concat(CCL_REGISTRATION_STATUSES)
+    );
+    statusFilterDropdown.root.classList.add("cp-ccl-registration-filter");
+    statusFilterDropdown.root.querySelector("button")?.setAttribute("aria-label", "Filter registrations by status");
+    statusFilterDropdown.addEventListener("change", () => {
+      statusFilter = statusFilterDropdown.value;
+      render();
+    });
+    head.appendChild(statusFilterDropdown.root);
+
+    const getStatusLabel = (value) => CCL_REGISTRATION_STATUSES.find((item) => item.value === value)?.label || value || "—";
     const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
     // SQLite keeps "YYYY-MM-DD HH:MM:SS" in UTC.
     const formatCreatedAt = (value) => {
       const raw = String(value || "").trim();
       return formatCclDateTimeInZone(/^\d{4}-\d{2}-\d{2} /.test(raw) ? `${raw.replace(" ", "T")}Z` : raw, timeZone) || raw;
+    };
+    const setStatus = (message, success = false) => {
+      status.textContent = String(message || "");
+      status.className = success ? "cp-edit-success" : "cp-edit-error";
+    };
+    const createIconButton = (iconClass, label, onClick, variant = "secondary") => {
+      const button = el("button", `cp-btn cp-btn-${variant} cp-ccl-icon-btn`);
+      button.type = "button";
+      button.title = label;
+      button.setAttribute("aria-label", label);
+      button.disabled = busy;
+      const icon = el("i", iconClass);
+      icon.setAttribute("aria-hidden", "true");
+      button.appendChild(icon);
+      button.addEventListener("click", onClick);
+      return button;
+    };
+    // Opens the qualifier tournament in a new tab; a disabled button keeps the column aligned without a link.
+    const createQualifierLink = (registration) => {
+      const icon = el("i", "fa-solid fa-arrow-up-right-from-square");
+      icon.setAttribute("aria-hidden", "true");
+      if (!registration.qualifier_link) {
+        const placeholder = el("button", "cp-btn cp-btn-secondary cp-ccl-icon-btn");
+        placeholder.type = "button";
+        placeholder.disabled = true;
+        placeholder.title = "No qualifier tournament yet";
+        placeholder.appendChild(icon);
+        return placeholder;
+      }
+      const link = el("a", "cp-btn cp-btn-secondary cp-ccl-icon-btn");
+      link.href = registration.qualifier_link;
+      link.target = "_blank";
+      link.rel = "noopener noreferrer";
+      link.title = "Open the qualifier tournament";
+      link.setAttribute("aria-label", "Open the qualifier tournament");
+      link.appendChild(icon);
+      return link;
     };
     const createCountry = (registration) => {
       const wrap = el("span", "cp-ccl-association");
@@ -8894,82 +9006,183 @@
       }
       return wrap;
     };
-
-    const setStatus = (message, success = false) => {
-      status.textContent = String(message || "");
-      status.className = success ? "cp-edit-success" : "cp-edit-error";
+    const addCell = (row, content, className = "") => {
+      const cell = el("td", className);
+      if (content instanceof Node) cell.appendChild(content);
+      else cell.textContent = String(content ?? "");
+      row.appendChild(cell);
+      return cell;
     };
-    // Soft delete: the server keeps the row with deleted_at.
-    const deleteRegistration = async (registration) => {
-      const country = registration.association_name || registration.country_name || "";
-      if (busy || !window.confirm(`Delete the registration of ${registration.bga_nickname}${country ? ` (${country})` : ""}?`)) return;
+
+    // Runs one request, then reloads the list.
+    const run = async (work, success, fallback) => {
+      if (busy) return;
       busy = true;
       setStatus("");
-      body.querySelectorAll("button").forEach((button) => { button.disabled = true; });
+      render();
       try {
-        await requestTournamentJson(`${CCL_URL}/registrations/${encodeURIComponent(registration.id)}`, { method: "DELETE" });
-        setStatus("Registration deleted.", true);
+        await work();
+        setStatus(success, true);
       } catch (error) {
-        setStatus(getCclErrorMessage(error, "Failed to delete the registration."));
+        setStatus(getCclErrorMessage(error, fallback));
       } finally {
         busy = false;
-        load();
+        await load();
       }
     };
-    const createDeleteButton = (registration) => {
-      const button = el("button", "cp-btn cp-btn-danger cp-ccl-icon-btn");
-      button.type = "button";
-      button.title = "Delete registration";
-      button.setAttribute("aria-label", "Delete registration");
-      const icon = el("i", "fa-solid fa-trash-can");
-      icon.setAttribute("aria-hidden", "true");
-      button.appendChild(icon);
-      button.addEventListener("click", () => deleteRegistration(registration));
+    const saveEdit = (registration) => {
+      const link = editDraft.qualifier_link.trim();
+      if (link && !/^https?:\/\/\S+$/i.test(link)) {
+        editDraft.error = "Enter an http(s) link or leave it empty.";
+        render();
+        return;
+      }
+      const changes = {};
+      if (editDraft.status !== registration.status) changes.status = editDraft.status;
+      if (link !== (registration.qualifier_link || "")) changes.qualifier_link = link;
+      if (!Object.keys(changes).length) {
+        editDraft = null;
+        render();
+        return;
+      }
+      run(async () => {
+        await requestTournamentJson(`${CCL_URL}/registrations/${encodeURIComponent(registration.id)}`, {
+          method: "PATCH",
+          body: JSON.stringify(changes),
+        });
+        editDraft = null;
+      }, "Registration saved.", "Failed to save the registration.");
+    };
+    // Soft delete: the server keeps the row with deleted_at.
+    const deleteRegistration = (registration) => {
+      const country = registration.association_name || registration.country_name || "";
+      if (!window.confirm(`Delete the registration of ${registration.bga_nickname}${country ? ` (${country})` : ""}?`)) return;
+      run(async () => {
+        await requestTournamentJson(`${CCL_URL}/registrations/${encodeURIComponent(registration.id)}`, { method: "DELETE" });
+        if (editDraft?.id === registration.id) editDraft = null;
+      }, "Registration deleted.", "Failed to delete the registration.");
+    };
+
+    const renderRowCells = (row, registration) => {
+      addCell(row, createCountry(registration));
+      addCell(row, el("span", "cp-ccl-strong", registration.bga_nickname || "—"));
+      addCell(row, registration.real_name || "—");
+      if (editDraft?.id === registration.id) {
+        row.classList.add("cp-ccl-editing");
+        const form = el("div", "cp-ccl-stack");
+        const statusSelect = createTournamentDropdown(editDraft.status, CCL_REGISTRATION_STATUSES);
+        statusSelect.root.querySelector("button")?.setAttribute("aria-label", "Registration status");
+        statusSelect.addEventListener("change", () => { editDraft.status = statusSelect.value; });
+        const linkInput = el("input", "cp-tournament-config-input");
+        linkInput.type = "url";
+        linkInput.value = editDraft.qualifier_link;
+        linkInput.placeholder = "Qualifier tournament link (optional)";
+        linkInput.setAttribute("aria-label", "Qualifier tournament link");
+        linkInput.addEventListener("input", () => {
+          editDraft.qualifier_link = linkInput.value;
+          if (editDraft.error) {
+            editDraft.error = "";
+            linkError?.remove();
+          }
+        });
+        linkInput.addEventListener("keydown", (event) => {
+          if (event.key === "Enter") saveEdit(registration);
+          if (event.key === "Escape") {
+            editDraft = null;
+            render();
+          }
+        });
+        form.appendChild(statusSelect.root);
+        form.appendChild(linkInput);
+        const linkError = editDraft.error ? el("span", "cp-ccl-field-error", editDraft.error) : null;
+        if (linkError) form.appendChild(linkError);
+        addCell(row, form);
+        const actions = el("div", "cp-ccl-actions");
+        actions.appendChild(createIconButton("fa-solid fa-check", "Save registration", () => saveEdit(registration), "primary"));
+        actions.appendChild(createIconButton("fa-solid fa-xmark", "Cancel", () => {
+          editDraft = null;
+          render();
+        }));
+        addCell(row, actions);
+        return;
+      }
+      addCell(row, el(
+        "span",
+        `cp-ccl-chip cp-ccl-chip--registration-${registration.status}`,
+        getStatusLabel(registration.status)
+      ));
       const actions = el("div", "cp-ccl-actions");
-      actions.appendChild(button);
-      return actions;
+      const detailsOpen = openDetails.has(registration.id);
+      const detailsButton = createIconButton("fa-solid fa-circle-info", detailsOpen ? "Hide details" : "Show details", () => {
+        if (openDetails.has(registration.id)) openDetails.delete(registration.id);
+        else openDetails.add(registration.id);
+        render();
+      });
+      detailsButton.setAttribute("aria-expanded", String(detailsOpen));
+      actions.appendChild(detailsButton);
+      actions.appendChild(createQualifierLink(registration));
+      actions.appendChild(createIconButton("fa-solid fa-pencil", "Edit registration", () => {
+        editDraft = {
+          id: registration.id,
+          status: registration.status || "pending",
+          qualifier_link: registration.qualifier_link || "",
+          error: "",
+        };
+        setStatus("");
+        render();
+      }));
+      actions.appendChild(createIconButton("fa-solid fa-trash-can", "Delete registration", () => deleteRegistration(registration), "danger"));
+      addCell(row, actions);
+    };
+    const renderDetailsRow = (registration) => {
+      const row = el("tr", "cp-ccl-registration-details");
+      const details = el("dl", "cp-ccl-registration-details-list");
+      [
+        ["Contacts", registration.contact || "—"],
+        ["Registered", formatCreatedAt(registration.created_at) || "—"],
+      ].forEach(([label, value]) => {
+        details.appendChild(el("dt", "", label));
+        details.appendChild(el("dd", "", value));
+      });
+      addCell(row, details).colSpan = 5;
+      return row;
+    };
+
+    const render = () => {
+      if (openTournamentDropdown && body.contains(openTournamentDropdown.root)) openTournamentDropdown.close();
+      if (!registrations) return;
+      const visible = registrations.filter((registration) => !statusFilter || registration.status === statusFilter);
+      title.textContent = statusFilter
+        ? `Registrations (${visible.length}/${registrations.length})`
+        : `Registrations (${registrations.length})`;
+      body.innerHTML = "";
+      if (!visible.length) {
+        body.appendChild(el("div", "cp-ccl-muted", registrations.length ? "No registrations with this status." : "No registrations yet."));
+        return;
+      }
+      const wrap = el("div", "cp-ccl-table-wrap");
+      const table = el("table", "cp-ccl-table cp-ccl-table--registrations");
+      const headRow = el("tr");
+      ["Association", "Player (BGA)", "Name", "Status", ""].forEach((label) => headRow.appendChild(el("th", "", label)));
+      const thead = el("thead");
+      thead.appendChild(headRow);
+      const tbody = el("tbody");
+      visible.forEach((registration) => {
+        const row = el("tr");
+        renderRowCells(row, registration);
+        tbody.appendChild(row);
+        if (openDetails.has(registration.id)) tbody.appendChild(renderDetailsRow(registration));
+      });
+      table.appendChild(thead);
+      table.appendChild(tbody);
+      wrap.appendChild(table);
+      body.appendChild(wrap);
     };
 
     const load = () => requestTournamentJson(registrationsUrl, { method: "GET" })
       .then((data) => {
-        const registrations = Array.isArray(data?.registrations) ? data.registrations : [];
-        title.textContent = `Registrations (${registrations.length})`;
-        body.innerHTML = "";
-        if (!registrations.length) {
-          body.appendChild(el("div", "cp-ccl-muted", "No registrations yet."));
-          return;
-        }
-        const wrap = el("div", "cp-ccl-table-wrap");
-        const table = el("table", "cp-ccl-table cp-ccl-table--registrations");
-        const headRow = el("tr");
-        ["Association", "Player (BGA)", "Name", "Contacts", "Registered", ""].forEach((label) => {
-          headRow.appendChild(el("th", "", label));
-        });
-        const thead = el("thead");
-        thead.appendChild(headRow);
-        const tbody = el("tbody");
-        registrations.forEach((registration) => {
-          const row = el("tr");
-          const cells = [
-            createCountry(registration),
-            el("span", "cp-ccl-strong", registration.bga_nickname || "—"),
-            registration.real_name || "—",
-            registration.contact || "—",
-            formatCreatedAt(registration.created_at),
-            createDeleteButton(registration),
-          ];
-          cells.forEach((content, index) => {
-            const cell = el("td", index === 3 ? "cp-ccl-registration-contact" : "");
-            if (content instanceof Node) cell.appendChild(content);
-            else cell.textContent = String(content);
-            row.appendChild(cell);
-          });
-          tbody.appendChild(row);
-        });
-        table.appendChild(thead);
-        table.appendChild(tbody);
-        wrap.appendChild(table);
-        body.appendChild(wrap);
+        registrations = Array.isArray(data?.registrations) ? data.registrations : [];
+        render();
       })
       .catch((error) => {
         body.innerHTML = "";
@@ -9490,7 +9703,7 @@
         editDraft.qualified_by_name = value;
         clearError("qualified_by_name");
       }), "qualified_by_name");
-      addField("Link", createInput(editDraft.qualified_by_link, "https://... (optional)", (value) => {
+      addField("Link", createInput(editDraft.qualified_by_link, "https://...", (value) => {
         editDraft.qualified_by_link = value;
       }, { type: "url" }));
 
@@ -9887,7 +10100,7 @@
           if (allotment) qualifiedByInput.title = "Enter the tournament through which the player qualified";
           qualifiedBy.appendChild(qualifiedByInput);
           appendError(qualifiedBy, "qualified_by_name");
-          qualifiedBy.appendChild(createInput(draft.link, "Link (optional)", (value) => {
+          qualifiedBy.appendChild(createInput(draft.link, "Tournament link", (value) => {
             draft.link = value;
             refresh();
           }, { type: "url" }));
