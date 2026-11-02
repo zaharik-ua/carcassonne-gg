@@ -2260,13 +2260,111 @@
     background: #fff;
   }
 
-  @media (max-width: 800px) {
+  @media (min-width: 641px) and (max-width: 800px) {
     .cp-ccl-table-wrap {
       overflow-x: auto;
     }
+  }
 
+  @media (max-width: 800px) {
     .cp-ccl-add {
       grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+  }
+
+  /* Phones: every table row becomes a card, each cell shows its column name (data-label). */
+  @media (max-width: 640px) {
+    .cp-tournament-section-head,
+    .cp-ccl-block-head {
+      flex-wrap: wrap;
+    }
+
+    .cp-ccl-table,
+    .cp-ccl-table tbody,
+    .cp-ccl-table tr,
+    .cp-ccl-table td {
+      display: block;
+      width: 100%;
+      box-sizing: border-box;
+    }
+
+    .cp-ccl-table thead {
+      display: none;
+    }
+
+    .cp-ccl-table tr {
+      padding: 6px 0;
+      border-top: 1px solid #e5e7eb;
+    }
+
+    .cp-ccl-table tbody tr:first-child {
+      border-top: 0;
+    }
+
+    .cp-ccl-table tr.cp-ccl-group-start {
+      border-top: 2px solid #d7dde5;
+    }
+
+    .cp-ccl-table tr.cp-ccl-registration-details {
+      border-top: 1px dashed #e5e7eb;
+    }
+
+    .cp-ccl-table th,
+    .cp-ccl-table td,
+    .cp-ccl--admin .cp-ccl-table td {
+      border-top: 0;
+      padding: 3px 10px;
+    }
+
+    .cp-ccl-table td[data-label] {
+      display: grid;
+      grid-template-columns: 96px minmax(0, 1fr);
+      align-items: center;
+      gap: 8px;
+    }
+
+    .cp-ccl-table td[data-label]::before {
+      content: attr(data-label);
+      color: #667085;
+      font-size: 12px;
+      font-weight: 600;
+    }
+
+    .cp-ccl-table td:empty {
+      display: none;
+    }
+
+    .cp-ccl-table .cp-dd,
+    .cp-ccl-table .cp-tournament-config-input,
+    .cp-ccl-table.cp-ccl-table--slots .cp-ccl-elo-input {
+      min-width: 0;
+      width: 100%;
+    }
+
+    .cp-ccl-table .cp-ccl-strong,
+    .cp-ccl-deadline {
+      white-space: normal;
+    }
+
+    .cp-ccl-actions {
+      flex-wrap: wrap;
+    }
+
+    .cp-ccl-edit-form {
+      grid-template-columns: 1fr;
+      gap: 4px;
+    }
+
+    .cp-ccl-field-error {
+      grid-column: auto;
+    }
+
+    .cp-ccl-add {
+      grid-template-columns: minmax(0, 1fr);
+    }
+
+    .cp-ccl-registration-filter.cp-dd {
+      width: 100%;
     }
   }
 
@@ -7917,7 +8015,7 @@
 
   function createTournamentAccessUsersEditor(users, initialEntries) {
     const root = document.createElement("section");
-    root.className = "cp-tournament-section";
+    root.className = "cp-tournament-section cp-ccl";
     const head = document.createElement("div");
     head.className = "cp-tournament-section-head";
     const headText = document.createElement("div");
@@ -7934,8 +8032,9 @@
     list.className = "cp-tournament-config-list";
     const addButton = document.createElement("button");
     addButton.type = "button";
-    addButton.className = "cp-btn cp-btn-secondary cp-tournament-add-row";
+    addButton.className = "cp-btn cp-btn-primary";
     addButton.textContent = "Add user";
+    head.appendChild(addButton);
 
     const userOptions = (Array.isArray(users) ? users : [])
       .map((user) => ({
@@ -7954,19 +8053,17 @@
 
     const render = () => {
       list.innerHTML = "";
-      const header = document.createElement("div");
-      header.className = "cp-tournament-config-header";
-      ["User", "Role", ""].forEach((label) => {
-        const cell = document.createElement("div");
-        cell.textContent = label;
-        header.appendChild(cell);
-      });
-      list.appendChild(header);
       if (!entries.length) {
-        const empty = document.createElement("div");
-        empty.className = "cp-tournament-config-empty";
-        empty.textContent = "No users selected.";
-        list.appendChild(empty);
+        list.appendChild(createCclElement("div", "cp-ccl-muted", "No users added."));
+      } else {
+        const header = document.createElement("div");
+        header.className = "cp-tournament-config-header";
+        ["User", "Role", ""].forEach((label) => {
+          const cell = document.createElement("div");
+          cell.textContent = label;
+          header.appendChild(cell);
+        });
+        list.appendChild(header);
       }
 
       entries.forEach((entry, index) => {
@@ -8034,7 +8131,6 @@
 
     root.appendChild(head);
     root.appendChild(list);
-    root.appendChild(addButton);
     render();
 
     return {
@@ -8891,6 +8987,28 @@
     return blockers ? `${message}: ${blockers}.` : message;
   }
 
+  // Copies the column names into data-label of every body cell (the phone layout shows them),
+  // taking rowspan and colspan into account. Cells spanning several columns stay unlabeled.
+  function labelCclTableCells(container) {
+    container.querySelectorAll("table.cp-ccl-table").forEach((table) => {
+      const headers = Array.from(table.querySelectorAll("thead th")).map((th) => th.textContent.trim());
+      const occupied = [];
+      Array.from(table.tBodies[0]?.rows || []).forEach((row, rowIndex) => {
+        let column = 0;
+        Array.from(row.cells).forEach((cell) => {
+          while (occupied[rowIndex]?.[column]) column += 1;
+          const span = cell.colSpan || 1;
+          if (span === 1 && headers[column]) cell.dataset.label = headers[column];
+          for (let r = rowIndex; r < rowIndex + (cell.rowSpan || 1); r += 1) {
+            occupied[r] = occupied[r] || [];
+            for (let c = column; c < column + span; c += 1) occupied[r][c] = true;
+          }
+          column += span;
+        });
+      });
+    });
+  }
+
   function createCclElement(tag, className = "", textContent = "") {
     const node = document.createElement(tag);
     if (className) node.className = className;
@@ -8914,11 +9032,6 @@
     const headText = el("div");
     const title = el("div", "cp-tournament-section-title", "Registrations");
     headText.appendChild(title);
-    headText.appendChild(el(
-      "div",
-      "cp-tournament-section-hint",
-      "Players from countries without captains who registered through the CCL registration form."
-    ));
     head.appendChild(headText);
     const status = el("div", "cp-edit-error");
     const body = el("div", "cp-ccl-body");
@@ -8968,18 +9081,10 @@
       button.addEventListener("click", onClick);
       return button;
     };
-    // Opens the qualifier tournament in a new tab; a disabled button keeps the column aligned without a link.
+    // Opens the qualifier tournament in a new tab.
     const createQualifierLink = (registration) => {
       const icon = el("i", "fa-solid fa-arrow-up-right-from-square");
       icon.setAttribute("aria-hidden", "true");
-      if (!registration.qualifier_link) {
-        const placeholder = el("button", "cp-btn cp-btn-secondary cp-ccl-icon-btn");
-        placeholder.type = "button";
-        placeholder.disabled = true;
-        placeholder.title = "No qualifier tournament yet";
-        placeholder.appendChild(icon);
-        return placeholder;
-      }
       const link = el("a", "cp-btn cp-btn-secondary cp-ccl-icon-btn");
       link.href = registration.qualifier_link;
       link.target = "_blank";
@@ -9120,7 +9225,7 @@
       });
       detailsButton.setAttribute("aria-expanded", String(detailsOpen));
       actions.appendChild(detailsButton);
-      actions.appendChild(createQualifierLink(registration));
+      if (registration.qualifier_link) actions.appendChild(createQualifierLink(registration));
       actions.appendChild(createIconButton("fa-solid fa-pencil", "Edit registration", () => {
         editDraft = {
           id: registration.id,
@@ -9177,6 +9282,7 @@
       table.appendChild(tbody);
       wrap.appendChild(table);
       body.appendChild(wrap);
+      labelCclTableCells(body);
     };
 
     const load = () => requestTournamentJson(registrationsUrl, { method: "GET" })
@@ -9471,12 +9577,6 @@
         tbody.appendChild(row);
         return row;
       };
-      const notes = [];
-      const noteBlockers = (label, info, blockers) => {
-        const summary = summarizeCclBlockers(blockers);
-        if (summary) notes.push(`${label}: ${summary}.`);
-        else if (Number(info.slots) && !info.elo_set) notes.push(`${label}: set Elo for every player before forming pots.`);
-      };
 
       // Qualification: one row per path; Elo and pots are set for the whole phase, so the buttons span the rows.
       const qualification = data.phases?.qualification || {};
@@ -9490,7 +9590,6 @@
           actionsCell.className = "cp-ccl-phase-actions";
         }
       });
-      noteBlockers("Qualification", qualification, qualificationBlockers);
 
       const league = data.phases?.league || {};
       const leagueBlockers = Array.isArray(league.pots_blockers) ? league.pots_blockers : [];
@@ -9503,10 +9602,8 @@
       });
       leagueRow.className = "cp-ccl-group-start";
       addCell(leagueRow, createPhaseActions("league", league, leagueBlockers), "cp-ccl-phase-actions");
-      noteBlockers("League", league, leagueBlockers);
 
       block.appendChild(wrap);
-      notes.forEach((note) => block.appendChild(el("div", "cp-tournament-section-hint", note)));
       return block;
     };
 
@@ -9910,10 +10007,7 @@
       }, "secondary", !slots.length);
       const block = createBlock(
         `Qualification results (${decided}/${slots.length})`,
-        resultsOpen
-          ? "Qualified players join the League Stage with the League qualified by text, e.g. Q2, Group G Winner. "
-            + "Every Q slot needs a result before League pots can be formed; mark empty slots as Eliminated."
-          : "",
+        "",
         toggle
       );
       if (!resultsOpen) return block;
@@ -10177,14 +10271,16 @@
         title.textContent = associationName ? `${associationName} — CCL slots` : "CCL slots";
         hint.textContent = "Choose a player for each slot before the stage deadline. A player can take only one slot.";
         body.appendChild(renderCaptainSlots());
+        labelCclTableCells(body);
         return;
       }
       root.classList.add("cp-ccl--admin");
       title.textContent = "CCL players";
-      hint.textContent = "Changes in this section are saved immediately. Stage deadlines are in the advanced settings.";
+      hint.textContent = "";
       body.appendChild(renderDraws());
       body.appendChild(renderSlots());
       body.appendChild(renderResults());
+      labelCclTableCells(body);
     };
 
     render();
@@ -10540,7 +10636,6 @@
     tournamentTeamsEditor.onChange((tournamentTeams) => {
       standingsEditor.setTournamentTeams(tournamentTeams);
     });
-    if (canManageAccessUsers) form.appendChild(accessUsersEditor.root);
     form.appendChild(tournamentTeamsEditor.root);
     form.appendChild(standingsEditor.root);
 
@@ -10840,6 +10935,7 @@
     contentEl.className = "";
     contentEl.innerHTML = "";
     contentEl.appendChild(form);
+    if (canManageAccessUsers) contentEl.appendChild(accessUsersEditor.root);
     if (initialClassification.isCcl && tournamentId) {
       contentEl.appendChild(createCclPlayersSection(tournament, references));
       contentEl.appendChild(createCclRegistrationsSection(tournament));

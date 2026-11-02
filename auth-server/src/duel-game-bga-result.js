@@ -11,23 +11,38 @@ export function registerDuelGameBgaResultRoutes(app, {
     }
     try {
       const duel = await dbGetAsync(`
-        SELECT d.*, m.team_1, m.team_2, m.status AS match_status,
+        SELECT d.*, d.status AS duel_status, m.id AS joined_match_id,
+          m.team_1, m.team_2, m.status AS match_status,
           COALESCE(NULLIF(trim(d.tournament_id), ''), m.tournament_id) AS tournament_id
         FROM duels d
-        JOIN matches m ON trim(m.id) = trim(d.match_id) AND m.deleted_at IS NULL
+        LEFT JOIN matches m ON trim(m.id) = trim(d.match_id) AND m.deleted_at IS NULL
         WHERE trim(d.id) = ? AND d.deleted_at IS NULL LIMIT 1
       `, [duelId]);
       if (!duel) return res.status(404).json({ ok: false, message: "Duel not found" });
-      if (!isCompletedMatchStatus(duel.match_status)) {
-        return res.status(403).json({ ok: false, message: "Match results can be edited only for completed matches" });
-      }
-      const tournament = await new Promise((resolve, reject) => {
-        loadTournamentAccessForUser(duel.tournament_id, req.user, (error, row) => error ? reject(error) : resolve(row));
-      });
-      const access = canUserEditMatchResults({ tournament, user: req.user, matchRow: duel });
-      if (!access.allowed) {
-        return res.status(403).json({ ok: false, message: access.expired
-          ? "Match result editing is available for 1 day after match start." : "Forbidden" });
+      if (String(duel.source_type || "").trim().toLowerCase() === "challenge") {
+        // Mirrors /duels/:id/games/save access for Challenge duels.
+        if (!isCompletedMatchStatus(duel.duel_status)) {
+          return res.status(403).json({ ok: false, message: "Challenge match results can be edited only for Done or Error matches" });
+        }
+        const userPlayerId = String(req.user.player_id ?? req.user.bga_id ?? "").trim();
+        const isParticipant = !!userPlayerId
+          && [duel.player_1_id, duel.player_2_id].map((id) => String(id ?? "").trim()).includes(userPlayerId);
+        if (Number(req.user.admin) !== 1 && !isParticipant) {
+          return res.status(403).json({ ok: false, message: "Forbidden" });
+        }
+      } else {
+        if (!duel.joined_match_id) return res.status(404).json({ ok: false, message: "Duel not found" });
+        if (!isCompletedMatchStatus(duel.match_status)) {
+          return res.status(403).json({ ok: false, message: "Match results can be edited only for completed matches" });
+        }
+        const tournament = await new Promise((resolve, reject) => {
+          loadTournamentAccessForUser(duel.tournament_id, req.user, (error, row) => error ? reject(error) : resolve(row));
+        });
+        const access = canUserEditMatchResults({ tournament, user: req.user, matchRow: duel });
+        if (!access.allowed) {
+          return res.status(403).json({ ok: false, message: access.expired
+            ? "Match result editing is available for 1 day after match start." : "Forbidden" });
+        }
       }
       if (![duel.player_1_id, duel.player_2_id].every((id) => /^\d+$/.test(String(id || "")))
         || String(duel.player_1_id) === String(duel.player_2_id)) {

@@ -2429,6 +2429,30 @@
     width: 100%;
   }
 
+  .challenge-game-edit-mode-field select {
+    width: auto;
+    max-width: 100%;
+  }
+
+  .challenge-game-edit-import {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 8px;
+  }
+
+  .challenge-game-edit-import-message {
+    margin-top: 5px;
+    font-size: 12px;
+    line-height: 1.4;
+    color: #b23a48;
+  }
+
+  .challenge-game-edit-import-message:empty {
+    display: none;
+  }
+
   .challenge-game-edit-actions {
     display: flex;
     align-items: center;
@@ -3742,6 +3766,7 @@
   const PLAYER_CHALLENGE_PERIODS_URL = `${CHALLENGE_PERIODS_URL}/player`;
   const DUELS_URL = `${AUTH_BASE}/duels`;
   const DUEL_GAMES_SAVE_URL = (duelId) => `${DUELS_URL}/${encodeURIComponent(duelId)}/games/save`;
+  const DUEL_GAME_BGA_RESULT_URL = (duelId) => `${DUELS_URL}/${encodeURIComponent(duelId)}/games/bga-result`;
   const CHALLENGE_DUEL_ISSUE_URL = (periodId, duelId) => (
     `${CHALLENGE_PERIODS_URL}/${encodeURIComponent(periodId)}/matches/${encodeURIComponent(duelId)}/resolve-issue`
   );
@@ -5248,25 +5273,66 @@
     return true;
   }
 
+  function createChallengePendingGame(duelId, gameNumber) {
+    return {
+      id: `${duelId || "challenge-duel"}-game-${gameNumber}-${Date.now()}`,
+      duel_id: duelId,
+      bga_table_id: "",
+      game_number: gameNumber,
+      player_1_score: null,
+      player_2_score: null,
+      player_1_rank: null,
+      player_2_rank: null,
+      player_1_clock: 0,
+      player_2_clock: 0,
+      status: "",
+      isNewLocal: true,
+      addMode: "",
+      bgaResultLoaded: false,
+    };
+  }
+
+  function isChallengeNoShowGame(game) {
+    return String(game?.status || "").trim().toLowerCase() === "no show";
+  }
+
+  function isChallengePendingGame(game) {
+    return !!game?.isNewLocal && !game.bgaResultLoaded && !isChallengeNoShowGame(game);
+  }
+
+  function getChallengeNoShowSide(game) {
+    if (!isChallengeNoShowGame(game)) return "";
+    if (parseNullableInt(game?.player_1_rank) === 0) return "player1";
+    if (parseNullableInt(game?.player_2_rank) === 0) return "player2";
+    return "";
+  }
+
+  function getChallengeDuelWinsLimit(duelFormat) {
+    const match = String(duelFormat || "").trim().toLowerCase().match(/^bo(\d+)$/);
+    const bestOf = match ? Number(match[1]) : NaN;
+    if (!Number.isFinite(bestOf) || bestOf <= 0) return 2;
+    return Math.max(1, Math.ceil(bestOf / 2));
+  }
+
+  function getChallengeEditableDuelCompletion(games, duelFormat) {
+    const winsToFinish = getChallengeDuelWinsLimit(duelFormat);
+    let wins1 = 0;
+    let wins2 = 0;
+    (Array.isArray(games) ? games : []).forEach((game) => {
+      const won1 = parseNullableInt(game?.player_1_rank) === 1;
+      const won2 = parseNullableInt(game?.player_2_rank) === 1;
+      if (won1 && !won2) wins1 += 1;
+      if (won2 && !won1) wins2 += 1;
+    });
+    return { complete: wins1 >= winsToFinish || wins2 >= winsToFinish, wins1, wins2, winsToFinish };
+  }
+
   function buildChallengeEditableGamesFromDuel(duel) {
     const duelId = String(duel?.id || "").trim();
     const games = (Array.isArray(duel?.games) ? duel.games : [])
       .filter((game) => game && !String(game?.deleted_at || "").trim());
     if (!games.length) {
-      return normalizeChallengeEditableGamesOrder([{
-        id: `${duelId || "challenge-duel"}-game-1-${Date.now()}`,
-        duel_id: duelId,
-        bga_table_id: "",
-        game_number: 1,
-        player_1_score: null,
-        player_2_score: null,
-        player_1_rank: null,
-        player_2_rank: null,
-        player_1_clock: 0,
-        player_2_clock: 0,
-        status: "",
-        isNewLocal: true,
-      }]);
+      return normalizeChallengeEditableGamesOrder([createChallengePendingGame(duelId, 1)]);
     }
     const sortedGames = [...games].sort((a, b) => {
       const aNumber = parseNullableInt(a?.game_number);
@@ -5292,7 +5358,7 @@
     })));
   }
 
-  function createChallengeGameResultsEditor(duel) {
+  function createChallengeGameResultsEditor(duel, options = {}) {
     const duelId = String(duel?.id || "").trim();
     const root = document.createElement("div");
     root.className = "challenge-game-edit-section";
@@ -5301,6 +5367,14 @@
       saving: false,
       error: "",
     };
+    const getDuelFormat = () => (
+      String((typeof options.getDuelFormat === "function" ? options.getDuelFormat() : "") || duel?.duel_format || "Bo3").trim() || "Bo3"
+    );
+    const playerNames = {
+      player1: String(options.player1Name || "Player 1"),
+      player2: String(options.player2Name || "Player 2"),
+    };
+    const isBusy = () => !!state.saving || state.games.some((game) => game.fetchingBgaResult);
 
     const syncWonFieldsWithinGame = (game, winnerSide) => {
       if (!game) return;
@@ -5313,6 +5387,20 @@
       }
     };
 
+    const applyNoShow = (game, noShowSide) => {
+      const isPlayer1NoShow = noShowSide === "player1";
+      Object.assign(game, {
+        status: "No show",
+        bga_table_id: "",
+        player_1_score: isPlayer1NoShow ? 0 : 1,
+        player_2_score: isPlayer1NoShow ? 1 : 0,
+        player_1_clock: 0,
+        player_2_clock: 0,
+        bgaResultError: "",
+      });
+      syncWonFieldsWithinGame(game, isPlayer1NoShow ? "player2" : "player1");
+    };
+
     const createSelect = (value, options, onChange) => {
       const select = document.createElement("select");
       (Array.isArray(options) ? options : []).forEach((option) => {
@@ -5322,7 +5410,7 @@
         select.appendChild(optionEl);
       });
       select.value = String(value || "");
-      select.disabled = !!state.saving;
+      select.disabled = isBusy();
       select.addEventListener("change", () => {
         if (typeof onChange === "function") onChange(select.value);
       });
@@ -5331,13 +5419,15 @@
 
     const validateGames = () => {
       for (const game of state.games) {
+        if (isChallengePendingGame(game)) {
+          return "Get the BGA result or choose a No show for each new game before saving.";
+        }
         const tableId = String(game?.bga_table_id || "").trim();
-        const status = String(game?.status || "").trim().toLowerCase();
         const p1Won = parseNullableInt(game?.player_1_rank);
         const p2Won = parseNullableInt(game?.player_2_rank);
-        if (status !== "no show") {
+        if (!isChallengeNoShowGame(game)) {
           if (!tableId) return "Table ID is required.";
-          if (!/^\d{9}$/.test(tableId)) return "Table ID must be exactly 9 digits.";
+          if (!/^\d{9,10}$/.test(tableId)) return "Table ID must contain 9 or 10 digits.";
         }
         if ((p1Won === 1 && p2Won === 1) || (p1Won !== 1 && p2Won !== 1)) {
           return "Select the player who won each game.";
@@ -5346,44 +5436,200 @@
       return "";
     };
 
+    const createGameNumberField = (game) => {
+      const gameNumberField = document.createElement("div");
+      gameNumberField.className = "challenge-game-edit-field challenge-game-edit-field--inline";
+      const gameNumberLabel = document.createElement("label");
+      gameNumberLabel.textContent = "Game #";
+      const gameNumberValue = document.createElement("div");
+      gameNumberValue.className = "challenge-game-edit-number";
+      gameNumberValue.textContent = String(game?.game_number || "");
+      gameNumberField.appendChild(gameNumberLabel);
+      gameNumberField.appendChild(gameNumberValue);
+      return gameNumberField;
+    };
+
+    const createDeleteGameButton = (gameIndex) => {
+      const deleteGameBtn = document.createElement("button");
+      deleteGameBtn.type = "button";
+      deleteGameBtn.className = "challenge-btn challenge-btn-danger challenge-game-edit-delete-btn";
+      deleteGameBtn.textContent = "Delete";
+      deleteGameBtn.title = "Delete";
+      deleteGameBtn.setAttribute("aria-label", "Delete");
+      deleteGameBtn.disabled = isBusy();
+      deleteGameBtn.addEventListener("click", () => {
+        state.games.splice(gameIndex, 1);
+        normalizeChallengeEditableGamesOrder(state.games);
+        state.error = "";
+        render();
+      });
+      return deleteGameBtn;
+    };
+
+    const createPendingGameEditor = (game, gameIndex) => {
+      const gameWrap = document.createElement("div");
+      gameWrap.className = "challenge-game-edit-game challenge-game-edit-game--pending";
+
+      const metaRow = document.createElement("div");
+      metaRow.className = "challenge-game-edit-meta";
+      metaRow.appendChild(createGameNumberField(game));
+
+      const modeField = document.createElement("div");
+      modeField.className = "challenge-game-edit-field challenge-game-edit-mode-field";
+      const modeSelect = createSelect(
+        game.addMode || "",
+        [
+          { value: "", label: "Select how to add the game" },
+          { value: "table", label: "BGA Table ID" },
+          { value: "player1", label: `${playerNames.player1} - No show` },
+          { value: "player2", label: `${playerNames.player2} - No show` },
+        ],
+        (nextValue) => {
+          game.addMode = nextValue;
+          game.bgaResultError = "";
+          if (nextValue === "player1" || nextValue === "player2") {
+            applyNoShow(game, nextValue);
+          }
+          state.error = "";
+          render();
+        }
+      );
+      modeSelect.setAttribute("aria-label", `Game ${game.game_number}: how to add`);
+      modeField.appendChild(modeSelect);
+      metaRow.appendChild(modeField);
+
+      const metaActions = document.createElement("div");
+      metaActions.className = "challenge-game-edit-meta-actions";
+      metaActions.appendChild(createDeleteGameButton(gameIndex));
+      metaRow.appendChild(metaActions);
+      gameWrap.appendChild(metaRow);
+
+      if (game.addMode !== "table") return gameWrap;
+
+      const importRow = document.createElement("div");
+      importRow.className = "challenge-game-edit-import";
+      const tableField = document.createElement("div");
+      tableField.className = "challenge-game-edit-field challenge-game-edit-field--inline challenge-game-edit-table-field";
+      const tableLabel = document.createElement("label");
+      tableLabel.textContent = "Table ID";
+      const tableInput = document.createElement("input");
+      tableInput.id = `challenge-bga-table-${game.id}`;
+      tableLabel.htmlFor = tableInput.id;
+      tableInput.type = "text";
+      tableInput.inputMode = "numeric";
+      tableInput.maxLength = 10;
+      tableInput.value = String(game.bga_table_id || "");
+      tableInput.disabled = isBusy();
+      const fetchBtn = document.createElement("button");
+      fetchBtn.type = "button";
+      fetchBtn.className = "challenge-btn challenge-btn-secondary";
+      fetchBtn.textContent = game.fetchingBgaResult ? "Getting..." : "Get BGA result";
+      const importMessage = document.createElement("div");
+      importMessage.className = "challenge-game-edit-import-message";
+      importMessage.setAttribute("role", "status");
+      importMessage.id = `${tableInput.id}-message`;
+      tableInput.setAttribute("aria-describedby", importMessage.id);
+
+      const updateValidation = () => {
+        const value = String(tableInput.value || "").trim();
+        const valid = /^\d{9,10}$/.test(value);
+        const invalid = !!value && !valid;
+        tableInput.setAttribute("aria-invalid", String(invalid));
+        importMessage.textContent = invalid ? "Table ID must contain 9 or 10 digits." : game.bgaResultError || "";
+        fetchBtn.disabled = !valid || isBusy();
+      };
+      tableInput.addEventListener("input", () => {
+        game.bga_table_id = String(tableInput.value || "").trim();
+        game.bgaResultError = "";
+        updateValidation();
+      });
+      tableInput.addEventListener("keydown", (event) => {
+        if (event.key !== "Enter") return;
+        event.preventDefault();
+        fetchBtn.click();
+      });
+      fetchBtn.addEventListener("click", async () => {
+        if (fetchBtn.disabled) return;
+        const tableId = String(game.bga_table_id || "").trim();
+        if (state.games.some((other) => other !== game && String(other.bga_table_id || "").trim() === tableId)) {
+          game.bgaResultError = "This Table ID is already included in the match.";
+          updateValidation();
+          return;
+        }
+        game.fetchingBgaResult = true;
+        game.bgaResultError = "";
+        render();
+        try {
+          const result = await apiJson(DUEL_GAME_BGA_RESULT_URL(duelId), {
+            method: "POST",
+            body: JSON.stringify({ bga_table_id: tableId }),
+          });
+          if (!result?.game) throw new Error("Could not load the BGA result. Please try again.");
+          Object.assign(game, result.game, { status: "" });
+          game.bgaResultLoaded = true;
+        } catch (error) {
+          game.bgaResultError = error?.message || "Could not load the BGA result. Please try again.";
+        } finally {
+          game.fetchingBgaResult = false;
+          render();
+        }
+      });
+
+      tableField.appendChild(tableLabel);
+      tableField.appendChild(tableInput);
+      importRow.appendChild(tableField);
+      importRow.appendChild(fetchBtn);
+      gameWrap.appendChild(importRow);
+      gameWrap.appendChild(importMessage);
+      updateValidation();
+      return gameWrap;
+    };
+
     const render = () => {
       root.innerHTML = "";
       const gamesWrap = document.createElement("div");
       gamesWrap.className = "challenge-game-edit-games";
 
       state.games.forEach((game, gameIndex) => {
+        if (isChallengePendingGame(game)) {
+          gamesWrap.appendChild(createPendingGameEditor(game, gameIndex));
+          return;
+        }
+        const isNoShowGame = isChallengeNoShowGame(game);
         const gameWrap = document.createElement("div");
         gameWrap.className = "challenge-game-edit-game";
 
         const metaRow = document.createElement("div");
         metaRow.className = "challenge-game-edit-meta";
-
-        const gameNumberField = document.createElement("div");
-        gameNumberField.className = "challenge-game-edit-field challenge-game-edit-field--inline";
-        const gameNumberLabel = document.createElement("label");
-        gameNumberLabel.textContent = "Game #";
-        const gameNumberValue = document.createElement("div");
-        gameNumberValue.className = "challenge-game-edit-number";
-        gameNumberValue.textContent = String(game?.game_number || "");
-        gameNumberField.appendChild(gameNumberLabel);
-        gameNumberField.appendChild(gameNumberValue);
-        metaRow.appendChild(gameNumberField);
+        metaRow.appendChild(createGameNumberField(game));
 
         const tableField = document.createElement("div");
         tableField.className = "challenge-game-edit-field challenge-game-edit-field--inline challenge-game-edit-table-field";
-        const tableLabel = document.createElement("label");
-        tableLabel.textContent = "Table ID";
-        const tableInput = document.createElement("input");
-        tableInput.type = "text";
-        tableInput.inputMode = "numeric";
-        tableInput.maxLength = 9;
-        tableInput.value = String(game?.bga_table_id || "");
-        tableInput.disabled = !!state.saving;
-        tableInput.addEventListener("input", () => {
-          game.bga_table_id = String(tableInput.value || "").trim();
-        });
-        tableField.appendChild(tableLabel);
-        tableField.appendChild(tableInput);
+        if (isNoShowGame) {
+          const noShowSide = getChallengeNoShowSide(game);
+          const noShowLabel = document.createElement("label");
+          noShowLabel.textContent = "No show";
+          const noShowValue = document.createElement("div");
+          noShowValue.className = "challenge-game-edit-number";
+          noShowValue.textContent = noShowSide ? playerNames[noShowSide] : "-";
+          tableField.appendChild(noShowLabel);
+          tableField.appendChild(noShowValue);
+        } else {
+          const tableLabel = document.createElement("label");
+          tableLabel.textContent = "Table ID";
+          const tableInput = document.createElement("input");
+          tableInput.type = "text";
+          tableInput.inputMode = "numeric";
+          tableInput.maxLength = 10;
+          tableInput.value = String(game?.bga_table_id || "");
+          tableInput.readOnly = !!game.bgaResultLoaded;
+          tableInput.disabled = isBusy();
+          tableInput.addEventListener("input", () => {
+            game.bga_table_id = String(tableInput.value || "").trim();
+          });
+          tableField.appendChild(tableLabel);
+          tableField.appendChild(tableInput);
+        }
         metaRow.appendChild(tableField);
 
         const metaActions = document.createElement("div");
@@ -5394,7 +5640,7 @@
         moveUpBtn.textContent = "↑";
         moveUpBtn.title = "Move up";
         moveUpBtn.setAttribute("aria-label", "Move up");
-        moveUpBtn.disabled = !!state.saving || gameIndex === 0;
+        moveUpBtn.disabled = isBusy() || gameIndex === 0;
         metaActions.appendChild(moveUpBtn);
         const moveDownBtn = document.createElement("button");
         moveDownBtn.type = "button";
@@ -5402,16 +5648,9 @@
         moveDownBtn.textContent = "↓";
         moveDownBtn.title = "Move down";
         moveDownBtn.setAttribute("aria-label", "Move down");
-        moveDownBtn.disabled = !!state.saving || gameIndex === state.games.length - 1;
+        moveDownBtn.disabled = isBusy() || gameIndex === state.games.length - 1;
         metaActions.appendChild(moveDownBtn);
-        const deleteGameBtn = document.createElement("button");
-        deleteGameBtn.type = "button";
-        deleteGameBtn.className = "challenge-btn challenge-btn-danger challenge-game-edit-delete-btn";
-        deleteGameBtn.textContent = "Delete";
-        deleteGameBtn.title = "Delete";
-        deleteGameBtn.setAttribute("aria-label", "Delete");
-        deleteGameBtn.disabled = !!state.saving;
-        metaActions.appendChild(deleteGameBtn);
+        metaActions.appendChild(createDeleteGameButton(gameIndex));
         metaRow.appendChild(metaActions);
         gameWrap.appendChild(metaRow);
 
@@ -5445,7 +5684,8 @@
           scoreInput.type = "number";
           scoreInput.step = "1";
           scoreInput.value = hasValue(game?.[playerConfig.scoreField]) ? String(game[playerConfig.scoreField]) : "";
-          scoreInput.disabled = !!state.saving;
+          scoreInput.readOnly = isNoShowGame;
+          scoreInput.disabled = isBusy();
           scoreInput.addEventListener("input", () => {
             game[playerConfig.scoreField] = parseNullableInt(scoreInput.value);
           });
@@ -5475,6 +5715,7 @@
               render();
             }
           );
+          if (isNoShowGame) wonSelect.disabled = true;
           wonField.appendChild(wonLabel);
           wonField.appendChild(wonSelect);
           grid.appendChild(wonField);
@@ -5493,6 +5734,7 @@
               game[playerConfig.clockField] = nextValue === "1" ? 1 : 0;
             }
           );
+          if (isNoShowGame) clockSelect.disabled = true;
           clockField.appendChild(clockLabel);
           clockField.appendChild(clockSelect);
           grid.appendChild(clockField);
@@ -5516,12 +5758,6 @@
             render();
           }
         });
-        deleteGameBtn.addEventListener("click", () => {
-          state.games.splice(gameIndex, 1);
-          normalizeChallengeEditableGamesOrder(state.games);
-          state.error = "";
-          render();
-        });
       });
 
       root.appendChild(gamesWrap);
@@ -5532,7 +5768,7 @@
       addGameBtn.type = "button";
       addGameBtn.className = "challenge-btn challenge-btn-secondary";
       addGameBtn.textContent = "Add Game";
-      addGameBtn.disabled = !!state.saving;
+      addGameBtn.disabled = isBusy();
       actions.appendChild(addGameBtn);
       root.appendChild(actions);
 
@@ -5542,22 +5778,24 @@
       root.appendChild(errorEl);
 
       addGameBtn.addEventListener("click", () => {
+        const duelFormat = getDuelFormat();
+        const completion = getChallengeEditableDuelCompletion(state.games, duelFormat);
+        if (completion.complete) {
+          showChallengeInfoDialog(
+            "Match already complete",
+            `This ${duelFormat} match already has a deciding result (${completion.wins1}–${completion.wins2}). You cannot add another game after a player has reached ${completion.winsToFinish} ${completion.winsToFinish === 1 ? "win" : "wins"}. To correct the result, edit or delete an existing game first.`
+          );
+          return;
+        }
+        if (state.games.some(isChallengePendingGame)) {
+          showChallengeInfoDialog(
+            "Finish adding the current game",
+            "Get the BGA result by Table ID or choose a No show for the current game before adding another one."
+          );
+          return;
+        }
         normalizeChallengeEditableGamesOrder(state.games);
-        const nextGameNumber = state.games.length + 1;
-        state.games.push({
-          id: `${duelId || "challenge-duel"}-game-${nextGameNumber}-${Date.now()}`,
-          duel_id: duelId,
-          bga_table_id: "",
-          game_number: nextGameNumber,
-          player_1_score: null,
-          player_2_score: null,
-          player_1_rank: null,
-          player_2_rank: null,
-          player_1_clock: 0,
-          player_2_clock: 0,
-          status: "",
-          isNewLocal: true,
-        });
+        state.games.push(createChallengePendingGame(duelId, state.games.length + 1));
         state.error = "";
         render();
       });
@@ -5567,6 +5805,7 @@
 
     return {
       root,
+      isBusy,
       validate() {
         state.error = validateGames();
         render();
@@ -5585,7 +5824,7 @@
           player_2_rank: parseNullableInt(game?.player_2_rank),
           player_1_clock: parseNullableInt(game?.player_1_clock) === 1 ? 1 : 0,
           player_2_clock: parseNullableInt(game?.player_2_clock) === 1 ? 1 : 0,
-          status: String(game?.status || "").trim().toLowerCase() === "no show" ? "No show" : "",
+          status: isChallengeNoShowGame(game) ? "No show" : "",
         }));
       },
       setSaving(saving) {
@@ -5704,7 +5943,13 @@
         addChallengeFormRow(form, "Status", statusSelect, { required: true });
       }
 
-      const gameEditor = canEditGames ? createChallengeGameResultsEditor(duel) : null;
+      const gameEditor = canEditGames
+        ? createChallengeGameResultsEditor(duel, {
+          getDuelFormat: () => formatSelect?.value,
+          player1Name: getOpponentDisplayName(request?.player_1 || { player_id: request?.player_1_id }),
+          player2Name: getOpponentDisplayName(request?.player_2 || { player_id: request?.player_2_id }),
+        })
+        : null;
       if (gameEditor) {
         form.appendChild(gameEditor.root);
       }

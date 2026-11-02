@@ -831,6 +831,33 @@ code {
     text-transform: uppercase;
   }
 
+  .main-event-center__live {
+    grid-row: 3;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+    line-height: 1;
+  }
+
+  .main-event-center__score {
+    color: #263647;
+    font-size: 18px;
+    font-weight: 700;
+    white-space: nowrap;
+  }
+
+  .main-event-center__games {
+    color: #5f6b78;
+    font-size: 12px;
+    font-weight: 600;
+    white-space: nowrap;
+  }
+
+  .main-event-center__live .live-icon {
+    margin-bottom: 2px;
+  }
+
   .main-event-center::before,
   .main-event-center::after {
     content: "";
@@ -2681,10 +2708,36 @@ function createMainEventElement(match, options = {}) {
   centerInfo.appendChild(time);
   center.appendChild(centerInfo);
 
-  const versus = document.createElement("div");
-  versus.className = "main-event-center__vs";
-  versus.textContent = "VS";
-  center.appendChild(versus);
+  const normalizedStatus = String(match?.status || "").trim().toUpperCase();
+  const isLive = normalizedStatus === "IN PROGRESS";
+  const isFinished = normalizedStatus === "DONE" || normalizedStatus === "COMPLETED";
+  if (isLive || isFinished) {
+    const live = document.createElement("div");
+    live.className = "main-event-center__live";
+    if (isLive) {
+      const liveIcon = document.createElement("img");
+      liveIcon.className = "live-icon";
+      liveIcon.src = "https://carcassonne.gg/gallery_gen/f4d6792e3ac5f7356502e64aefa51f32_60x28_fit.png";
+      liveIcon.alt = "LIVE";
+      live.appendChild(liveIcon);
+    }
+    const liveScore = document.createElement("div");
+    liveScore.className = "main-event-center__score";
+    liveScore.textContent = `${match?.dw1 || 0} - ${match?.dw2 || 0}`;
+    live.appendChild(liveScore);
+    if (!isDuel) {
+      const liveGames = document.createElement("div");
+      liveGames.className = "main-event-center__games";
+      liveGames.textContent = `(${match?.gw1 || 0} - ${match?.gw2 || 0})`;
+      live.appendChild(liveGames);
+    }
+    center.appendChild(live);
+  } else {
+    const versus = document.createElement("div");
+    versus.className = "main-event-center__vs";
+    versus.textContent = "VS";
+    center.appendChild(versus);
+  }
   stage.appendChild(center);
   stage.appendChild(createMainEventCompetitor(match, "right", isDuel));
   matchContainer.appendChild(stage);
@@ -2701,7 +2754,8 @@ function createMainEventElement(match, options = {}) {
     const lineupsLabel = document.createElement("span");
     lineupsLabel.textContent = "Lineups";
     const chevronIcon = document.createElement("i");
-    chevronIcon.className = "fas fa-chevron-down";
+    // Shared toggle rotates 180deg when closed, so chevron-up points down while closed
+    chevronIcon.className = "fas fa-chevron-up";
     chevronIcon.style.transition = "transform 0.3s ease";
     chevronIcon.style.transform = "rotate(180deg)";
     chevronIcon.style.fontSize = "12px";
@@ -2717,13 +2771,6 @@ function createMainEventElement(match, options = {}) {
 
   const streamsWrap = document.createElement("div");
   streamsWrap.className = "main-event-actions__streams";
-  if (String(match?.status || "").trim().toUpperCase() === "IN PROGRESS") {
-    const liveIcon = document.createElement("img");
-    liveIcon.className = "live-icon";
-    liveIcon.src = "https://carcassonne.gg/gallery_gen/f4d6792e3ac5f7356502e64aefa51f32_60x28_fit.png";
-    liveIcon.alt = "LIVE";
-    streamsWrap.appendChild(liveIcon);
-  }
   if (!streamsOff && Array.isArray(match?.streamers)) {
     const streamUrls = Array.isArray(match?.streams) ? match.streams : [];
     const streamerNames = Array.isArray(match?.streamer_names) ? match.streamer_names : [];

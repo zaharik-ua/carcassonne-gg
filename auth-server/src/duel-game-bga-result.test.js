@@ -2,11 +2,11 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { registerDuelGameBgaResultRoutes } from "./duel-game-bga-result.js";
 
-function context({ allowed = true, expired = false, matchStatus = "Done", result = { ok: true, game: { bga_table_id: "1234567890" } } } = {}) {
+function context({ allowed = true, expired = false, matchStatus = "Done", duel = null, result = { ok: true, game: { bga_table_id: "1234567890" } } } = {}) {
   let handler;
   const calls = [];
   registerDuelGameBgaResultRoutes({ post(path, callback) { assert.equal(path, "/duels/:id/games/bga-result"); handler = callback; } }, {
-    dbGetAsync: async () => ({ id: "duel", player_1_id: "11", player_2_id: "22", tournament_id: "T", match_status: matchStatus }),
+    dbGetAsync: async () => duel || ({ id: "duel", joined_match_id: "M", player_1_id: "11", player_2_id: "22", tournament_id: "T", match_status: matchStatus }),
     loadTournamentAccessForUser: (id, user, done) => done(null, { id }),
     canUserEditMatchResults: () => ({ allowed, expired }),
     isCompletedMatchStatus: (status) => ["Done", "Error"].includes(status),
@@ -48,4 +48,22 @@ test("missing games and BGA failures return actionable warnings", async () => {
     assert.equal(response.status, expectedStatus);
     assert.equal(response.message, "Check the Table ID.");
   }
+});
+
+test("Challenge duels without a match allow admins and participants of Done or Error duels", async () => {
+  const challengeDuel = (status) => ({ id: "duel", source_type: "challenge", duel_status: status, player_1_id: "11", player_2_id: "22" });
+  const ctx = context({ allowed: false, duel: challengeDuel("Done") });
+  assert.equal((await ctx.request("1234567890", { player_id: "22" })).ok, true);
+  assert.equal((await ctx.request("1234567890", { admin: 1, player_id: "99" })).ok, true);
+  assert.equal((await ctx.request("1234567890", { player_id: "99" })).status, 403);
+  assert.equal(ctx.calls.length, 2);
+  const planned = context({ duel: challengeDuel("Planned") });
+  assert.equal((await planned.request("1234567890", { admin: 1 })).status, 403);
+  assert.equal(planned.calls.length, 0);
+});
+
+test("non-Challenge duels without an active match are not found", async () => {
+  const ctx = context({ duel: { id: "duel", player_1_id: "11", player_2_id: "22" } });
+  assert.equal((await ctx.request()).status, 404);
+  assert.equal(ctx.calls.length, 0);
 });
