@@ -105,6 +105,7 @@ import {
   ensureTournamentRegistrationsSchema,
   registerTournamentRegistrationRoutes,
 } from "./tournament-registrations.js";
+import { ensureCclFansChoiceSchema, registerCclFansChoiceRoutes } from "./ccl-fans-choice.js";
 import { registerBgaReplayAdminRoutes } from "./bga-replay-admin.js";
 import { loadPublicGamesByDuelIds } from "./bga-replay-public.js";
 import { ensureMatchIdReferenceSync } from "./match-id-sync.js";
@@ -6818,6 +6819,9 @@ function ensureTournamentPlayersSchema() {
   ensureTournamentRegistrationsSchema(db).catch((error) => {
     console.error("Failed to ensure tournament_registrations schema", error);
   });
+  ensureCclFansChoiceSchema(db).catch((error) => {
+    console.error("Failed to ensure ccl_fans_choice_votes schema", error);
+  });
 }
 
 function ensureStandingsSchema() {
@@ -8429,6 +8433,13 @@ registerCclRoutes(app, {
 registerTournamentRegistrationRoutes(app, {
   db,
   requireAuthenticated,
+  requireTrustedJsonRequest,
+  getAuditActor,
+  logAuditEvent,
+});
+
+registerCclFansChoiceRoutes(app, {
+  db,
   requireTrustedJsonRequest,
   getAuditActor,
   logAuditEvent,

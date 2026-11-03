@@ -2429,9 +2429,18 @@
     width: 100%;
   }
 
-  .challenge-game-edit-mode-field select {
-    width: auto;
-    max-width: 100%;
+  .challenge-game-edit-mode-field {
+    min-width: 220px;
+  }
+
+  .challenge-game-edit-mode-field .cp-dd-menu {
+    width: max-content;
+    min-width: 100%;
+    max-width: calc(100vw - 48px);
+  }
+
+  .challenge-game-edit-mode-field .cp-dd-btn-content .is-placeholder {
+    color: #999;
   }
 
   .challenge-game-edit-import {
@@ -5476,26 +5485,29 @@
 
       const modeField = document.createElement("div");
       modeField.className = "challenge-game-edit-field challenge-game-edit-mode-field";
-      const modeSelect = createSelect(
+      const modeDropdown = createChallengeOptionDropdown(
         game.addMode || "",
         [
-          { value: "", label: "Select how to add the game" },
           { value: "table", label: "BGA Table ID" },
           { value: "player1", label: `${playerNames.player1} - No show` },
           { value: "player2", label: `${playerNames.player2} - No show` },
         ],
-        (nextValue) => {
-          game.addMode = nextValue;
-          game.bgaResultError = "";
-          if (nextValue === "player1" || nextValue === "player2") {
-            applyNoShow(game, nextValue);
-          }
-          state.error = "";
-          render();
+        {
+          placeholderLabel: "Select how to add the game",
+          ariaLabel: `Game ${game.game_number}: how to add`,
+          disabled: isBusy(),
+          onChange: (nextValue) => {
+            game.addMode = nextValue;
+            game.bgaResultError = "";
+            if (nextValue === "player1" || nextValue === "player2") {
+              applyNoShow(game, nextValue);
+            }
+            state.error = "";
+            render();
+          },
         }
       );
-      modeSelect.setAttribute("aria-label", `Game ${game.game_number}: how to add`);
-      modeField.appendChild(modeSelect);
+      modeField.appendChild(modeDropdown.root);
       metaRow.appendChild(modeField);
 
       const metaActions = document.createElement("div");
@@ -7246,6 +7258,102 @@
       setValue: (nextValue, trigger) => setValue(nextValue, !!trigger),
       setDisabled,
     };
+    dropdowns.push(api);
+    return api;
+  }
+
+  function createChallengeOptionDropdown(initialValue, options, cfg = {}) {
+    const normalizedOptions = (Array.isArray(options) ? options : [])
+      .map((option) => ({
+        value: String(option?.value || "").trim(),
+        label: String(option?.label || option?.value || "").trim(),
+      }))
+      .filter((option) => option.value && option.label);
+    let value = String(initialValue || "").trim();
+    const root = document.createElement("div");
+    root.className = "cp-dd";
+
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "cp-dd-btn";
+    btn.setAttribute("aria-haspopup", "listbox");
+    btn.setAttribute("aria-expanded", "false");
+    if (cfg.ariaLabel) btn.setAttribute("aria-label", String(cfg.ariaLabel));
+    const btnContent = document.createElement("span");
+    btnContent.className = "cp-dd-btn-content";
+    const chevron = document.createElement("span");
+    chevron.className = "cp-dd-chevron";
+    chevron.setAttribute("aria-hidden", "true");
+    chevron.textContent = "▾";
+    btn.appendChild(btnContent);
+    btn.appendChild(chevron);
+
+    const menu = document.createElement("div");
+    menu.className = "cp-dd-menu";
+    menu.setAttribute("role", "listbox");
+
+    const renderButtonContent = () => {
+      btnContent.innerHTML = "";
+      const selected = normalizedOptions.find((option) => option.value === value) || null;
+      const text = document.createElement("span");
+      text.textContent = selected ? selected.label : String(cfg.placeholderLabel || "Select");
+      if (!selected) text.className = "is-placeholder";
+      text.title = text.textContent;
+      btnContent.appendChild(text);
+    };
+
+    const close = () => {
+      menu.classList.remove("open");
+      menu.style.maxHeight = "0px";
+      btn.classList.remove("open");
+      btn.setAttribute("aria-expanded", "false");
+    };
+    const open = () => {
+      if (btn.disabled) return;
+      closeAllDropdowns();
+      menu.classList.add("open");
+      menu.style.maxHeight = `${Math.min(menu.scrollHeight, 280)}px`;
+      btn.classList.add("open");
+      btn.setAttribute("aria-expanded", "true");
+    };
+
+    normalizedOptions.forEach((option) => {
+      const optionBtn = document.createElement("button");
+      optionBtn.type = "button";
+      optionBtn.className = "cp-dd-option";
+      optionBtn.setAttribute("role", "option");
+      optionBtn.setAttribute("aria-selected", option.value === value ? "true" : "false");
+      optionBtn.classList.toggle("active", option.value === value);
+      optionBtn.textContent = option.label;
+      optionBtn.addEventListener("click", (event) => {
+        event.stopPropagation();
+        close();
+        if (option.value === value) return;
+        value = option.value;
+        renderButtonContent();
+        if (typeof cfg.onChange === "function") cfg.onChange(value);
+      });
+      menu.appendChild(optionBtn);
+    });
+
+    btn.addEventListener("click", (event) => {
+      event.stopPropagation();
+      if (menu.classList.contains("open")) close();
+      else open();
+    });
+
+    const setDisabled = (isDisabled) => {
+      btn.disabled = !!isDisabled;
+      btn.classList.toggle("disabled", !!isDisabled);
+      if (isDisabled) close();
+    };
+
+    renderButtonContent();
+    root.appendChild(btn);
+    root.appendChild(menu);
+    setDisabled(!!cfg.disabled);
+
+    const api = { root, close, getValue: () => value, setDisabled };
     dropdowns.push(api);
     return api;
   }
