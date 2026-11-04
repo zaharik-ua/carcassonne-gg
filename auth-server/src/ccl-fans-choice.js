@@ -473,8 +473,9 @@ export function registerCclFansChoiceRoutes(app, {
     return res.json({ ok: true, vote: updated });
   }));
 
-  // Tournament admins: BGA ids of guest votes from site profiles with exactly the same nickname,
-  // as "Get players data" of in-person tournaments. A nickname of several profiles stays without an id.
+  // Tournament admins: BGA ids of guest votes from site profiles with the same nickname in any case
+  // (voters often type "Pandeyuk" for "pandeyuk"). A profile with exactly the same nickname wins over
+  // the others; a nickname of several profiles stays without an id. NOCASE folds only Latin letters.
   app.post(
     "/ccl/:tournamentId/fans-choice/votes/fill-bga-ids",
     requireAuthenticated,
@@ -484,9 +485,10 @@ export function registerCclFansChoiceRoutes(app, {
       const matches = await dbAll(
         db,
         `
-          SELECT v.id AS vote_id, trim(g.id) AS bga_id
+          SELECT v.id AS vote_id, trim(g.id) AS bga_id,
+                 g.bga_nickname COLLATE BINARY = v.bga_nickname COLLATE BINARY AS exact
           FROM ccl_fans_choice_votes v
-          JOIN profiles g ON g.bga_nickname COLLATE BINARY = v.bga_nickname COLLATE BINARY
+          JOIN profiles g ON g.bga_nickname COLLATE NOCASE = v.bga_nickname COLLATE NOCASE
             AND g.deleted_at IS NULL
           WHERE upper(trim(v.tournament_id)) = upper(trim(?))
             AND v.player_id IS NULL
@@ -494,10 +496,12 @@ export function registerCclFansChoiceRoutes(app, {
         `,
         [tournament.id]
       );
-      const idsByVote = new Map();
-      matches.forEach((match) => idsByVote.set(match.vote_id, [...(idsByVote.get(match.vote_id) || []), match.bga_id]));
+      const matchesByVote = new Map();
+      matches.forEach((match) => matchesByVote.set(match.vote_id, [...(matchesByVote.get(match.vote_id) || []), match]));
       let updatedCount = 0;
-      for (const [voteId, ids] of idsByVote) {
+      for (const [voteId, voteMatches] of matchesByVote) {
+        const exact = voteMatches.filter((match) => Number(match.exact) === 1);
+        const ids = [...new Set((exact.length ? exact : voteMatches).map((match) => match.bga_id))];
         if (ids.length !== 1 || !/^[0-9]*[1-9][0-9]*$/.test(ids[0])) continue;
         const result = await dbRun(
           db,

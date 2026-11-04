@@ -406,6 +406,15 @@
   const VERIFY_URL = "https://carcassonne.gg/player/?id=noprofile";
   // Guests have no account: this browser remembers their vote so they do not vote again.
   const STORAGE_KEY = `ccl-fans-choice:${TOURNAMENT_ID}`;
+  // The results widget listens for this and reloads, so a new vote shows up there at once.
+  const VOTE_EVENT = "ccl-fans-choice-vote";
+  const voteChannel = (() => {
+    try {
+      return typeof BroadcastChannel === "function" ? new BroadcastChannel(VOTE_EVENT) : null;
+    } catch (_error) {
+      return null;
+    }
+  })();
 
   const startButton = document.getElementById("fcStart");
   const panel = document.getElementById("fcPanel");
@@ -430,6 +439,17 @@
     } catch (_error) {
       return null;
     }
+  }
+
+  function notifyVote(vote) {
+    const detail = { tournament_id: TOURNAMENT_ID, vote_id: vote?.id || null };
+    window.dispatchEvent(new CustomEvent(VOTE_EVENT, { detail }));
+    try {
+      if (window.parent !== window) window.parent.dispatchEvent(new CustomEvent(VOTE_EVENT, { detail }));
+    } catch (_error) {
+      // BroadcastChannel still covers separate same-origin frames.
+    }
+    voteChannel?.postMessage(detail);
   }
 
   function rememberVote(vote) {
@@ -676,7 +696,29 @@
     return { row, input };
   }
 
-  function renderForm(changing = null) {
+  // Sends the vote and keeps it on the page: a verified player's or account's vote,
+  // else this browser remembers it.
+  async function postVote(body) {
+    const verified = Boolean(data.viewer?.verified);
+    const response = await fetch(VOTES_URL, {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok || !result.ok) throw new Error(result.message || "Voting failed. Please try again.");
+    if (verified || data.viewer?.authenticated) data.viewer.vote = result.vote;
+    if (!verified) {
+      data.remembered_vote = result.vote;
+      rememberVote(result.vote);
+    }
+    notifyVote(result.vote);
+    return result.vote;
+  }
+
+  // backTo: the vote the Back button returns to; by default the one being changed.
+  function renderForm(changing = null, backTo = changing) {
     const verified = Boolean(data.viewer?.verified);
     const upcoming = data.voting.status === "upcoming";
 
@@ -718,10 +760,10 @@
     }
 
     const actions = el("div", "fc-actions");
-    if (changing) {
+    if (backTo) {
       const back = el("button", "fc-btn", "Back");
       back.type = "button";
-      back.addEventListener("click", () => renderVoted(changing, false));
+      back.addEventListener("click", () => renderVoted(backTo, false));
       actions.appendChild(back);
     }
     actions.appendChild(submit);
@@ -748,20 +790,7 @@
       submit.disabled = true;
       submit.textContent = "Submitting...";
       try {
-        const response = await fetch(VOTES_URL, {
-          method: "POST",
-          credentials: "include",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(body),
-        });
-        const result = await response.json().catch(() => ({}));
-        if (!response.ok || !result.ok) throw new Error(result.message || "Voting failed. Please try again.");
-        if (verified || data.viewer?.authenticated) data.viewer.vote = result.vote;
-        if (!verified) {
-          data.remembered_vote = result.vote;
-          rememberVote(result.vote);
-        }
-        renderVoted(result.vote, true);
+        renderVoted(await postVote(body), true);
       } catch (requestError) {
         error.textContent = requestError.message || "Voting failed. Please try again.";
         submit.textContent = "Submit vote";
@@ -772,8 +801,24 @@
     showPanel(...intro, form);
   }
 
+  // Nicknames match as the server compares them: trimmed, single spaces, any case.
+  const nicknameKey = (value) => String(value || "").trim().replace(/\s+/g, " ").toLowerCase();
+
+  function confirmHint() {
+    const hint = el("div", "fc-hint", data.viewer?.authenticated
+      ? "You can confirm your vote yourself: verify your account on carcassonne.gg. "
+      : "You can confirm your vote yourself: sign in and verify your account on carcassonne.gg. ");
+    hint.appendChild(topLink(VERIFY_URL, "How to sign in and verify"));
+    return hint;
+  }
+
   function renderVoted(vote, justVoted) {
     const verified = Boolean(data.viewer?.verified);
+    const votingOpen = data.voting.status === "open";
+    // A verified player who voted as a guest in this browser before signing in.
+    const guestVote = verified && vote.id !== data.viewer?.vote?.id;
+    // The server makes a guest vote with the player's own nickname the player's vote; another nickname stays a separate vote.
+    const sameNickname = guestVote && nicknameKey(vote.bga_nickname) === nicknameKey(data.viewer.bga_nickname);
     const association = findAssociation(vote.association_id);
 
     const success = el("div", "fc-success");
@@ -798,23 +843,57 @@
       textWrap.appendChild(rejected);
     } else {
       textWrap.appendChild(el("div", "", "Your vote has been received and will be checked by the admins."));
+      if (!verified && votingOpen) textWrap.appendChild(confirmHint());
     }
 
-    const canChange = verified && data.voting.status === "open";
+    const canConfirm = votingOpen && sameNickname && vote.status !== "confirmed";
+    const canChange = votingOpen && verified && (!guestVote || sameNickname);
+    const canVoteAgain = votingOpen && guestVote && !sameNickname;
+
+    if (canConfirm) {
+      textWrap.appendChild(el("div", "fc-note", `You voted as ${vote.bga_nickname} before signing in. Confirm this vote with your verified account.`));
+    } else if (canVoteAgain) {
+      const mine = data.viewer.bga_nickname || data.viewer.player_id;
+      textWrap.appendChild(el("div", "fc-note", `This vote was cast as ${vote.bga_nickname}, which is not your BGA nickname ${mine}. Vote again as ${mine} to have your vote confirmed.`));
+    }
     if (canChange) {
       textWrap.appendChild(el("div", "fc-hint", `You can change your vote until voting closes on ${formatUtc(data.voting.closes_at)}.`));
     }
     success.appendChild(textWrap);
 
     const children = [success];
+    const actions = el("div", "fc-actions");
+    const error = el("div", "fc-error");
     if (canChange) {
       const change = el("button", "fc-btn", "Change vote");
       change.type = "button";
       change.addEventListener("click", () => renderForm(vote));
-      const actions = el("div", "fc-actions");
       actions.appendChild(change);
-      children.push(actions);
     }
+    if (canConfirm) {
+      const confirm = el("button", "fc-btn fc-btn-primary", "Confirm my vote");
+      confirm.type = "button";
+      confirm.addEventListener("click", async () => {
+        error.textContent = "";
+        confirm.disabled = true;
+        confirm.textContent = "Confirming...";
+        try {
+          renderVoted(await postVote({ association_id: vote.association_id }), true);
+        } catch (requestError) {
+          error.textContent = requestError.message || "Voting failed. Please try again.";
+          confirm.disabled = false;
+          confirm.textContent = "Confirm my vote";
+        }
+      });
+      actions.appendChild(confirm);
+    }
+    if (canVoteAgain) {
+      const again = el("button", "fc-btn fc-btn-primary", "Vote again");
+      again.type = "button";
+      again.addEventListener("click", () => renderForm(null, vote));
+      actions.appendChild(again);
+    }
+    if (actions.children.length) children.push(error, actions);
     showPanel(...children);
   }
 
@@ -824,28 +903,59 @@
     else panel.hidden = true;
   });
 
-  const rememberedVoteId = readRememberedVoteId();
-  const stateUrl = rememberedVoteId ? `${STATE_URL}?vote_id=${encodeURIComponent(rememberedVoteId)}` : STATE_URL;
-  fetch(stateUrl, { credentials: "include" })
-    .then((response) => {
-      if (!response.ok) throw new Error("Failed to load Fans Choice data");
-      return response.json();
-    })
-    .then((result) => {
-      if (!result?.ok || !Array.isArray(result.associations)) throw new Error("Failed to load Fans Choice data");
-      data = result;
-      // The remembered vote is gone or voided: this browser may vote again.
-      if (rememberedVoteId && (!data.remembered_vote || data.remembered_vote.status === "cancelled")) rememberVote(null);
-    })
-    .catch((error) => {
-      console.error("❌ Failed to load CCL Fans Choice", error);
-      loadError = "❌ Failed to load voting data. Please reload the page.";
-    })
-    .finally(() => {
-      // Players who have voted see their vote right away.
-      if (currentVote()) panelOpen = true;
-      if (panelOpen && !panel.querySelector("form")) render();
-    });
+  let loadRequest = 0;
+
+  // reload: the viewer signed in or out, so the open panel is drawn again for them.
+  function loadState(reload = false) {
+    const request = ++loadRequest;
+    const rememberedVoteId = readRememberedVoteId();
+    const stateUrl = rememberedVoteId ? `${STATE_URL}?vote_id=${encodeURIComponent(rememberedVoteId)}` : STATE_URL;
+    fetch(stateUrl, { credentials: "include" })
+      .then((response) => {
+        if (!response.ok) throw new Error("Failed to load Fans Choice data");
+        return response.json();
+      })
+      .then((result) => {
+        if (request !== loadRequest) return;
+        if (!result?.ok || !Array.isArray(result.associations)) throw new Error("Failed to load Fans Choice data");
+        data = result;
+        loadError = "";
+        // The remembered vote is gone or voided: this browser may vote again.
+        if (rememberedVoteId && (!data.remembered_vote || data.remembered_vote.status === "cancelled")) rememberVote(null);
+      })
+      .catch((error) => {
+        if (request !== loadRequest) return;
+        console.error("❌ Failed to load CCL Fans Choice", error);
+        loadError = "❌ Failed to load voting data. Please reload the page.";
+      })
+      .finally(() => {
+        if (request !== loadRequest) return;
+        // Players who have voted see their vote right away.
+        if (currentVote()) panelOpen = true;
+        if (panelOpen && (reload || !panel.querySelector("form"))) {
+          selectedAssociation = "";
+          render();
+        }
+      });
+  }
+
+  // The site header announces sign-in and sign-out without a page reload.
+  function onAuthStateChange(event) {
+    const authenticated = Boolean(event.detail?.authenticated);
+    // The header also reports the state it finds on page load: a guest staying a guest changes nothing.
+    if (data && !authenticated && !data.viewer?.authenticated) return;
+    loadState(true);
+  }
+
+  window.addEventListener("gg-auth-state-change", onAuthStateChange);
+  // In an iframe the header lives in the parent page.
+  try {
+    if (window.parent !== window) window.parent.addEventListener("gg-auth-state-change", onAuthStateChange);
+  } catch (_error) {
+    // Cross-origin parent: only this window's events are heard.
+  }
+
+  loadState();
 
   // Lets the parent page fit the iframe to the content, if it listens.
   if (window.parent !== window && "ResizeObserver" in window) {

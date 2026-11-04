@@ -346,25 +346,28 @@ test("admins review guest votes; rejecting needs a reason", async (t) => {
   assert.equal(restore.status, 409);
 });
 
-test("BGA ids of guest votes come from profiles with exactly the same nickname", async (t) => {
+test("BGA ids of guest votes come from profiles with the same nickname in any case", async (t) => {
   const db = await createDatabase(t);
   const api = createApi(db);
-  for (const nickname of ["Kasia", "kasia2", "twin", "gone"]) await vote(api, { association_id: "POL", bga_nickname: nickname });
-  // Exact case only, as in-person tournaments.
-  await exec(db, "INSERT INTO profiles (id, bga_nickname) VALUES ('555', 'KASIA2')");
+  for (const nickname of ["Kasia", "kasia2", "twin", "gone", "Pair"]) await vote(api, { association_id: "POL", bga_nickname: nickname });
+  // "kasia2" differs only in case; "kasia" loses to the exact "Kasia"; "pair" and "PAIR" are two profiles, neither exact.
+  await exec(db, `
+    INSERT INTO profiles (id, bga_nickname) VALUES ('555', 'KASIA2'), ('666', 'kasia'), ('777', 'pair'), ('888', 'PAIR')
+  `);
 
   const fill = (user) => api.call("POST /ccl/:tournamentId/fans-choice/votes/fill-bga-ids", { user });
   assert.equal((await fill(USERS.stranger)).status, 403);
   const result = await fill(USERS.admin);
   assert.equal(result.status, 200, JSON.stringify(result.body));
-  assert.equal(result.body.updated_count, 1);
+  assert.equal(result.body.updated_count, 2);
   assert.deepEqual(
     await all(db, "SELECT bga_nickname, bga_player_id FROM ccl_fans_choice_votes ORDER BY id"),
     [
       { bga_nickname: "Kasia", bga_player_id: "111" },
-      { bga_nickname: "kasia2", bga_player_id: null },
+      { bga_nickname: "kasia2", bga_player_id: "555" },
       { bga_nickname: "twin", bga_player_id: null },
       { bga_nickname: "gone", bga_player_id: null },
+      { bga_nickname: "Pair", bga_player_id: null },
     ]
   );
   assert.equal((await fill(USERS.admin)).body.updated_count, 0);

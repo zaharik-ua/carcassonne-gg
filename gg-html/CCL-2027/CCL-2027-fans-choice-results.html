@@ -490,6 +490,29 @@
   }
 
   load();
+
+  // The voting widget announces a new or changed vote: show it without waiting for the next refresh.
+  const VOTE_EVENT = "ccl-fans-choice-vote";
+  let voteReloadTimer = null;
+  function onVote(event) {
+    const detail = event.detail || event.data || {};
+    if (detail.tournament_id && detail.tournament_id !== TOURNAMENT_ID) return;
+    // One vote can arrive both as a window event and over BroadcastChannel: load once.
+    clearTimeout(voteReloadTimer);
+    voteReloadTimer = setTimeout(load, 100);
+  }
+  window.addEventListener(VOTE_EVENT, onVote);
+  try {
+    if (window.parent !== window) window.parent.addEventListener(VOTE_EVENT, onVote);
+  } catch (_error) {
+    // BroadcastChannel still covers separate same-origin frames.
+  }
+  try {
+    if (typeof BroadcastChannel === "function") new BroadcastChannel(VOTE_EVENT).addEventListener("message", onVote);
+  } catch (_error) {
+    // The window events remain.
+  }
+
   // The results update while voting is open; refreshes pause in a hidden tab.
   setInterval(() => {
     if (document.visibilityState === "visible" && data?.voting?.status !== "closed") load();

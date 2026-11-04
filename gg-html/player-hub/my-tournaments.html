@@ -9440,7 +9440,7 @@
     });
     const fillButton = el("button", "cp-btn cp-btn-secondary", "Get players data");
     fillButton.type = "button";
-    fillButton.title = "Find BGA ids of the votes by exact nickname in the site profiles";
+    fillButton.title = "Find BGA ids of the votes by nickname in the site profiles (case-insensitive)";
     controls.appendChild(statusFilterDropdown.root);
     controls.appendChild(duplicateFilterDropdown.root);
     controls.appendChild(fillButton);
@@ -9637,6 +9637,15 @@
       });
       detailsButton.setAttribute("aria-expanded", String(detailsOpen));
       actions.appendChild(detailsButton);
+      // One click for the usual review outcome; cancelled votes are restored only through Edit.
+      if (vote.status === "pending" || vote.status === "rejected") {
+        actions.appendChild(createIconButton("fa-solid fa-check", "Confirm vote", () => run(async () => {
+          await requestTournamentJson(`${CCL_URL}/fans-choice/votes/${encodeURIComponent(vote.id)}`, {
+            method: "PATCH",
+            body: JSON.stringify({ status: "confirmed", reject_reason: "" }),
+          });
+        }, `Vote of ${vote.bga_nickname || "the player"} confirmed.`, "Failed to confirm the vote."), "primary"));
+      }
       actions.appendChild(createIconButton("fa-solid fa-pencil", "Edit vote", () => {
         editDraft = {
           id: vote.id,
