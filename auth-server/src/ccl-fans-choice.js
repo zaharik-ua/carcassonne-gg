@@ -310,7 +310,8 @@ export function registerCclFansChoiceRoutes(app, {
 
   // Tournament admins: guest votes to review, newest first. Verified votes are confirmed automatically.
   // duplicate_count: other active votes of the same player (nickname or BGA id), verified ones included;
-  // ip_duplicate_count: other active votes from the same network.
+  // ip_duplicate_count: other active votes from the same network;
+  // has_verified_account: the player has a site account linked to the profile (by BGA id, else exact nickname).
   app.get("/ccl/:tournamentId/fans-choice/votes", requireAuthenticated, handle("Failed to load Fans Choice votes", async (req, res) => {
     const { tournament } = await requireAdmin(req.user, req.params.tournamentId);
     const rows = await dbAll(
@@ -331,7 +332,15 @@ export function registerCclFansChoiceRoutes(app, {
                  SELECT COUNT(*) FROM ccl_fans_choice_votes o
                  WHERE o.tournament_id = v.tournament_id AND o.id <> v.id AND o.status <> 'cancelled'
                    AND v.ip_hash IS NOT NULL AND o.ip_hash = v.ip_hash
-               ) AS ip_duplicate_count
+               ) AS ip_duplicate_count,
+               EXISTS (
+                 SELECT 1 FROM users u
+                 JOIN profiles p ON p.id = u.bga_id AND p.deleted_at IS NULL
+                 WHERE CASE
+                   WHEN trim(COALESCE(v.bga_player_id, '')) <> '' THEN p.id = v.bga_player_id
+                   ELSE p.bga_nickname COLLATE BINARY = v.bga_nickname COLLATE BINARY
+                 END
+               ) AS has_verified_account
         FROM ccl_fans_choice_votes v
         LEFT JOIN associations a ON upper(${ASSOCIATION_ID_SQL}) = upper(trim(v.association_id))
         WHERE upper(trim(v.tournament_id)) = upper(trim(?))
@@ -342,7 +351,11 @@ export function registerCclFansChoiceRoutes(app, {
     );
     return res.json({
       ok: true,
-      votes: rows.map((row) => ({ ...row, association_flag: row.association_flag || null })),
+      votes: rows.map((row) => ({
+        ...row,
+        association_flag: row.association_flag || null,
+        has_verified_account: Number(row.has_verified_account) === 1,
+      })),
     });
   }));
 

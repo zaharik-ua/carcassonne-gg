@@ -2033,6 +2033,12 @@
     cursor: help;
   }
 
+  .cp-ccl-fc-verified {
+    color: #1a73b7;
+    font-size: 12px;
+    cursor: help;
+  }
+
   .cp-ccl.cp-ccl--standalone {
     margin-top: 0;
     padding-top: 0;
@@ -9397,9 +9403,7 @@
     const head = el("div", "cp-tournament-section-head");
     const headText = el("div");
     const title = el("div", "cp-tournament-section-title", "Fans Choice votes");
-    const hint = el("div", "cp-tournament-section-hint", "Votes of guests. Votes of verified players are confirmed automatically.");
     headText.appendChild(title);
-    headText.appendChild(hint);
     head.appendChild(headText);
     const status = el("div", "cp-edit-error");
     const body = el("div", "cp-ccl-body");
@@ -9512,6 +9516,12 @@
         missing.setAttribute("aria-label", "BGA id not found");
         wrap.appendChild(missing);
         wrap.appendChild(nickname);
+      }
+      if (vote.has_verified_account) {
+        const verified = el("i", "fa-solid fa-user-check cp-ccl-fc-verified");
+        verified.title = "This player has a verified account on carcassonne.gg";
+        verified.setAttribute("aria-label", "Has a verified account");
+        wrap.appendChild(verified);
       }
       const duplicates = Number(vote.duplicate_count) || 0;
       const ipDuplicates = Number(vote.ip_duplicate_count) || 0;

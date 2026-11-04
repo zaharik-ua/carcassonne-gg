@@ -68,6 +68,11 @@ async function createDatabase(t) {
       role TEXT
     );
     INSERT INTO tournament_access_users VALUES ('tournament', 'CCL-2027', 11, 'admin');
+    -- Site accounts; bga_id links an account to its profile (a verified player).
+    CREATE TABLE users (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      bga_id TEXT
+    );
   `);
   await ensureCclFansChoiceSchema(db);
   await ensureCclFansChoiceSchema(db);
@@ -358,4 +363,24 @@ test("BGA ids of guest votes come from profiles with exactly the same nickname",
     ]
   );
   assert.equal((await fill(USERS.admin)).body.updated_count, 0);
+});
+
+test("admins see guest votes of players who have a verified site account", async (t) => {
+  const db = await createDatabase(t);
+  const api = createApi(db);
+  // Kasia (111) and twin (222) have verified accounts; the account of "gone" points to a deleted profile.
+  await exec(db, "INSERT INTO users (bga_id) VALUES ('111'), ('222'), ('444')");
+  for (const nickname of ["Kasia", "twin", "gone", "nobody"]) {
+    await vote(api, { association_id: "POL", bga_nickname: nickname });
+  }
+  // Once found, the BGA id decides: this "twin" vote is the other twin profile (333), without an account.
+  await exec(db, "UPDATE ccl_fans_choice_votes SET bga_player_id = '333' WHERE bga_nickname = 'twin'");
+
+  const list = await adminList(api);
+  assert.deepEqual(
+    Object.fromEntries(list.body.votes.map((row) => [row.bga_nickname, row.has_verified_account])),
+    { Kasia: true, twin: false, gone: false, nobody: false }
+  );
+  await exec(db, "UPDATE ccl_fans_choice_votes SET bga_player_id = '222' WHERE bga_nickname = 'twin'");
+  assert.equal((await adminList(api)).body.votes.find((row) => row.bga_nickname === "twin").has_verified_account, true);
 });
