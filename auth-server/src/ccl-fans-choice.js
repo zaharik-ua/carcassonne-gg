@@ -54,6 +54,7 @@ export const FANS_CHOICE_SEASONS = {
 const ASSOCIATION_ID_SQL = "COALESCE(NULLIF(trim(a.code), ''), printf('ASSOCIATION_%s', a.rowid))";
 const NICKNAME_MAX = 64;
 const REJECT_REASON_MAX = 300;
+const VERIFIED_REPLACED_REASON = "Replaced by the vote of the verified player";
 const VOTE_STATUSES = ["pending", "confirmed", "rejected", "cancelled"];
 const VOTE_FIELDS = "id, association_id, bga_nickname, status, created_at, updated_at";
 // Columns added after the first version of the table.
@@ -116,11 +117,14 @@ export async function ensureCclFansChoiceSchema(db) {
   }
 }
 
-// Admin review of a guest vote: a status, and a reason when it is rejected.
+// Statuses that keep a reason: required for rejected, optional for cancelled.
+const STATUSES_WITH_REASON = ["rejected", "cancelled"];
+
+// Admin review of a guest vote: a status, and the reason for a rejected or cancelled vote.
 export function normalizeVoteReview(body) {
   const status = text(body?.status).toLowerCase();
   if (!VOTE_STATUSES.includes(status)) return { error: `status must be one of ${VOTE_STATUSES.join(", ")}` };
-  const rejectReason = status === "rejected" ? text(body?.reject_reason) : "";
+  const rejectReason = STATUSES_WITH_REASON.includes(status) ? text(body?.reject_reason) : "";
   if (status === "rejected" && !rejectReason) return { error: "Enter the reason for rejecting the vote" };
   if (rejectReason.length > REJECT_REASON_MAX) {
     return { error: `reject_reason must be at most ${REJECT_REASON_MAX} characters` };
@@ -270,6 +274,69 @@ export function registerCclFansChoiceRoutes(app, {
         vote: viewerVote,
       },
       remembered_vote: rememberedVote,
+    });
+  }));
+
+  // Public: the vote count per association and every vote (nickname, BGA id, date, status, reason).
+  // Counts leave out rejected and cancelled votes. No IP hashes, accounts or reviewers.
+  // voted_at: verified players may change the vote, so their last change; guests vote once.
+  app.get("/public/ccl/:tournamentId/fans-choice/results", handle("Failed to load Fans Choice results", async (req, res) => {
+    const { tournament, season } = await loadSeason(req.params.tournamentId);
+    const [associations, votes] = await Promise.all([
+      loadAssociations(db, season),
+      dbAll(
+        db,
+        `
+          SELECT id, association_id, bga_nickname, COALESCE(player_id, bga_player_id) AS bga_player_id,
+                 player_id IS NOT NULL AS verified, status,
+                 CASE WHEN status IN ('rejected', 'cancelled') THEN reject_reason END AS reason,
+                 CASE WHEN player_id IS NOT NULL THEN updated_at ELSE created_at END AS voted_at
+          FROM ccl_fans_choice_votes
+          WHERE upper(trim(tournament_id)) = upper(trim(?))
+          ORDER BY voted_at ASC, id ASC
+        `,
+        [tournament.id]
+      ),
+    ]);
+    const byAssociation = new Map(associations.map((association) => [idKey(association.id), {
+      id: association.id,
+      name: association.name,
+      flag: association.flag,
+      confirmed: 0,
+      pending: 0,
+      votes: [],
+    }]));
+    for (const vote of votes) {
+      const association = byAssociation.get(idKey(vote.association_id));
+      if (!association) continue;
+      if (vote.status === "confirmed") association.confirmed += 1;
+      if (vote.status === "pending") association.pending += 1;
+      association.votes.push({
+        id: vote.id,
+        bga_nickname: vote.bga_nickname,
+        bga_player_id: text(vote.bga_player_id) || null,
+        verified: Number(vote.verified) === 1,
+        status: vote.status,
+        reason: vote.reason || null,
+        voted_at: vote.voted_at,
+      });
+    }
+    const results = [...byAssociation.values()]
+      .filter((association) => association.votes.length)
+      .sort((left, right) => String(left.name).localeCompare(String(right.name)));
+    return res.json({
+      ok: true,
+      tournament: { id: tournament.id, name: tournament.name },
+      voting: {
+        opens_at: season.opensAt,
+        closes_at: season.closesAt,
+        status: getFansChoiceVotingStatus(season, now()),
+      },
+      totals: {
+        confirmed: results.reduce((sum, association) => sum + association.confirmed, 0),
+        pending: results.reduce((sum, association) => sum + association.pending, 0),
+      },
+      associations: results,
     });
   }));
 
@@ -468,8 +535,12 @@ export function registerCclFansChoiceRoutes(app, {
       if (own && byNickname && own.id !== byNickname.id) {
         await dbRun(
           db,
-          "UPDATE ccl_fans_choice_votes SET status = 'cancelled', updated_at = CURRENT_TIMESTAMP WHERE id = ?",
-          [byNickname.id]
+          `
+            UPDATE ccl_fans_choice_votes
+            SET status = 'cancelled', reject_reason = ?, updated_at = CURRENT_TIMESTAMP
+            WHERE id = ?
+          `,
+          [VERIFIED_REPLACED_REASON, byNickname.id]
         );
       }
       const previous = own || byNickname;

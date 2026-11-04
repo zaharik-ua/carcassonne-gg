@@ -384,3 +384,68 @@ test("admins see guest votes of players who have a verified site account", async
   await exec(db, "UPDATE ccl_fans_choice_votes SET bga_player_id = '222' WHERE bga_nickname = 'twin'");
   assert.equal((await adminList(api)).body.votes.find((row) => row.bga_nickname === "twin").has_verified_account, true);
 });
+
+test("cancelled votes keep an optional reason; a replaced guest vote gets one", async (t) => {
+  const db = await createDatabase(t);
+  const api = createApi(db);
+  const guest = await vote(api, { association_id: "POL", bga_nickname: "kasia" });
+
+  const noReason = await review(api, guest.body.vote.id, { status: "cancelled" });
+  assert.equal(noReason.status, 200, JSON.stringify(noReason.body));
+  assert.equal(noReason.body.vote.reject_reason, null);
+  const withReason = await review(api, guest.body.vote.id, { status: "cancelled", reject_reason: "Poland got a 4th spot" });
+  assert.equal(withReason.body.vote.reject_reason, "Poland got a 4th spot");
+
+  // The verified player Jan already voted; a guest vote typed with his nickname is then replaced.
+  await vote(api, { association_id: "POL" }, USERS.verifiedPl);
+  await exec(db, "UPDATE ccl_fans_choice_votes SET bga_nickname = 'Jan old' WHERE player_id = 'jan'");
+  await vote(api, { association_id: "ESP", bga_nickname: "Jan" });
+  await vote(api, { association_id: "ESP" }, USERS.verifiedPl);
+  assert.deepEqual(
+    await all(db, "SELECT bga_nickname, player_id, status, reject_reason FROM ccl_fans_choice_votes WHERE id > ? ORDER BY id", [guest.body.vote.id]),
+    [
+      { bga_nickname: "Jan", player_id: "jan", status: "confirmed", reject_reason: null },
+      { bga_nickname: "Jan", player_id: null, status: "cancelled", reject_reason: "Replaced by the vote of the verified player" },
+    ]
+  );
+});
+
+test("results count confirmed and pending votes and list every vote oldest first", async (t) => {
+  const db = await createDatabase(t);
+  const api = createApi(db);
+  await vote(api, { association_id: "POL", bga_nickname: "kasia" });
+  await vote(api, { association_id: "POL" }, USERS.verifiedUa);
+  const rejected = await vote(api, { association_id: "POL", bga_nickname: "bot1" });
+  const cancelled = await vote(api, { association_id: "ESP", bga_nickname: "pepe" });
+  await review(api, rejected.body.vote.id, { status: "rejected", reject_reason: "Not a real account" });
+  await review(api, cancelled.body.vote.id, { status: "cancelled", reject_reason: "Spain got a 4th spot" });
+  await exec(db, `
+    UPDATE ccl_fans_choice_votes SET created_at = '2026-11-04 10:00:00', updated_at = '2026-11-04 10:00:00' WHERE bga_nickname = 'kasia';
+    UPDATE ccl_fans_choice_votes SET created_at = '2026-11-04 09:00:00', updated_at = '2026-11-04 11:00:00' WHERE bga_nickname = 'taras';
+    UPDATE ccl_fans_choice_votes SET created_at = '2026-11-04 08:00:00', bga_player_id = '999' WHERE bga_nickname = 'bot1';
+  `);
+
+  const results = await api.call("GET /public/ccl/:tournamentId/fans-choice/results");
+  assert.equal(results.status, 200, JSON.stringify(results.body));
+  assert.deepEqual(results.body.totals, { confirmed: 1, pending: 1 });
+  // Sorted by name; Ukraine has no votes and is not listed.
+  assert.deepEqual(
+    results.body.associations.map((row) => [row.id, row.confirmed, row.pending, row.votes.length]),
+    [["POL", 1, 1, 3], ["ESP", 0, 0, 1]]
+  );
+  const poland = results.body.associations.find((row) => row.id === "POL");
+  assert.deepEqual(
+    poland.votes.map((row) => [row.bga_nickname, row.status, row.reason, row.bga_player_id, row.verified, row.voted_at]),
+    [
+      ["bot1", "rejected", "Not a real account", "999", false, "2026-11-04 08:00:00"],
+      ["kasia", "pending", null, null, false, "2026-11-04 10:00:00"],
+      ["taras", "confirmed", null, "taras", true, "2026-11-04 11:00:00"],
+    ]
+  );
+  const spain = results.body.associations.find((row) => row.id === "ESP");
+  assert.deepEqual(spain.votes.map((row) => [row.status, row.reason]), [["cancelled", "Spain got a 4th spot"]]);
+  // Nothing private leaves the server.
+  const fields = new Set(results.body.associations.flatMap((row) => row.votes.flatMap(Object.keys)));
+  for (const field of ["ip_hash", "user_id", "reviewed_by", "voter_association_id"]) assert.ok(!fields.has(field), field);
+  assert.equal((await api.call("GET /public/ccl/:tournamentId/fans-choice/results", { tournamentId: "CCL-2026" })).status, 404);
+});

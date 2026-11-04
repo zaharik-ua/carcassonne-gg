@@ -9553,8 +9553,10 @@
       return `Updated BGA ids for ${Number(result?.updated_count) || 0} vote(s).`;
     }, "", "Failed to get players data."));
 
+    // Rejected votes need a reason, cancelled ones may have one.
+    const statusHasReason = (value) => value === "rejected" || value === "cancelled";
     const saveEdit = (vote) => {
-      const reason = editDraft.status === "rejected" ? editDraft.reject_reason.trim() : "";
+      const reason = statusHasReason(editDraft.status) ? editDraft.reject_reason.trim() : "";
       if (editDraft.status === "rejected" && !reason) {
         editDraft.error = "Enter the reason for rejecting the vote.";
         render();
@@ -9586,12 +9588,15 @@
         reasonInput.type = "text";
         reasonInput.maxLength = 300;
         reasonInput.value = editDraft.reject_reason;
-        reasonInput.placeholder = "Reason for rejecting";
-        reasonInput.setAttribute("aria-label", "Reason for rejecting");
-        reasonInput.hidden = editDraft.status !== "rejected";
+        const syncReasonInput = () => {
+          reasonInput.hidden = !statusHasReason(editDraft.status);
+          reasonInput.placeholder = editDraft.status === "cancelled" ? "Reason (optional)" : "Reason for rejecting";
+          reasonInput.setAttribute("aria-label", reasonInput.placeholder);
+        };
+        syncReasonInput();
         statusSelect.addEventListener("change", () => {
           editDraft.status = statusSelect.value;
-          reasonInput.hidden = editDraft.status !== "rejected";
+          syncReasonInput();
           if (!reasonInput.hidden) reasonInput.focus();
         });
         reasonInput.addEventListener("input", () => {
@@ -9653,7 +9658,7 @@
       [
         ["Voted", formatDate(vote.created_at) || "—"],
         ["IP hash", vote.ip_hash || "—"],
-        vote.reject_reason ? ["Reject reason", vote.reject_reason] : null,
+        vote.reject_reason ? ["Reason", vote.reject_reason] : null,
         ["Reviewed", reviewed],
       ].filter(Boolean).forEach(([label, value]) => {
         details.appendChild(el("dt", "", label));
