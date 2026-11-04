@@ -38,27 +38,28 @@
     font-size: 15px;
   }
 
+  /* One compact row per association (about 40 of them): name, bar, votes, under review, chevron. */
   .fcr-list {
-    display: grid;
-    gap: 6px;
-  }
-
-  .fcr-item {
     background: #fff;
     border: 1px solid var(--border);
     border-radius: 6px;
     overflow: hidden;
   }
 
+  .fcr-item + .fcr-item {
+    border-top: 1px solid #edf1f6;
+  }
+
   .fcr-head {
     all: unset;
     box-sizing: border-box;
     width: 100%;
-    padding: 8px 10px;
+    padding: 4px 10px;
     display: grid;
-    grid-template-columns: minmax(0, 1fr) auto 12px;
+    /* Fixed name column so the bars of all rows line up and get the rest of the width. */
+    grid-template-columns: 140px minmax(40px, 1fr) auto 10px;
     align-items: center;
-    gap: 4px 10px;
+    gap: 10px;
     cursor: pointer;
   }
 
@@ -70,9 +71,9 @@
   .fcr-country {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 7px;
     min-width: 0;
-    font-size: 14px;
+    font-size: 13px;
     font-weight: 600;
   }
 
@@ -83,8 +84,8 @@
   }
 
   .fcr-flag {
-    width: 22px;
-    height: 16px;
+    width: 18px;
+    height: 13px;
     object-fit: cover;
     border-radius: 2px;
     flex-shrink: 0;
@@ -92,23 +93,23 @@
 
   .fcr-counts {
     display: flex;
-    align-items: baseline;
-    gap: 6px;
-    white-space: nowrap;
+    align-items: center;
+    gap: 10px;
   }
 
   .fcr-confirmed {
-    font-size: 16px;
+    min-width: 22px;
+    font-size: 14px;
     font-weight: 700;
     color: #15375c;
+    text-align: right;
   }
 
   .fcr-pending {
     display: inline-flex;
     align-items: center;
-    justify-content: flex-end;
-    gap: 4px;
-    min-width: 38px;
+    gap: 2px;
+    min-width: 34px;
     font-size: 12px;
     font-weight: 600;
     color: #1a5d96;
@@ -123,7 +124,7 @@
 
   .fcr-chevron {
     color: #6f7785;
-    font-size: 11px;
+    font-size: 10px;
     transition: transform 0.18s ease;
   }
 
@@ -132,15 +133,7 @@
   }
 
   /* Confirmed votes relative to the leader: the leader's bar is full. */
-  .fcr-bar {
-    grid-column: 1 / -1;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-  }
-
   .fcr-bar-track {
-    flex: 1 1 auto;
     height: 6px;
     border-radius: 3px;
     background: #eef1f5;
@@ -154,8 +147,9 @@
   }
 
   .fcr-votes {
-    border-top: 1px solid #edf1f6;
-    padding: 4px 10px 8px;
+    border-top: 1px dashed #edf1f6;
+    padding: 2px 10px 6px 35px;
+    background: #fafbfc;
     display: grid;
   }
 
@@ -164,9 +158,9 @@
     grid-template-columns: minmax(0, 1fr) auto;
     align-items: center;
     gap: 2px 10px;
-    padding: 5px 0;
-    border-top: 1px solid #f2f4f7;
-    font-size: 13px;
+    padding: 3px 0;
+    border-top: 1px solid #f0f2f5;
+    font-size: 12px;
   }
 
   .fcr-vote:first-child {
@@ -272,6 +266,30 @@
   }
 
   @media (max-width: 480px) {
+    .fcr-head {
+      grid-template-columns: 110px minmax(30px, 1fr) auto 10px;
+      gap: 8px;
+      padding: 4px 8px;
+    }
+
+    .fcr-country {
+      gap: 5px;
+      font-size: 12px;
+    }
+
+    .fcr-counts {
+      gap: 4px;
+    }
+
+    .fcr-flag {
+      width: 16px;
+      height: 12px;
+    }
+
+    .fcr-votes {
+      padding-left: 29px;
+    }
+
     .fcr-vote {
       grid-template-columns: minmax(0, 1fr);
     }
@@ -404,15 +422,16 @@
       flag.alt = "";
       country.appendChild(flag);
     }
-    country.appendChild(el("span", "", association.name));
+    const name = el("span", "", association.name);
+    name.title = association.name;
+    country.appendChild(name);
 
-    const counts = el("div", "fcr-counts");
-    counts.appendChild(el("span", "fcr-confirmed", String(association.confirmed)));
+    const confirmed = el("span", "fcr-confirmed", String(association.confirmed));
+    confirmed.title = plural(association.confirmed, "confirmed vote");
 
     // The leader's bar is full; the others are relative to it.
     const maxConfirmed = Math.max(0, ...data.associations.map((row) => row.confirmed));
     const fillShare = maxConfirmed ? association.confirmed / maxConfirmed : 0;
-    const bar = el("div", "fcr-bar");
     const track = el("div", "fcr-bar-track");
     track.title = `${plural(association.confirmed, "confirmed vote")}: the weight on the draw wheel`;
     const fill = el("div", "fcr-bar-fill");
@@ -427,9 +446,10 @@
       eyes.setAttribute("aria-hidden", "true");
       pending.append(document.createTextNode(`+${association.pending}`), eyes);
     }
-    bar.append(track, pending);
 
-    head.append(country, counts, el("i", "fa-solid fa-chevron-down fcr-chevron"), bar);
+    const counts = el("div", "fcr-counts");
+    counts.append(confirmed, pending);
+    head.append(country, track, counts, el("i", "fa-solid fa-chevron-down fcr-chevron"));
     head.addEventListener("click", () => {
       if (openAssociations.has(association.id)) openAssociations.delete(association.id);
       else openAssociations.add(association.id);

@@ -151,14 +151,14 @@ test("state lists associations with eligibility and describes the viewer", async
 
 test("voting is accepted only inside the window", async (t) => {
   const db = await createDatabase(t);
-  const api = createApi(db, { now: new Date("2026-11-04T17:59:59Z") });
+  const api = createApi(db, { now: new Date("2026-11-04T16:59:59Z") });
 
   assert.equal((await state(api)).body.voting.status, "upcoming");
   const early = await vote(api, { association_id: "POL", bga_nickname: "kasia" });
   assert.equal(early.status, 409);
   assert.equal(early.body.message, "Voting has not started yet");
 
-  api.clock.now = new Date("2026-11-04T18:00:00Z");
+  api.clock.now = new Date("2026-11-04T17:00:00Z");
   assert.equal((await vote(api, { association_id: "POL", bga_nickname: "first" })).status, 201);
   api.clock.now = new Date("2026-11-09T23:59:30Z");
   assert.equal((await vote(api, { association_id: "POL", bga_nickname: "last" })).status, 201);
