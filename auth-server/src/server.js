@@ -8440,6 +8440,7 @@ registerTournamentRegistrationRoutes(app, {
 
 registerCclFansChoiceRoutes(app, {
   db,
+  requireAuthenticated,
   requireTrustedJsonRequest,
   getAuditActor,
   logAuditEvent,

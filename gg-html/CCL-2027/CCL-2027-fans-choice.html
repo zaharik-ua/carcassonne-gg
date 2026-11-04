@@ -5,10 +5,9 @@
 <style>
   :root {
     --main-bg-color: #15375c;
-    --hover-bg-color: #082340;
+    --hover-bg-color: #0e2c4d;
     --accent-text-color: #fff;
     --muted: #666;
-    --border: #e0e0e0;
   }
 
   body {
@@ -20,14 +19,21 @@
   .fc-wrap {
     display: grid;
     gap: 10px;
-    padding: 2px;
+    /* Room for the Vote Here button glow, so a fitted iframe does not clip it. */
+    padding: 4px 2px 18px;
     max-width: 520px;
+    margin: 0 auto;
   }
 
   .fc-btn {
+    box-sizing: border-box;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    height: 32px;
     border: 1px solid #c8ced8;
     border-radius: 2px;
-    padding: 7px 14px;
+    padding: 0 14px;
     font: inherit;
     font-size: 14px;
     font-weight: 600;
@@ -54,15 +60,30 @@
     opacity: 0.6;
   }
 
+  /* Coral to orange gradient: stands out from the site's navy. On hover the wide background shifts slightly. */
   .fc-start {
-    justify-self: start;
+    justify-self: center;
+    min-width: 200px;
+    border: 0;
+    border-radius: 16px;
+    background: linear-gradient(90deg, #ff3d6e 0%, #ff5e57 40%, #ff8a3d 70%, #ff3d6e 100%);
+    background-size: 200% 100%;
+    background-position: 0% 0;
+    color: #fff;
+    font-weight: 700;
+    letter-spacing: 0.3px;
+    box-shadow: 0 4px 14px rgba(255, 77, 94, 0.35);
+    transition: background-position 0.3s ease, box-shadow 0.3s ease;
+  }
+
+  .fc-start:hover,
+  .fc-start:focus-visible {
+    background-position: 30% 0;
+    box-shadow: 0 4px 16px rgba(255, 77, 94, 0.42);
   }
 
   .fc-card {
     background: #fff;
-    border: 1px solid var(--border);
-    border-radius: 6px;
-    box-shadow: 1.4px 1.4px 2px #b2b2b2;
     padding: 12px;
     display: grid;
     gap: 10px;
@@ -371,7 +392,7 @@
 
 <!-- HTML -->
 <div class="fc-wrap" id="cclFansChoice">
-  <button type="button" class="fc-btn fc-btn-primary fc-start" id="fcStart">Vote</button>
+  <button type="button" class="fc-btn fc-start" id="fcStart">Vote Here</button>
   <div id="fcPanel" hidden></div>
 </div>
 
@@ -821,6 +842,8 @@
       loadError = "❌ Failed to load voting data. Please reload the page.";
     })
     .finally(() => {
+      // Players who have voted see their vote right away.
+      if (currentVote()) panelOpen = true;
       if (panelOpen && !panel.querySelector("form")) render();
     });
 

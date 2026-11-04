@@ -1965,6 +1965,74 @@
     color: #a12a2a;
   }
 
+  .cp-ccl-chip--vote-pending {
+    background: #e4f0fb;
+    color: #1a5d96;
+  }
+
+  .cp-ccl-chip--vote-confirmed {
+    background: #e3f6ec;
+    color: #177245;
+  }
+
+  .cp-ccl-chip--vote-rejected {
+    background: #fdecec;
+    color: #a12a2a;
+  }
+
+  .cp-ccl-chip--vote-cancelled {
+    background: #f3f4f6;
+    color: #667085;
+  }
+
+  .cp-ccl-fc-controls {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 8px;
+  }
+
+  .cp-ccl-fc-player {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+  }
+
+  .cp-ccl-fc-player a {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    color: inherit;
+    text-decoration: none;
+  }
+
+  .cp-ccl-fc-player a:hover .cp-ccl-strong {
+    text-decoration: underline;
+  }
+
+  .cp-ccl-fc-bga {
+    width: 14px;
+    height: 14px;
+    object-fit: contain;
+    flex-shrink: 0;
+  }
+
+  .cp-ccl-fc-no-bga {
+    width: 14px;
+    color: #c0c6d0;
+    font-size: 13px;
+    text-align: center;
+    flex-shrink: 0;
+  }
+
+  .cp-ccl-fc-flag {
+    color: #c26a00;
+    font-size: 12px;
+    cursor: help;
+  }
+
   .cp-ccl.cp-ccl--standalone {
     margin-top: 0;
     padding-top: 0;
@@ -2365,6 +2433,15 @@
 
     .cp-ccl-registration-filter.cp-dd {
       width: 100%;
+    }
+
+    .cp-ccl-fc-controls {
+      width: 100%;
+      justify-content: stretch;
+    }
+
+    .cp-ccl-fc-controls > * {
+      flex: 1 1 140px;
     }
   }
 
@@ -9298,6 +9375,340 @@
     return root;
   }
 
+  // DB values of ccl_fans_choice_votes.status and their labels.
+  const CCL_FANS_CHOICE_STATUSES = [
+    { value: "pending", label: "Pending" },
+    { value: "confirmed", label: "Confirmed" },
+    { value: "rejected", label: "Rejected" },
+    { value: "cancelled", label: "Cancelled" },
+  ];
+  const CCL_FANS_CHOICE_DUPLICATE_FILTERS = [
+    { value: "", label: "All votes" },
+    { value: "player", label: "Duplicate players" },
+    { value: "ip", label: "Duplicate IP" },
+  ];
+  const BGA_LOGO_URL = "https://carcassonne.gg/gallery/bga-logo.png";
+
+  // Fans Choice votes of guests (not verified on the site) for admins to review.
+  // Votes of verified players are confirmed automatically and are not listed. Hidden for seasons without Fans Choice.
+  function createCclFansChoiceSection(tournament) {
+    const el = createCclElement;
+    const root = el("section", "cp-tournament-section cp-ccl cp-ccl--admin");
+    const head = el("div", "cp-tournament-section-head");
+    const headText = el("div");
+    const title = el("div", "cp-tournament-section-title", "Fans Choice votes");
+    const hint = el("div", "cp-tournament-section-hint", "Votes of guests. Votes of verified players are confirmed automatically.");
+    headText.appendChild(title);
+    headText.appendChild(hint);
+    head.appendChild(headText);
+    const status = el("div", "cp-edit-error");
+    const body = el("div", "cp-ccl-body");
+    root.appendChild(head);
+    root.appendChild(status);
+    root.appendChild(body);
+    body.textContent = "Loading votes...";
+    const encodedTournamentId = encodeURIComponent(String(tournament?.id || "").trim());
+    const votesUrl = `${CCL_URL}/${encodedTournamentId}/fans-choice/votes`;
+    let votes = null;
+    let busy = false;
+    let statusFilter = "";
+    let duplicateFilter = "";
+    let editDraft = null;
+    const openDetails = new Set();
+
+    const controls = el("div", "cp-ccl-fc-controls");
+    const statusFilterDropdown = createTournamentDropdown(
+      "",
+      [{ value: "", label: "All statuses" }].concat(CCL_FANS_CHOICE_STATUSES)
+    );
+    statusFilterDropdown.root.classList.add("cp-ccl-registration-filter");
+    statusFilterDropdown.root.querySelector("button")?.setAttribute("aria-label", "Filter votes by status");
+    statusFilterDropdown.addEventListener("change", () => {
+      statusFilter = statusFilterDropdown.value;
+      render();
+    });
+    const duplicateFilterDropdown = createTournamentDropdown("", CCL_FANS_CHOICE_DUPLICATE_FILTERS);
+    duplicateFilterDropdown.root.classList.add("cp-ccl-registration-filter");
+    duplicateFilterDropdown.root.querySelector("button")?.setAttribute("aria-label", "Show duplicates");
+    duplicateFilterDropdown.addEventListener("change", () => {
+      duplicateFilter = duplicateFilterDropdown.value;
+      render();
+    });
+    const fillButton = el("button", "cp-btn cp-btn-secondary", "Get players data");
+    fillButton.type = "button";
+    fillButton.title = "Find BGA ids of the votes by exact nickname in the site profiles";
+    controls.appendChild(statusFilterDropdown.root);
+    controls.appendChild(duplicateFilterDropdown.root);
+    controls.appendChild(fillButton);
+    head.appendChild(controls);
+
+    const getStatusLabel = (value) => CCL_FANS_CHOICE_STATUSES.find((item) => item.value === value)?.label || value || "—";
+    const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    // SQLite keeps "YYYY-MM-DD HH:MM:SS" in UTC.
+    const formatDate = (value) => {
+      const raw = String(value || "").trim();
+      return formatCclDateTimeInZone(/^\d{4}-\d{2}-\d{2} /.test(raw) ? `${raw.replace(" ", "T")}Z` : raw, timeZone) || raw;
+    };
+    const setStatus = (message, success = false) => {
+      status.textContent = String(message || "");
+      status.className = success ? "cp-edit-success" : "cp-edit-error";
+    };
+    const createIconButton = (iconClass, label, onClick, variant = "secondary") => {
+      const button = el("button", `cp-btn cp-btn-${variant} cp-ccl-icon-btn`);
+      button.type = "button";
+      button.title = label;
+      button.setAttribute("aria-label", label);
+      button.disabled = busy;
+      const icon = el("i", iconClass);
+      icon.setAttribute("aria-hidden", "true");
+      button.appendChild(icon);
+      button.addEventListener("click", onClick);
+      return button;
+    };
+    const addCell = (row, content, className = "") => {
+      const cell = el("td", className);
+      if (content instanceof Node) cell.appendChild(content);
+      else cell.textContent = String(content ?? "");
+      row.appendChild(cell);
+      return cell;
+    };
+    const createAssociation = (vote) => {
+      const wrap = el("span", "cp-ccl-association");
+      const flag = toApiAbsoluteUrl(vote.association_flag || "");
+      if (flag) {
+        const image = el("img", "cp-dd-flag");
+        image.src = flag;
+        image.alt = "";
+        wrap.appendChild(image);
+      }
+      wrap.appendChild(el("span", "", vote.association_name || vote.association_id || "—"));
+      return wrap;
+    };
+    const createDuplicateFlag = (iconClass, label) => {
+      const icon = el("i", `${iconClass} cp-ccl-fc-flag`);
+      icon.title = label;
+      icon.setAttribute("aria-label", label);
+      return icon;
+    };
+    // BGA icon with a link to the profile when the BGA id is known.
+    const createPlayer = (vote) => {
+      const wrap = el("span", "cp-ccl-fc-player");
+      const nickname = el("span", "cp-ccl-strong", vote.bga_nickname || "—");
+      if (vote.bga_player_id) {
+        const link = el("a");
+        link.href = `https://boardgamearena.com/player?id=${encodeURIComponent(vote.bga_player_id)}`;
+        link.target = "_blank";
+        link.rel = "noopener noreferrer";
+        link.title = `BGA profile (id ${vote.bga_player_id})`;
+        const logo = el("img", "cp-ccl-fc-bga");
+        logo.src = BGA_LOGO_URL;
+        logo.alt = "BGA";
+        link.appendChild(logo);
+        link.appendChild(nickname);
+        wrap.appendChild(link);
+      } else {
+        const missing = el("i", "fa-solid fa-circle-question cp-ccl-fc-no-bga");
+        missing.title = "BGA id not found. Use Get players data.";
+        missing.setAttribute("aria-label", "BGA id not found");
+        wrap.appendChild(missing);
+        wrap.appendChild(nickname);
+      }
+      const duplicates = Number(vote.duplicate_count) || 0;
+      const ipDuplicates = Number(vote.ip_duplicate_count) || 0;
+      if (duplicates) wrap.appendChild(createDuplicateFlag("fa-solid fa-clone", `Same player: ${duplicates} other vote(s)`));
+      if (ipDuplicates) wrap.appendChild(createDuplicateFlag("fa-solid fa-network-wired", `Same IP: ${ipDuplicates} other vote(s)`));
+      return wrap;
+    };
+
+    // Runs one request, then reloads the list.
+    const run = async (work, success, fallback) => {
+      if (busy) return;
+      busy = true;
+      fillButton.disabled = true;
+      setStatus("");
+      render();
+      try {
+        const message = await work();
+        setStatus(message || success, true);
+      } catch (error) {
+        setStatus(getCclErrorMessage(error, fallback));
+      } finally {
+        busy = false;
+        fillButton.disabled = false;
+        await load();
+      }
+    };
+    fillButton.addEventListener("click", () => run(async () => {
+      const result = await requestTournamentJson(`${votesUrl}/fill-bga-ids`, { method: "POST", body: "{}" });
+      return `Updated BGA ids for ${Number(result?.updated_count) || 0} vote(s).`;
+    }, "", "Failed to get players data."));
+
+    const saveEdit = (vote) => {
+      const reason = editDraft.status === "rejected" ? editDraft.reject_reason.trim() : "";
+      if (editDraft.status === "rejected" && !reason) {
+        editDraft.error = "Enter the reason for rejecting the vote.";
+        render();
+        return;
+      }
+      if (editDraft.status === vote.status && reason === (vote.reject_reason || "")) {
+        editDraft = null;
+        render();
+        return;
+      }
+      run(async () => {
+        await requestTournamentJson(`${CCL_URL}/fans-choice/votes/${encodeURIComponent(vote.id)}`, {
+          method: "PATCH",
+          body: JSON.stringify({ status: editDraft.status, reject_reason: reason }),
+        });
+        editDraft = null;
+      }, "Vote saved.", "Failed to save the vote.");
+    };
+
+    const renderRowCells = (row, vote) => {
+      addCell(row, createAssociation(vote));
+      addCell(row, createPlayer(vote));
+      if (editDraft?.id === vote.id) {
+        row.classList.add("cp-ccl-editing");
+        const form = el("div", "cp-ccl-stack");
+        const statusSelect = createTournamentDropdown(editDraft.status, CCL_FANS_CHOICE_STATUSES);
+        statusSelect.root.querySelector("button")?.setAttribute("aria-label", "Vote status");
+        const reasonInput = el("input", "cp-tournament-config-input");
+        reasonInput.type = "text";
+        reasonInput.maxLength = 300;
+        reasonInput.value = editDraft.reject_reason;
+        reasonInput.placeholder = "Reason for rejecting";
+        reasonInput.setAttribute("aria-label", "Reason for rejecting");
+        reasonInput.hidden = editDraft.status !== "rejected";
+        statusSelect.addEventListener("change", () => {
+          editDraft.status = statusSelect.value;
+          reasonInput.hidden = editDraft.status !== "rejected";
+          if (!reasonInput.hidden) reasonInput.focus();
+        });
+        reasonInput.addEventListener("input", () => {
+          editDraft.reject_reason = reasonInput.value;
+          if (editDraft.error) {
+            editDraft.error = "";
+            reasonError?.remove();
+          }
+        });
+        reasonInput.addEventListener("keydown", (event) => {
+          if (event.key === "Enter") saveEdit(vote);
+          if (event.key === "Escape") {
+            editDraft = null;
+            render();
+          }
+        });
+        form.appendChild(statusSelect.root);
+        form.appendChild(reasonInput);
+        const reasonError = editDraft.error ? el("span", "cp-ccl-field-error", editDraft.error) : null;
+        if (reasonError) form.appendChild(reasonError);
+        addCell(row, form);
+        const actions = el("div", "cp-ccl-actions");
+        actions.appendChild(createIconButton("fa-solid fa-check", "Save vote", () => saveEdit(vote), "primary"));
+        actions.appendChild(createIconButton("fa-solid fa-xmark", "Cancel", () => {
+          editDraft = null;
+          render();
+        }));
+        addCell(row, actions);
+        return;
+      }
+      addCell(row, el("span", `cp-ccl-chip cp-ccl-chip--vote-${vote.status}`, getStatusLabel(vote.status)));
+      const actions = el("div", "cp-ccl-actions");
+      const detailsOpen = openDetails.has(vote.id);
+      const detailsButton = createIconButton("fa-solid fa-circle-info", detailsOpen ? "Hide details" : "Show details", () => {
+        if (openDetails.has(vote.id)) openDetails.delete(vote.id);
+        else openDetails.add(vote.id);
+        render();
+      });
+      detailsButton.setAttribute("aria-expanded", String(detailsOpen));
+      actions.appendChild(detailsButton);
+      actions.appendChild(createIconButton("fa-solid fa-pencil", "Edit vote", () => {
+        editDraft = {
+          id: vote.id,
+          status: vote.status || "pending",
+          reject_reason: vote.reject_reason || "",
+          error: "",
+        };
+        setStatus("");
+        render();
+      }));
+      addCell(row, actions);
+    };
+    const renderDetailsRow = (vote) => {
+      const row = el("tr", "cp-ccl-registration-details");
+      const details = el("dl", "cp-ccl-registration-details-list");
+      const reviewed = vote.reviewed_at
+        ? `${formatDate(vote.reviewed_at)}${vote.reviewed_by ? ` by ${vote.reviewed_by}` : ""}`
+        : "—";
+      [
+        ["Voted", formatDate(vote.created_at) || "—"],
+        ["IP hash", vote.ip_hash || "—"],
+        vote.reject_reason ? ["Reject reason", vote.reject_reason] : null,
+        ["Reviewed", reviewed],
+      ].filter(Boolean).forEach(([label, value]) => {
+        details.appendChild(el("dt", "", label));
+        details.appendChild(el("dd", "", value));
+      });
+      addCell(row, details).colSpan = 4;
+      return row;
+    };
+
+    const matchesDuplicateFilter = (vote) => {
+      if (duplicateFilter === "player") return Number(vote.duplicate_count) > 0;
+      if (duplicateFilter === "ip") return Number(vote.ip_duplicate_count) > 0;
+      return true;
+    };
+
+    const render = () => {
+      if (openTournamentDropdown && body.contains(openTournamentDropdown.root)) openTournamentDropdown.close();
+      if (!votes) return;
+      const visible = votes.filter((vote) => (!statusFilter || vote.status === statusFilter) && matchesDuplicateFilter(vote));
+      title.textContent = statusFilter || duplicateFilter
+        ? `Fans Choice votes (${visible.length}/${votes.length})`
+        : `Fans Choice votes (${votes.length})`;
+      body.innerHTML = "";
+      if (!visible.length) {
+        body.appendChild(el("div", "cp-ccl-muted", votes.length ? "No votes match the filters." : "No guest votes yet."));
+        return;
+      }
+      const wrap = el("div", "cp-ccl-table-wrap");
+      const table = el("table", "cp-ccl-table cp-ccl-table--registrations");
+      const headRow = el("tr");
+      ["Association", "Player (BGA)", "Status", ""].forEach((label) => headRow.appendChild(el("th", "", label)));
+      const thead = el("thead");
+      thead.appendChild(headRow);
+      const tbody = el("tbody");
+      visible.forEach((vote) => {
+        const row = el("tr");
+        renderRowCells(row, vote);
+        tbody.appendChild(row);
+        if (openDetails.has(vote.id)) tbody.appendChild(renderDetailsRow(vote));
+      });
+      table.appendChild(thead);
+      table.appendChild(tbody);
+      wrap.appendChild(table);
+      body.appendChild(wrap);
+      labelCclTableCells(body);
+    };
+
+    const load = () => requestTournamentJson(votesUrl, { method: "GET" })
+      .then((data) => {
+        votes = Array.isArray(data?.votes) ? data.votes : [];
+        render();
+      })
+      .catch((error) => {
+        // This season has no Fans Choice, or the viewer is not a tournament admin.
+        if (error?.status === 404 || error?.status === 403) {
+          root.remove();
+          return;
+        }
+        body.innerHTML = "";
+        body.appendChild(el("div", "cp-edit-error", getCclErrorMessage(error, "Failed to load votes.")));
+      });
+    load();
+    return root;
+  }
+
   // CCL players of a tournament. Admins get slots, draws (Elo and pots) and qualification results;
   // captains get the slots of their association. Every action is saved through /ccl/... right away.
   function createCclPlayersSection(tournament, references, options = {}) {
@@ -10939,6 +11350,7 @@
     if (initialClassification.isCcl && tournamentId) {
       contentEl.appendChild(createCclPlayersSection(tournament, references));
       contentEl.appendChild(createCclRegistrationsSection(tournament));
+      contentEl.appendChild(createCclFansChoiceSection(tournament));
     }
   }
 
