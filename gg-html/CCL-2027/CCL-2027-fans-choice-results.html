@@ -104,8 +104,21 @@
   }
 
   .fcr-pending {
+    display: inline-flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 4px;
+    min-width: 38px;
     font-size: 12px;
+    font-weight: 600;
     color: #1a5d96;
+    cursor: help;
+  }
+
+  .fcr-pending-icon {
+    font-family: "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif;
+    font-size: 12px;
+    line-height: 1;
   }
 
   .fcr-chevron {
@@ -118,7 +131,7 @@
     transform: rotate(180deg);
   }
 
-  /* Share of the confirmed votes: the weight of the association on the draw wheel. */
+  /* Confirmed votes relative to the leader: the leader's bar is full. */
   .fcr-bar {
     grid-column: 1 / -1;
     display: flex;
@@ -138,13 +151,6 @@
     height: 100%;
     border-radius: 3px;
     background: linear-gradient(90deg, #ff3d6e 0%, #ff5e57 50%, #ff8a3d 100%);
-  }
-
-  .fcr-share {
-    min-width: 38px;
-    text-align: right;
-    font-size: 11px;
-    color: var(--muted);
   }
 
   .fcr-votes {
@@ -314,7 +320,7 @@
     return `${day}, ${time} UTC`;
   }
 
-  // "2026-11-09T00:00:00Z" -> "November 9 at 00:00 UTC"
+  // "2026-11-09T23:59:59Z" -> "November 9 at 23:59 UTC"
   function formatDeadline(iso) {
     const date = new Date(iso);
     if (Number.isNaN(date.getTime())) return "";
@@ -402,16 +408,26 @@
 
     const counts = el("div", "fcr-counts");
     counts.appendChild(el("span", "fcr-confirmed", String(association.confirmed)));
-    if (association.pending) counts.appendChild(el("span", "fcr-pending", `+${association.pending} under review`));
 
-    const share = data.totals.confirmed ? association.confirmed / data.totals.confirmed : 0;
+    // The leader's bar is full; the others are relative to it.
+    const maxConfirmed = Math.max(0, ...data.associations.map((row) => row.confirmed));
+    const fillShare = maxConfirmed ? association.confirmed / maxConfirmed : 0;
     const bar = el("div", "fcr-bar");
-    bar.title = "Share of the confirmed votes: the weight on the draw wheel";
     const track = el("div", "fcr-bar-track");
+    track.title = `${plural(association.confirmed, "confirmed vote")}: the weight on the draw wheel`;
     const fill = el("div", "fcr-bar-fill");
-    fill.style.width = `${(share * 100).toFixed(1)}%`;
+    fill.style.width = `${(fillShare * 100).toFixed(1)}%`;
     track.appendChild(fill);
-    bar.append(track, el("span", "fcr-share", `${Math.round(share * 100)}%`));
+    // Votes under review: "+N 👀"; empty when there are none, so the bars stay aligned.
+    const pending = el("span", "fcr-pending");
+    if (association.pending) {
+      pending.title = `${plural(association.pending, "vote")} under review`;
+      pending.setAttribute("aria-label", pending.title);
+      const eyes = el("span", "fcr-pending-icon", "👀");
+      eyes.setAttribute("aria-hidden", "true");
+      pending.append(document.createTextNode(`+${association.pending}`), eyes);
+    }
+    bar.append(track, pending);
 
     head.append(country, counts, el("i", "fa-solid fa-chevron-down fcr-chevron"), bar);
     head.addEventListener("click", () => {

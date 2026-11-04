@@ -43,8 +43,9 @@ const FANS_CHOICE_VOTES_SQL = `
 // Per CCL season. Associations that already have 4–5 spots cannot be voted for.
 export const FANS_CHOICE_SEASONS = {
   "CCL-2027": {
-    opensAt: "2026-11-04T00:00:00Z",
-    closesAt: "2026-11-09T00:00:00Z",
+    opensAt: "2026-11-04T18:00:00Z",
+    // The last second of 23:59, so the pages show "November 9 at 23:59 UTC".
+    closesAt: "2026-11-09T23:59:59Z",
     excludedAssociations: ["ARG", "CHN", "HRV", "DEU", "JPN", "RCP", "UKR"],
     excludedReason: "Already has 4–5 spots in CCL 2027",
   },
