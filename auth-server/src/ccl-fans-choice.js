@@ -302,6 +302,7 @@ export function registerCclFansChoiceRoutes(app, {
         `
           SELECT id, association_id, bga_nickname, COALESCE(player_id, bga_player_id) AS bga_player_id,
                  player_id IS NOT NULL AS verified, status,
+                 bga_lookup_failed_at IS NOT NULL AS not_on_bga,
                  CASE WHEN status IN ('rejected', 'cancelled') THEN reject_reason END AS reason,
                  CASE WHEN player_id IS NOT NULL THEN updated_at ELSE created_at END AS voted_at
           FROM ccl_fans_choice_votes
@@ -329,6 +330,8 @@ export function registerCclFansChoiceRoutes(app, {
         bga_nickname: vote.bga_nickname,
         bga_player_id: text(vote.bga_player_id) || null,
         verified: Number(vote.verified) === 1,
+        // Get players data found no BGA player with this nickname.
+        not_on_bga: !text(vote.bga_player_id) && Number(vote.not_on_bga) === 1,
         status: vote.status,
         reason: vote.reason || null,
         voted_at: vote.voted_at,

@@ -2027,6 +2027,10 @@
     flex-shrink: 0;
   }
 
+  .cp-ccl-fc-no-bga.is-not-on-bga {
+    color: #f08a8a;
+  }
+
   .cp-ccl-fc-flag {
     color: #c26a00;
     font-size: 12px;
@@ -9515,7 +9519,7 @@
         wrap.appendChild(link);
       } else {
         const notOnBga = !!vote.bga_lookup_failed_at;
-        const missing = el("i", `fa-solid ${notOnBga ? "fa-circle-xmark" : "fa-circle-question"} cp-ccl-fc-no-bga`);
+        const missing = el("i", `fa-solid ${notOnBga ? "fa-circle-xmark is-not-on-bga" : "fa-circle-question"} cp-ccl-fc-no-bga`);
         missing.title = notOnBga
           ? `No BGA player with this nickname (checked ${formatDate(vote.bga_lookup_failed_at)}).`
           : "BGA id not found. Use Get players data.";

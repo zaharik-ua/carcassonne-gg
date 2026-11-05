@@ -510,6 +510,7 @@ test("results count confirmed and pending votes and list every vote oldest first
     UPDATE ccl_fans_choice_votes SET created_at = '2026-11-04 10:00:00', updated_at = '2026-11-04 10:00:00' WHERE bga_nickname = 'kasia';
     UPDATE ccl_fans_choice_votes SET created_at = '2026-11-04 09:00:00', updated_at = '2026-11-04 11:00:00' WHERE bga_nickname = 'taras';
     UPDATE ccl_fans_choice_votes SET created_at = '2026-11-04 08:00:00', bga_player_id = '999' WHERE bga_nickname = 'bot1';
+    UPDATE ccl_fans_choice_votes SET bga_lookup_failed_at = '2026-11-05 12:00:00' WHERE bga_nickname = 'pepe';
   `);
 
   const results = await api.call("GET /public/ccl/:tournamentId/fans-choice/results");
@@ -530,9 +531,10 @@ test("results count confirmed and pending votes and list every vote oldest first
     ]
   );
   const spain = results.body.associations.find((row) => row.id === "ESP");
-  assert.deepEqual(spain.votes.map((row) => [row.status, row.reason]), [["cancelled", "Spain got a 4th spot"]]);
+  assert.deepEqual(spain.votes.map((row) => [row.status, row.reason, row.not_on_bga]), [["cancelled", "Spain got a 4th spot", true]]);
+  assert.deepEqual(poland.votes.map((row) => row.not_on_bga), [false, false, false]);
   // Nothing private leaves the server.
   const fields = new Set(results.body.associations.flatMap((row) => row.votes.flatMap(Object.keys)));
-  for (const field of ["ip_hash", "user_id", "reviewed_by", "voter_association_id"]) assert.ok(!fields.has(field), field);
+  for (const field of ["ip_hash", "user_id", "reviewed_by", "voter_association_id", "bga_lookup_failed_at"]) assert.ok(!fields.has(field), field);
   assert.equal((await api.call("GET /public/ccl/:tournamentId/fans-choice/results", { tournamentId: "CCL-2026" })).status, 404);
 });

@@ -210,6 +210,12 @@
     flex-shrink: 0;
   }
 
+  .fcr-no-bga.fa-circle-xmark {
+    color: #f08a8a;
+    font-size: 13px;
+    text-align: center;
+  }
+
   .fcr-verified {
     color: #2e7d32;
     font-size: 11px;
@@ -382,7 +388,13 @@
       link.append(logo, nick);
       player.appendChild(link);
     } else {
-      player.append(el("span", "fcr-no-bga"), nick);
+      // A cross when Get players data found no BGA player with this nickname, else an empty gap.
+      const missing = vote.not_on_bga ? el("i", "fa-solid fa-circle-xmark fcr-no-bga") : el("span", "fcr-no-bga");
+      if (vote.not_on_bga) {
+        missing.title = "No BGA player with this nickname";
+        missing.setAttribute("aria-label", "Not found on BGA");
+      }
+      player.append(missing, nick);
     }
     if (vote.verified) {
       const verified = el("i", "fa-solid fa-circle-check fcr-verified");
