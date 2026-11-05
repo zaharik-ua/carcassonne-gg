@@ -376,7 +376,19 @@ test("BGA ids of guest votes come from profiles with the same nickname in any ca
   assert.equal((await fill(USERS.admin)).body.updated_count, 0);
 });
 
-test("nicknames missing from the site profiles are looked up on BGA", async (t) => {
+// The BGA lookup runs in the background: waits until the admin list shows the run finished.
+async function waitForBgaLookup(api) {
+  for (let attempt = 0; attempt < 200; attempt += 1) {
+    const lookup = (await adminList(api)).body.bga_lookup;
+    if (!lookup?.running) return lookup;
+    await new Promise((resolve) => setImmediate(resolve));
+  }
+  return assert.fail("BGA lookup did not finish");
+}
+
+const bgaCounts = ({ total, checked, found, not_found, error }) => ({ total, checked, found, not_found, error });
+
+test("nicknames missing from the site profiles are looked up on BGA in the background", async (t) => {
   const db = await createDatabase(t);
   const calls = [];
   const bga = { Pandeyuk: { ok: true, player_id: "999", bga_nickname: "pandeyuk" }, ghost: { ok: false, not_found: true } };
@@ -390,12 +402,15 @@ test("nicknames missing from the site profiles are looked up on BGA", async (t) 
   for (const nickname of ["Kasia", "Pandeyuk", "ghost"]) await vote(api, { association_id: "POL", bga_nickname: nickname });
   const fill = () => api.call("POST /ccl/:tournamentId/fans-choice/votes/fill-bga-ids", { user: USERS.admin });
 
-  // Kasia is in the site profiles: no BGA request for her.
+  // Kasia is in the site profiles: no BGA request for her. The click answers before BGA does.
   const first = await fill();
   assert.equal(first.status, 200, JSON.stringify(first.body));
-  assert.deepEqual(first.body, {
-    ok: true, updated_count: 2, profiles_count: 1, bga: { found: 1, not_found: 1, remaining: 0, error: null },
-  });
+  assert.equal(first.body.updated_count, 1);
+  assert.equal(first.body.bga_lookup.running, true);
+  assert.equal(first.body.bga_lookup.total, 2);
+  // A second click during the run reports the same run instead of starting another one.
+  assert.equal((await fill()).body.bga_lookup.running, true);
+  assert.deepEqual(bgaCounts(await waitForBgaLookup(api)), { total: 2, checked: 2, found: 1, not_found: 1, error: null });
   assert.deepEqual(calls, ["Pandeyuk", "ghost"]);
   assert.deepEqual(
     await all(db, "SELECT bga_nickname, bga_player_id, bga_lookup_failed_at IS NOT NULL AS failed FROM ccl_fans_choice_votes ORDER BY id"),
@@ -407,15 +422,21 @@ test("nicknames missing from the site profiles are looked up on BGA", async (t) 
   );
   assert.ok((await adminList(api)).body.votes.find((row) => row.bga_nickname === "ghost").bga_lookup_failed_at);
 
+  // Nothing left for BGA: no run.
+  assert.equal((await fill()).body.bga_lookup, null);
+
   // A nickname BGA did not know is not looked up again; a BGA failure leaves the nickname for the next click.
   await vote(api, { association_id: "POL", bga_nickname: "later" });
-  const second = await fill();
-  assert.deepEqual(second.body.bga, { found: 0, not_found: 0, remaining: 1, error: "BGA lookup failed. Try again later." });
+  await fill();
+  assert.deepEqual(
+    bgaCounts(await waitForBgaLookup(api)),
+    { total: 1, checked: 0, found: 0, not_found: 0, error: "BGA lookup failed. Try again later." }
+  );
   assert.deepEqual(calls, ["Pandeyuk", "ghost", "later"]);
   assert.equal((await all(db, "SELECT bga_lookup_failed_at FROM ccl_fans_choice_votes WHERE bga_nickname = 'later'"))[0].bga_lookup_failed_at, null);
 });
 
-test("one click looks up at most 10 nicknames on BGA", async (t) => {
+test("one BGA run checks every nickname without a limit per click", async (t) => {
   const db = await createDatabase(t);
   const calls = [];
   const api = createApi(db, {
@@ -425,10 +446,9 @@ test("one click looks up at most 10 nicknames on BGA", async (t) => {
     },
   });
   for (let index = 1; index <= 12; index += 1) await vote(api, { association_id: "POL", bga_nickname: `player${index}` });
-  const fill = () => api.call("POST /ccl/:tournamentId/fans-choice/votes/fill-bga-ids", { user: USERS.admin });
+  await api.call("POST /ccl/:tournamentId/fans-choice/votes/fill-bga-ids", { user: USERS.admin });
 
-  assert.deepEqual((await fill()).body.bga, { found: 0, not_found: 10, remaining: 2, error: null });
-  assert.deepEqual((await fill()).body.bga, { found: 0, not_found: 2, remaining: 0, error: null });
+  assert.deepEqual(bgaCounts(await waitForBgaLookup(api)), { total: 12, checked: 12, found: 0, not_found: 12, error: null });
   assert.equal(calls.length, 12);
 });
 

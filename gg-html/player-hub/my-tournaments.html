@@ -9415,6 +9415,9 @@
     const votesUrl = `${CCL_URL}/${encodedTournamentId}/fans-choice/votes`;
     let votes = null;
     let busy = false;
+    // The background BGA run of Get players data, as the server reports it.
+    let bgaLookup = null;
+    let bgaPollTimer = 0;
     let statusFilter = "";
     let duplicateFilter = "";
     let editDraft = null;
@@ -9440,7 +9443,7 @@
     });
     const fillButton = el("button", "cp-btn cp-btn-secondary", "Get players data");
     fillButton.type = "button";
-    fillButton.title = "Find BGA ids of the votes by nickname (any case): first in the site profiles, then on BGA";
+    fillButton.title = "Find BGA ids of the votes by nickname (any case): first in the site profiles, then on BGA in the background";
     controls.appendChild(statusFilterDropdown.root);
     controls.appendChild(duplicateFilterDropdown.root);
     controls.appendChild(fillButton);
@@ -9547,20 +9550,42 @@
         setStatus(getCclErrorMessage(error, fallback));
       } finally {
         busy = false;
-        fillButton.disabled = false;
+        fillButton.disabled = !!bgaLookup?.running;
         await load();
       }
     };
-    // BGA is asked for at most 10 nicknames per click, so a long list takes several clicks.
+    // The site profiles are checked at once; BGA runs in the background and the list polls its progress.
     fillButton.addEventListener("click", () => run(async () => {
       const result = await requestTournamentJson(`${votesUrl}/fill-bga-ids`, { method: "POST", body: "{}" });
-      const bga = result?.bga || {};
-      const parts = [`Updated BGA ids for ${Number(result?.updated_count) || 0} vote(s).`];
-      if (Number(bga.not_found)) parts.push(`Not found on BGA: ${bga.not_found} vote(s).`);
-      if (bga.error) parts.push(bga.error);
-      if (Number(bga.remaining)) parts.push(`${bga.remaining} nickname(s) left to check on BGA: click Get players data again.`);
-      return parts.join(" ");
+      const message = `Updated BGA ids for ${Number(result?.updated_count) || 0} vote(s) from the site profiles.`;
+      return result?.bga_lookup ? message : `${message} No other nicknames to check on BGA.`;
     }, "", "Failed to get players data."));
+    const describeBgaLookup = (lookup) => {
+      if (lookup.running) {
+        return `Looking up nicknames on BGA: ${lookup.checked}/${lookup.total} checked, ${lookup.found} vote(s) updated. The list refreshes by itself.`;
+      }
+      const parts = [`BGA lookup finished: ${lookup.found} vote(s) updated.`];
+      if (Number(lookup.not_found)) parts.push(`Not found on BGA: ${lookup.not_found} vote(s).`);
+      if (lookup.error) {
+        parts.push(`${lookup.error} ${lookup.total - lookup.checked} nickname(s) left: click Get players data again.`);
+      }
+      return parts.join(" ");
+    };
+    const syncBgaLookup = (nextLookup) => {
+      const wasRunning = !!bgaLookup?.running;
+      bgaLookup = nextLookup || null;
+      window.clearTimeout(bgaPollTimer);
+      fillButton.disabled = busy || !!bgaLookup?.running;
+      if (bgaLookup?.running) {
+        setStatus(describeBgaLookup(bgaLookup), true);
+        // Stops once the section is gone (another tournament opened).
+        bgaPollTimer = window.setTimeout(() => {
+          if (root.isConnected) load();
+        }, 3000);
+      } else if (wasRunning && bgaLookup) {
+        setStatus(describeBgaLookup(bgaLookup), !bgaLookup.error);
+      }
+    };
 
     // Rejected votes need a reason, cancelled ones may have one.
     const statusHasReason = (value) => value === "rejected" || value === "cancelled";
@@ -9727,6 +9752,7 @@
     const load = () => requestTournamentJson(votesUrl, { method: "GET" })
       .then((data) => {
         votes = Array.isArray(data?.votes) ? data.votes : [];
+        syncBgaLookup(data?.bga_lookup);
         render();
       })
       .catch((error) => {
