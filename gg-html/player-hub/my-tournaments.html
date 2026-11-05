@@ -1970,6 +1970,11 @@
     color: #1a5d96;
   }
 
+  .cp-ccl-chip--vote-review_later {
+    background: #fff1e0;
+    color: #b45309;
+  }
+
   .cp-ccl-chip--vote-confirmed {
     background: #e3f6ec;
     color: #177245;
@@ -2043,15 +2048,33 @@
     cursor: help;
   }
 
-  /* Confirm and Reject right after the nickname. */
+  /* Confirm and Reject of a pending vote, before the nickname: small and light. */
   .cp-ccl-fc-review {
     display: inline-flex;
-    gap: 4px;
-    margin-left: 4px;
+    gap: 3px;
+    flex-shrink: 0;
+  }
+
+  .cp-ccl--admin .cp-ccl-fc-review .cp-ccl-icon-btn {
+    width: 16px;
+    height: 16px;
+    font-size: 8px;
   }
 
   .cp-ccl-fc-review .cp-btn-danger {
     margin-left: 0;
+  }
+
+  .cp-ccl-fc-review .cp-ccl-fc-later {
+    background: #fff7ed;
+    border-color: #f3c99a;
+    color: #c2620a;
+  }
+
+  .cp-ccl-fc-review .cp-ccl-fc-confirm {
+    background: #f3f8fd;
+    border-color: #b9d3ea;
+    color: #1a73b7;
   }
 
   .cp-ccl.cp-ccl--standalone {
@@ -9399,6 +9422,7 @@
   // DB values of ccl_fans_choice_votes.status and their labels.
   const CCL_FANS_CHOICE_STATUSES = [
     { value: "pending", label: "Pending" },
+    { value: "review_later", label: "Review later" },
     { value: "confirmed", label: "Confirmed" },
     { value: "rejected", label: "Rejected" },
     { value: "cancelled", label: "Cancelled" },
@@ -9606,12 +9630,19 @@
       }
     };
 
-    // Rejected votes need a reason, cancelled ones may have one.
-    const statusHasReason = (value) => value === "rejected" || value === "cancelled";
+    // Rejected and review-later votes need a reason, cancelled ones may have one.
+    const statusHasReason = (value) => value === "rejected" || value === "review_later" || value === "cancelled";
+    const REASON_PLACEHOLDERS = {
+      rejected: "Reason for rejecting",
+      review_later: "Why review later",
+      cancelled: "Reason (optional)",
+    };
     const saveEdit = (vote) => {
       const reason = statusHasReason(editDraft.status) ? editDraft.reject_reason.trim() : "";
-      if (editDraft.status === "rejected" && !reason) {
-        editDraft.error = "Enter the reason for rejecting the vote.";
+      if ((editDraft.status === "rejected" || editDraft.status === "review_later") && !reason) {
+        editDraft.error = editDraft.status === "rejected"
+          ? "Enter the reason for rejecting the vote."
+          : "Enter why the vote is reviewed later.";
         render();
         return;
       }
@@ -9651,16 +9682,19 @@
     const renderRowCells = (row, vote) => {
       addCell(row, createAssociation(vote));
       const player = createPlayer(vote);
-      // One click for the usual review outcomes; cancelled votes are restored only through Edit.
-      if (editDraft?.id !== vote.id) {
+      // One click to review a pending or put-off vote; reviewed votes change only through Edit.
+      if ((vote.status === "pending" || vote.status === "review_later") && editDraft?.id !== vote.id) {
         const review = el("span", "cp-ccl-fc-review");
-        if (vote.status === "pending" || vote.status === "rejected") {
-          review.appendChild(createIconButton("fa-solid fa-check", "Confirm vote", () => confirmVote(vote), "primary"));
+        const confirm = createIconButton("fa-solid fa-check", "Confirm vote", () => confirmVote(vote));
+        confirm.classList.add("cp-ccl-fc-confirm");
+        review.appendChild(confirm);
+        if (vote.status === "pending") {
+          const later = createIconButton("fa-solid fa-clock", "Review later", () => startEdit(vote, "review_later"));
+          later.classList.add("cp-ccl-fc-later");
+          review.appendChild(later);
         }
-        if (vote.status === "pending" || vote.status === "confirmed") {
-          review.appendChild(createIconButton("fa-solid fa-ban", "Reject vote", () => startEdit(vote, "rejected"), "danger"));
-        }
-        if (review.children.length) player.appendChild(review);
+        review.appendChild(createIconButton("fa-solid fa-ban", "Reject vote", () => startEdit(vote, "rejected"), "danger"));
+        player.prepend(review);
       }
       addCell(row, player);
       if (editDraft?.id === vote.id) {
@@ -9674,7 +9708,7 @@
         reasonInput.value = editDraft.reject_reason;
         const syncReasonInput = () => {
           reasonInput.hidden = !statusHasReason(editDraft.status);
-          reasonInput.placeholder = editDraft.status === "cancelled" ? "Reason (optional)" : "Reason for rejecting";
+          reasonInput.placeholder = REASON_PLACEHOLDERS[editDraft.status] || "Reason";
           reasonInput.setAttribute("aria-label", reasonInput.placeholder);
         };
         syncReasonInput();

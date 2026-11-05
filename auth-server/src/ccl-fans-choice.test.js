@@ -318,10 +318,37 @@ test("an older table gets the review columns", async (t) => {
       bga_nickname TEXT NOT NULL, player_id TEXT, user_id INTEGER, voter_association_id TEXT,
       status TEXT NOT NULL, ip_hash TEXT, created_at TEXT, updated_at TEXT
     );
+    INSERT INTO ccl_fans_choice_votes (tournament_id, association_id, bga_nickname, status, created_at)
+    VALUES ('CCL-2027', 'POL', 'kasia', 'pending', '2026-11-04 10:00:00');
   `);
+  await ensureCclFansChoiceSchema(db);
   await ensureCclFansChoiceSchema(db);
   const columns = (await all(db, "PRAGMA table_info(ccl_fans_choice_votes)")).map((column) => column.name);
   for (const column of ["bga_player_id", "reject_reason", "reviewed_at", "reviewed_by", "bga_lookup_failed_at"]) assert.ok(columns.includes(column), column);
+  // The table is rebuilt for the review_later status and keeps its votes.
+  await exec(db, "UPDATE ccl_fans_choice_votes SET status = 'review_later' WHERE bga_nickname = 'kasia'");
+  const [vote] = await all(db, "SELECT bga_nickname, status, created_at, updated_at IS NOT NULL AS dated FROM ccl_fans_choice_votes");
+  assert.deepEqual(vote, { bga_nickname: "kasia", status: "review_later", created_at: "2026-11-04 10:00:00", dated: 1 });
+});
+
+test("a vote put off for later needs a reason, stays live and shows in the results as under review", async (t) => {
+  const db = await createDatabase(t);
+  const api = createApi(db);
+  const guest = await vote(api, { association_id: "POL", bga_nickname: "kasia" });
+  assert.equal((await review(api, guest.body.vote.id, { status: "review_later", reject_reason: " " })).status, 400);
+  const later = await review(api, guest.body.vote.id, { status: "review_later", reject_reason: "Asked on BGA" });
+  assert.equal(later.status, 200, JSON.stringify(later.body));
+  assert.deepEqual([later.body.vote.status, later.body.vote.reject_reason], ["review_later", "Asked on BGA"]);
+
+  // Still the live vote of the nickname: no second vote.
+  assert.equal((await vote(api, { association_id: "ESP", bga_nickname: "Kasia" })).status, 409);
+  const results = await api.call("GET /public/ccl/:tournamentId/fans-choice/results");
+  const poland = results.body.associations.find((row) => row.id === "POL");
+  assert.deepEqual([poland.confirmed, poland.pending], [0, 1]);
+  assert.deepEqual(
+    poland.votes.map((row) => [row.status, row.reason]),
+    [["review_later", "Asked on BGA"]]
+  );
 });
 
 test("admins list guest votes with duplicates by player and by network", async (t) => {

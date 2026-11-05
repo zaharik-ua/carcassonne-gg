@@ -240,6 +240,11 @@
     color: #1a5d96;
   }
 
+  .fcr-chip--review_later {
+    background: #fff1e0;
+    color: #b45309;
+  }
+
   .fcr-chip--rejected {
     background: #fdecec;
     color: #a12a2a;
@@ -320,7 +325,7 @@
   const RESULTS_URL = `${API_BASE}/public/ccl/${encodeURIComponent(TOURNAMENT_ID)}/fans-choice/results`;
   const BGA_LOGO_URL = "https://carcassonne.gg/gallery/bga-logo.png";
   const REFRESH_MS = 60 * 1000;
-  const STATUS_LABELS = { pending: "Under review", rejected: "Rejected", cancelled: "Cancelled" };
+  const STATUS_LABELS = { pending: "Under review", review_later: "Review later", rejected: "Rejected", cancelled: "Cancelled" };
 
   const root = document.getElementById("cclFansChoiceResults");
   // Associations the visitor opened; kept across refreshes.
@@ -414,7 +419,8 @@
       const isVoid = vote.status === "rejected" || vote.status === "cancelled";
       const row = el("div", `fcr-vote${isVoid ? " is-void" : ""}`);
       row.append(renderPlayer(vote), el("div", "fcr-date", formatVoteDate(vote.voted_at)));
-      if (isVoid && vote.reason) row.appendChild(el("div", "fcr-reason", vote.reason));
+      // The admins' reason: why a vote was voided or put off for later.
+      if ((isVoid || vote.status === "review_later") && vote.reason) row.appendChild(el("div", "fcr-reason", vote.reason));
       list.appendChild(row);
     });
     return list;

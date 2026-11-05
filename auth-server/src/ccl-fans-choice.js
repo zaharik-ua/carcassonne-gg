@@ -17,8 +17,9 @@ const FANS_CHOICE_VOTES_SQL = `
     player_id TEXT,
     user_id INTEGER,
     voter_association_id TEXT COLLATE NOCASE,
-    -- pending: to check, confirmed; rejected and cancelled: voided, the voter may vote again (a new row).
-    status TEXT NOT NULL CHECK (status IN ('pending', 'confirmed', 'rejected', 'cancelled')),
+    -- pending: to check, review_later: an admin put it off (with a reason), confirmed;
+    -- rejected and cancelled: voided, the voter may vote again (a new row).
+    status TEXT NOT NULL CHECK (status IN ('pending', 'review_later', 'confirmed', 'rejected', 'cancelled')),
     -- Lets admins spot many votes from one network without keeping the address itself.
     ip_hash TEXT,
     -- Review of guest votes: the BGA id found by nickname, why a vote was rejected, who changed the status.
@@ -34,10 +35,10 @@ const FANS_CHOICE_VOTES_SQL = `
   );
   CREATE UNIQUE INDEX IF NOT EXISTS idx_ccl_fans_choice_votes_live_nickname
     ON ccl_fans_choice_votes(tournament_id COLLATE NOCASE, bga_nickname COLLATE NOCASE)
-    WHERE status IN ('pending', 'confirmed');
+    WHERE status IN ('pending', 'review_later', 'confirmed');
   CREATE UNIQUE INDEX IF NOT EXISTS idx_ccl_fans_choice_votes_live_player
     ON ccl_fans_choice_votes(tournament_id COLLATE NOCASE, player_id)
-    WHERE status IN ('pending', 'confirmed') AND player_id IS NOT NULL;
+    WHERE status IN ('pending', 'review_later', 'confirmed') AND player_id IS NOT NULL;
   CREATE INDEX IF NOT EXISTS idx_ccl_fans_choice_votes_association
     ON ccl_fans_choice_votes(tournament_id COLLATE NOCASE, association_id);
 `;
@@ -58,13 +59,13 @@ const ASSOCIATION_ID_SQL = "COALESCE(NULLIF(trim(a.code), ''), printf('ASSOCIATI
 const NICKNAME_MAX = 64;
 const REJECT_REASON_MAX = 300;
 const VERIFIED_REPLACED_REASON = "Replaced by the vote of the verified player";
-const VOTE_STATUSES = ["pending", "confirmed", "rejected", "cancelled"];
+const VOTE_STATUSES = ["pending", "review_later", "confirmed", "rejected", "cancelled"];
 const BGA_ID_PATTERN = /^[0-9]*[1-9][0-9]*$/;
 // reason: why the vote was rejected or cancelled, shown to the voter.
 const VOTE_FIELDS = `id, association_id, bga_nickname, status,
   CASE WHEN status IN ('rejected', 'cancelled') THEN reject_reason END AS reason, created_at, updated_at`;
 // Votes that count or wait for review; a rejected or cancelled vote lets the voter vote again.
-const LIVE_VOTE = "status IN ('pending', 'confirmed')";
+const LIVE_VOTE = "status IN ('pending', 'review_later', 'confirmed')";
 // Columns added after the first version of the table.
 const LATER_COLUMNS = ["bga_player_id", "reject_reason", "reviewed_at", "reviewed_by", "bga_lookup_failed_at"];
 
@@ -118,6 +119,7 @@ const isUniqueViolation = (error) => String(error?.code) === "SQLITE_CONSTRAINT"
 
 // Repeatable: creates the table or adds the later columns to an older version of it.
 export async function ensureCclFansChoiceSchema(db) {
+  await rebuildForReviewLater(db);
   await dbExec(db, FANS_CHOICE_VOTES_SQL);
   // The first indexes kept rejected votes unique too, so a rejected voter could not vote again.
   await dbExec(db, `
@@ -130,8 +132,38 @@ export async function ensureCclFansChoiceSchema(db) {
   }
 }
 
-// Statuses that keep a reason: required for rejected, optional for cancelled.
-const STATUSES_WITH_REASON = ["rejected", "cancelled"];
+// SQLite cannot change a CHECK constraint, so a table without the review_later status is copied
+// into a new one. Its later columns are added first, so every column of the new table exists in it.
+async function rebuildForReviewLater(db) {
+  const table = await dbGet(db, "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'ccl_fans_choice_votes'");
+  if (!table || table.sql.includes("'review_later'")) return;
+  const oldColumns = new Set((await dbAll(db, "PRAGMA table_info(ccl_fans_choice_votes)")).map((column) => column.name));
+  for (const column of LATER_COLUMNS.filter((name) => !oldColumns.has(name))) {
+    await dbExec(db, `ALTER TABLE ccl_fans_choice_votes ADD COLUMN ${column} TEXT`);
+  }
+  await inTransaction(db, async () => {
+    const indexes = await dbAll(
+      db,
+      "SELECT name FROM sqlite_master WHERE type = 'index' AND tbl_name = 'ccl_fans_choice_votes' AND sql IS NOT NULL"
+    );
+    for (const index of indexes) await dbExec(db, `DROP INDEX IF EXISTS "${index.name}"`);
+    await dbExec(db, "ALTER TABLE ccl_fans_choice_votes RENAME TO ccl_fans_choice_votes_before_review_later");
+    await dbExec(db, FANS_CHOICE_VOTES_SQL);
+    const columns = (await dbAll(db, "PRAGMA table_info(ccl_fans_choice_votes)")).map((column) => column.name);
+    // The new table needs the dates the very first version could leave empty.
+    const values = columns.map((column) => (
+      column === "created_at" || column === "updated_at" ? `COALESCE(${column}, CURRENT_TIMESTAMP)` : column
+    ));
+    await dbExec(db, `
+      INSERT INTO ccl_fans_choice_votes (${columns.join(", ")})
+      SELECT ${values.join(", ")} FROM ccl_fans_choice_votes_before_review_later;
+      DROP TABLE ccl_fans_choice_votes_before_review_later;
+    `);
+  });
+}
+
+// Statuses that keep a reason: required for rejected and review_later, optional for cancelled.
+const STATUSES_WITH_REASON = ["rejected", "review_later", "cancelled"];
 
 // Admin review of a guest vote: a status, and the reason for a rejected or cancelled vote.
 export function normalizeVoteReview(body) {
@@ -139,6 +171,7 @@ export function normalizeVoteReview(body) {
   if (!VOTE_STATUSES.includes(status)) return { error: `status must be one of ${VOTE_STATUSES.join(", ")}` };
   const rejectReason = STATUSES_WITH_REASON.includes(status) ? text(body?.reject_reason) : "";
   if (status === "rejected" && !rejectReason) return { error: "Enter the reason for rejecting the vote" };
+  if (status === "review_later" && !rejectReason) return { error: "Enter why the vote is reviewed later" };
   if (rejectReason.length > REJECT_REASON_MAX) {
     return { error: `reject_reason must be at most ${REJECT_REASON_MAX} characters` };
   }
@@ -312,7 +345,7 @@ export function registerCclFansChoiceRoutes(app, {
           SELECT id, association_id, bga_nickname, COALESCE(player_id, bga_player_id) AS bga_player_id,
                  player_id IS NOT NULL AS verified, status,
                  bga_lookup_failed_at IS NOT NULL AS not_on_bga,
-                 CASE WHEN status IN ('rejected', 'cancelled') THEN reject_reason END AS reason,
+                 CASE WHEN status IN ('rejected', 'review_later', 'cancelled') THEN reject_reason END AS reason,
                  CASE WHEN player_id IS NOT NULL THEN updated_at ELSE created_at END AS voted_at
           FROM ccl_fans_choice_votes
           WHERE upper(trim(tournament_id)) = upper(trim(?))
@@ -333,7 +366,8 @@ export function registerCclFansChoiceRoutes(app, {
       const association = byAssociation.get(idKey(vote.association_id));
       if (!association) continue;
       if (vote.status === "confirmed") association.confirmed += 1;
-      if (vote.status === "pending") association.pending += 1;
+      // Votes put off for later are still under review.
+      if (vote.status === "pending" || vote.status === "review_later") association.pending += 1;
       association.votes.push({
         id: vote.id,
         bga_nickname: vote.bga_nickname,
