@@ -146,6 +146,30 @@
     color: #334155;
   }
 
+  /* Guest note: text, a quiet Sign in button, the hint under it. */
+  .fc-note-signin {
+    display: grid;
+    gap: 6px;
+    justify-items: start;
+  }
+
+  /* Light so it does not compete with Vote Here and Submit vote. */
+  .fc-btn-light {
+    height: 28px;
+    padding: 0 12px;
+    background: #fff;
+    border-color: #c9d6e6;
+    color: #15375c;
+    font-size: 13px;
+    text-decoration: none;
+  }
+
+  .fc-btn-light:hover,
+  .fc-btn-light:focus-visible {
+    background: #eef4fb;
+    border-color: #9fb6d1;
+  }
+
   .fc-note-warning {
     background: #fff8e1;
     border-color: #f3dc9a;
@@ -222,6 +246,15 @@
     color: #2e7d32;
     font-size: 20px;
     margin-top: 1px;
+  }
+
+  .fc-success.is-rejected > i {
+    color: #c62828;
+  }
+
+  .fc-reason {
+    font-style: italic;
+    color: #555;
   }
 
   /* Dropdown with search, as on the registration page. The menu stays in the flow so the iframe does not clip it. */
@@ -750,8 +783,14 @@
       form.appendChild(associationRow(syncSubmit));
       form.appendChild(el("div", "fc-hint", `You can change your vote until voting closes on ${formatUtc(data.voting.closes_at)}.`));
     } else {
-      const note = el("div", "fc-note", "Your vote will be checked by the admins. If you sign in and verify your account on carcassonne.gg, your vote is confirmed automatically. ");
-      note.appendChild(topLink(VERIFY_URL, "How to sign in and verify"));
+      const note = el("div", "fc-note fc-note-signin");
+      const signIn = topLink(VERIFY_URL, "Sign in");
+      signIn.className = "fc-btn fc-btn-light";
+      note.append(
+        el("div", "", "Your vote will be checked by the admins."),
+        signIn,
+        el("div", "fc-hint", "If you sign in and verify your account on carcassonne.gg, your vote is confirmed automatically.")
+      );
       intro.push(note);
       form.appendChild(associationRow(syncSubmit));
       nickname = createNicknameRow();
@@ -820,11 +859,13 @@
     // The server makes a guest vote with the player's own nickname the player's vote; another nickname stays a separate vote.
     const sameNickname = guestVote && nicknameKey(vote.bga_nickname) === nicknameKey(data.viewer.bga_nickname);
     const association = findAssociation(vote.association_id);
+    const rejected = vote.status === "rejected";
 
-    const success = el("div", "fc-success");
-    success.appendChild(el("i", "fa-solid fa-circle-check"));
+    const success = el("div", `fc-success${rejected ? " is-rejected" : ""}`);
+    success.appendChild(el("i", `fa-solid ${rejected ? "fa-circle-xmark" : "fa-circle-check"}`));
     const textWrap = el("div", "fc-success-text");
-    textWrap.appendChild(el("div", "fc-title", justVoted ? "Thank you for voting! 🎉" : "You have voted"));
+    const title = rejected ? "Your vote was rejected" : justVoted ? "Thank you for voting! 🎉" : "You have voted";
+    textWrap.appendChild(el("div", "fc-title", title));
 
     const voteLine = el("div", "fc-vote-line");
     voteLine.appendChild(el("span", "", "Your vote:"));
@@ -835,24 +876,28 @@
 
     if (vote.status === "confirmed") {
       textWrap.appendChild(el("div", "", "Your vote is confirmed."));
-    } else if (vote.status === "rejected") {
-      const rejected = el("div", "", "Your vote was rejected. If you think this is a mistake, contact us at ");
+    } else if (rejected) {
+      if (vote.reason) textWrap.appendChild(el("div", "fc-reason", `Reason: ${vote.reason}`));
+      const contact = el("div", "", votingOpen
+        ? "You can vote again. If you think this is a mistake, contact us at "
+        : "If you think this is a mistake, contact us at ");
       const email = el("a", "", "carcassonne.gg@gmail.com");
       email.href = "mailto:carcassonne.gg@gmail.com";
-      rejected.append(email, document.createTextNode("."));
-      textWrap.appendChild(rejected);
+      contact.append(email, document.createTextNode("."));
+      textWrap.appendChild(contact);
     } else {
       textWrap.appendChild(el("div", "", "Your vote has been received and will be checked by the admins."));
       if (!verified && votingOpen) textWrap.appendChild(confirmHint());
     }
 
-    const canConfirm = votingOpen && sameNickname && vote.status !== "confirmed";
-    const canChange = votingOpen && verified && (!guestVote || sameNickname);
-    const canVoteAgain = votingOpen && guestVote && !sameNickname;
+    // A rejected vote stays as it is: the voter casts a new one.
+    const canConfirm = votingOpen && !rejected && sameNickname && vote.status !== "confirmed";
+    const canChange = votingOpen && !rejected && verified && (!guestVote || sameNickname);
+    const canVoteAgain = votingOpen && (rejected || (guestVote && !sameNickname));
 
     if (canConfirm) {
       textWrap.appendChild(el("div", "fc-note", `You voted as ${vote.bga_nickname} before signing in. Confirm this vote with your verified account.`));
-    } else if (canVoteAgain) {
+    } else if (canVoteAgain && !rejected) {
       const mine = data.viewer.bga_nickname || data.viewer.player_id;
       textWrap.appendChild(el("div", "fc-note", `This vote was cast as ${vote.bga_nickname}, which is not your BGA nickname ${mine}. Vote again as ${mine} to have your vote confirmed.`));
     }

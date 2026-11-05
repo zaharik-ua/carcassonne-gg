@@ -17,7 +17,7 @@ const FANS_CHOICE_VOTES_SQL = `
     player_id TEXT,
     user_id INTEGER,
     voter_association_id TEXT COLLATE NOCASE,
-    -- pending: to check, confirmed, rejected, cancelled: voided, the voter may vote again.
+    -- pending: to check, confirmed; rejected and cancelled: voided, the voter may vote again (a new row).
     status TEXT NOT NULL CHECK (status IN ('pending', 'confirmed', 'rejected', 'cancelled')),
     -- Lets admins spot many votes from one network without keeping the address itself.
     ip_hash TEXT,
@@ -32,12 +32,12 @@ const FANS_CHOICE_VOTES_SQL = `
     updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (tournament_id) REFERENCES tournaments(id) ON DELETE CASCADE
   );
-  CREATE UNIQUE INDEX IF NOT EXISTS idx_ccl_fans_choice_votes_active_nickname
+  CREATE UNIQUE INDEX IF NOT EXISTS idx_ccl_fans_choice_votes_live_nickname
     ON ccl_fans_choice_votes(tournament_id COLLATE NOCASE, bga_nickname COLLATE NOCASE)
-    WHERE status <> 'cancelled';
-  CREATE UNIQUE INDEX IF NOT EXISTS idx_ccl_fans_choice_votes_active_player
+    WHERE status IN ('pending', 'confirmed');
+  CREATE UNIQUE INDEX IF NOT EXISTS idx_ccl_fans_choice_votes_live_player
     ON ccl_fans_choice_votes(tournament_id COLLATE NOCASE, player_id)
-    WHERE status <> 'cancelled' AND player_id IS NOT NULL;
+    WHERE status IN ('pending', 'confirmed') AND player_id IS NOT NULL;
   CREATE INDEX IF NOT EXISTS idx_ccl_fans_choice_votes_association
     ON ccl_fans_choice_votes(tournament_id COLLATE NOCASE, association_id);
 `;
@@ -60,7 +60,11 @@ const REJECT_REASON_MAX = 300;
 const VERIFIED_REPLACED_REASON = "Replaced by the vote of the verified player";
 const VOTE_STATUSES = ["pending", "confirmed", "rejected", "cancelled"];
 const BGA_ID_PATTERN = /^[0-9]*[1-9][0-9]*$/;
-const VOTE_FIELDS = "id, association_id, bga_nickname, status, created_at, updated_at";
+// reason: why the vote was rejected or cancelled, shown to the voter.
+const VOTE_FIELDS = `id, association_id, bga_nickname, status,
+  CASE WHEN status IN ('rejected', 'cancelled') THEN reject_reason END AS reason, created_at, updated_at`;
+// Votes that count or wait for review; a rejected or cancelled vote lets the voter vote again.
+const LIVE_VOTE = "status IN ('pending', 'confirmed')";
 // Columns added after the first version of the table.
 const LATER_COLUMNS = ["bga_player_id", "reject_reason", "reviewed_at", "reviewed_by", "bga_lookup_failed_at"];
 
@@ -115,6 +119,11 @@ const isUniqueViolation = (error) => String(error?.code) === "SQLITE_CONSTRAINT"
 // Repeatable: creates the table or adds the later columns to an older version of it.
 export async function ensureCclFansChoiceSchema(db) {
   await dbExec(db, FANS_CHOICE_VOTES_SQL);
+  // The first indexes kept rejected votes unique too, so a rejected voter could not vote again.
+  await dbExec(db, `
+    DROP INDEX IF EXISTS idx_ccl_fans_choice_votes_active_nickname;
+    DROP INDEX IF EXISTS idx_ccl_fans_choice_votes_active_player;
+  `);
   const columns = new Set((await dbAll(db, "PRAGMA table_info(ccl_fans_choice_votes)")).map((column) => column.name));
   for (const column of LATER_COLUMNS.filter((name) => !columns.has(name))) {
     await dbExec(db, `ALTER TABLE ccl_fans_choice_votes ADD COLUMN ${column} TEXT`);
@@ -179,7 +188,7 @@ async function loadAssociations(db, season) {
   });
 }
 
-// The viewer's latest vote: the active one, else the last cancelled one so the page can say so.
+// The viewer's latest vote: the live one, else the last rejected or cancelled one so the page can say so.
 async function loadViewerVote(db, tournamentId, user) {
   const playerId = verifiedPlayerId(user);
   const accountId = userId(user);
@@ -191,7 +200,7 @@ async function loadViewerVote(db, tournamentId, user) {
       SELECT ${VOTE_FIELDS}
       FROM ccl_fans_choice_votes
       WHERE upper(trim(tournament_id)) = upper(trim(?)) AND ${column} = ?
-      ORDER BY (status <> 'cancelled') DESC, id DESC
+      ORDER BY (${LIVE_VOTE}) DESC, id DESC
       LIMIT 1
     `,
     [tournamentId, value]
@@ -467,7 +476,7 @@ export function registerCclFansChoiceRoutes(app, {
         [input.value.status, input.value.reject_reason, reviewer, id]
       );
     } catch (error) {
-      // Restoring a cancelled vote whose nickname has voted again.
+      // Restoring a rejected or cancelled vote whose nickname has voted again.
       if (isUniqueViolation(error)) throw requestError(409, "This BGA nickname already has another active vote");
       throw error;
     }
@@ -637,7 +646,7 @@ export function registerCclFansChoiceRoutes(app, {
         db,
         `
           SELECT * FROM ccl_fans_choice_votes
-          WHERE upper(trim(tournament_id)) = upper(trim(?)) AND ${column} = ? AND status <> 'cancelled'
+          WHERE upper(trim(tournament_id)) = upper(trim(?)) AND ${column} = ? AND ${LIVE_VOTE}
         `,
         [tournament.id, value]
       );
@@ -648,7 +657,7 @@ export function registerCclFansChoiceRoutes(app, {
         `
           SELECT * FROM ccl_fans_choice_votes
           WHERE upper(trim(tournament_id)) = upper(trim(?)) AND bga_nickname = ? COLLATE NOCASE
-            AND status <> 'cancelled'
+            AND ${LIVE_VOTE}
         `,
         [tournament.id, nickname]
       );
@@ -717,7 +726,7 @@ export function registerCclFansChoiceRoutes(app, {
         db,
         `
           SELECT id FROM ccl_fans_choice_votes
-          WHERE upper(trim(tournament_id)) = upper(trim(?)) AND user_id = ? AND status <> 'cancelled'
+          WHERE upper(trim(tournament_id)) = upper(trim(?)) AND user_id = ? AND ${LIVE_VOTE}
         `,
         [tournament.id, accountId]
       );

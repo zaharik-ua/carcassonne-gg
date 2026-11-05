@@ -275,6 +275,40 @@ test("a cancelled vote lets the voter vote again", async (t) => {
 const adminList = (api, user = USERS.admin) => api.call("GET /ccl/:tournamentId/fans-choice/votes", { user });
 const review = (api, id, body, user = USERS.admin) => api.call("PATCH /ccl/fans-choice/votes/:id", { user, params: { id: String(id) }, body });
 
+test("a rejected voter sees the reason and votes again; the rejected vote stays", async (t) => {
+  const db = await createDatabase(t);
+  const api = createApi(db);
+  const first = await vote(api, { association_id: "POL", bga_nickname: "kasia" });
+  await review(api, first.body.vote.id, { status: "rejected", reject_reason: "Not a real account" });
+
+  const remembered = (await state(api, { query: { vote_id: String(first.body.vote.id) } })).body.remembered_vote;
+  assert.deepEqual([remembered.status, remembered.reason], ["rejected", "Not a real account"]);
+
+  const again = await vote(api, { association_id: "ESP", bga_nickname: "Kasia" });
+  assert.equal(again.status, 201, JSON.stringify(again.body));
+  assert.notEqual(again.body.vote.id, first.body.vote.id);
+  assert.equal(again.body.vote.reason, null);
+  assert.deepEqual(
+    await all(db, "SELECT bga_nickname, association_id, status, reject_reason FROM ccl_fans_choice_votes ORDER BY id"),
+    [
+      { bga_nickname: "kasia", association_id: "POL", status: "rejected", reject_reason: "Not a real account" },
+      { bga_nickname: "Kasia", association_id: "ESP", status: "pending", reject_reason: null },
+    ]
+  );
+  // One live vote per nickname: a third vote and restoring the rejected one are refused.
+  assert.equal((await vote(api, { association_id: "POL", bga_nickname: "kasia" })).status, 409);
+  assert.equal((await review(api, first.body.vote.id, { status: "confirmed" })).status, 409);
+
+  // A verified player's guest vote that was rejected is not taken over: the player gets a new vote.
+  await vote(api, { association_id: "POL", bga_nickname: "taras" });
+  const tarasGuest = (await all(db, "SELECT id FROM ccl_fans_choice_votes WHERE bga_nickname = 'taras'"))[0];
+  await review(api, tarasGuest.id, { status: "rejected", reject_reason: "Unknown voter" });
+  const player = await vote(api, { association_id: "ESP" }, USERS.verifiedUa);
+  assert.equal(player.status, 201, JSON.stringify(player.body));
+  assert.notEqual(player.body.vote.id, tarasGuest.id);
+  assert.equal((await all(db, "SELECT status FROM ccl_fans_choice_votes WHERE id = ?", [tarasGuest.id]))[0].status, "rejected");
+});
+
 test("an older table gets the review columns", async (t) => {
   const db = new sqlite3.Database(":memory:");
   t.after(() => close(db));
