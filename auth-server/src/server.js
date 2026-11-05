@@ -8438,12 +8438,24 @@ registerTournamentRegistrationRoutes(app, {
   logAuditEvent,
 });
 
+// BGA player by ID or nickname (any case): { ok, player_id, bga_nickname, avatar } or { ok: false, not_found }.
+async function runBgaPlayerLookup(player) {
+  const authServerRoot = path.resolve(__dirname, "..");
+  const { stdout } = await execFileAsync(
+    String(process.env.PYTHON_BIN || "python3").trim() || "python3",
+    [path.join(authServerRoot, "get_bga_player_avatar.py"), "--player", player],
+    { cwd: authServerRoot, env: process.env, timeout: 25000, maxBuffer: 1024 * 1024 }
+  );
+  return JSON.parse(stdout);
+}
+
 registerCclFansChoiceRoutes(app, {
   db,
   requireAuthenticated,
   requireTrustedJsonRequest,
   getAuditActor,
   logAuditEvent,
+  lookupBgaPlayer: runBgaPlayerLookup,
 });
 
 registerDuelGameBgaResultRoutes(app, {
@@ -8464,15 +8476,7 @@ registerDuelGameBgaResultRoutes(app, {
 });
 
 registerBgaPlayerAvatarRoutes(app, {
-  async fetchBgaPlayerAvatar(player) {
-    const authServerRoot = path.resolve(__dirname, "..");
-    const { stdout } = await execFileAsync(
-      String(process.env.PYTHON_BIN || "python3").trim() || "python3",
-      [path.join(authServerRoot, "get_bga_player_avatar.py"), "--player", player],
-      { cwd: authServerRoot, env: process.env, timeout: 25000, maxBuffer: 1024 * 1024 }
-    );
-    return JSON.parse(stdout);
-  },
+  fetchBgaPlayerAvatar: runBgaPlayerLookup,
 });
 
 function requireActorAuthenticated(req, res, next) {

@@ -79,7 +79,7 @@ async function createDatabase(t) {
   return db;
 }
 
-function createApi(db, { now = OPEN } = {}) {
+function createApi(db, { now = OPEN, lookupBgaPlayer = null } = {}) {
   const routes = new Map();
   const app = {};
   for (const method of ["get", "post", "patch"]) {
@@ -96,6 +96,9 @@ function createApi(db, { now = OPEN } = {}) {
     },
     logger: { error() {} },
     now: () => clock.now,
+    lookupBgaPlayer,
+    bgaLookupIntervalMs: 0,
+    sleep: async () => {},
   });
   const call = async (route, {
     user = null, tournamentId = "CCL-2027", params = { tournamentId }, body = {}, query = {}, ip = "203.0.113.7",
@@ -284,7 +287,7 @@ test("an older table gets the review columns", async (t) => {
   `);
   await ensureCclFansChoiceSchema(db);
   const columns = (await all(db, "PRAGMA table_info(ccl_fans_choice_votes)")).map((column) => column.name);
-  for (const column of ["bga_player_id", "reject_reason", "reviewed_at", "reviewed_by"]) assert.ok(columns.includes(column), column);
+  for (const column of ["bga_player_id", "reject_reason", "reviewed_at", "reviewed_by", "bga_lookup_failed_at"]) assert.ok(columns.includes(column), column);
 });
 
 test("admins list guest votes with duplicates by player and by network", async (t) => {
@@ -371,6 +374,62 @@ test("BGA ids of guest votes come from profiles with the same nickname in any ca
     ]
   );
   assert.equal((await fill(USERS.admin)).body.updated_count, 0);
+});
+
+test("nicknames missing from the site profiles are looked up on BGA", async (t) => {
+  const db = await createDatabase(t);
+  const calls = [];
+  const bga = { Pandeyuk: { ok: true, player_id: "999", bga_nickname: "pandeyuk" }, ghost: { ok: false, not_found: true } };
+  const api = createApi(db, {
+    async lookupBgaPlayer(nickname) {
+      calls.push(nickname);
+      if (nickname === "later") throw new Error("BGA is down");
+      return bga[nickname];
+    },
+  });
+  for (const nickname of ["Kasia", "Pandeyuk", "ghost"]) await vote(api, { association_id: "POL", bga_nickname: nickname });
+  const fill = () => api.call("POST /ccl/:tournamentId/fans-choice/votes/fill-bga-ids", { user: USERS.admin });
+
+  // Kasia is in the site profiles: no BGA request for her.
+  const first = await fill();
+  assert.equal(first.status, 200, JSON.stringify(first.body));
+  assert.deepEqual(first.body, {
+    ok: true, updated_count: 2, profiles_count: 1, bga: { found: 1, not_found: 1, remaining: 0, error: null },
+  });
+  assert.deepEqual(calls, ["Pandeyuk", "ghost"]);
+  assert.deepEqual(
+    await all(db, "SELECT bga_nickname, bga_player_id, bga_lookup_failed_at IS NOT NULL AS failed FROM ccl_fans_choice_votes ORDER BY id"),
+    [
+      { bga_nickname: "Kasia", bga_player_id: "111", failed: 0 },
+      { bga_nickname: "Pandeyuk", bga_player_id: "999", failed: 0 },
+      { bga_nickname: "ghost", bga_player_id: null, failed: 1 },
+    ]
+  );
+  assert.ok((await adminList(api)).body.votes.find((row) => row.bga_nickname === "ghost").bga_lookup_failed_at);
+
+  // A nickname BGA did not know is not looked up again; a BGA failure leaves the nickname for the next click.
+  await vote(api, { association_id: "POL", bga_nickname: "later" });
+  const second = await fill();
+  assert.deepEqual(second.body.bga, { found: 0, not_found: 0, remaining: 1, error: "BGA lookup failed. Try again later." });
+  assert.deepEqual(calls, ["Pandeyuk", "ghost", "later"]);
+  assert.equal((await all(db, "SELECT bga_lookup_failed_at FROM ccl_fans_choice_votes WHERE bga_nickname = 'later'"))[0].bga_lookup_failed_at, null);
+});
+
+test("one click looks up at most 10 nicknames on BGA", async (t) => {
+  const db = await createDatabase(t);
+  const calls = [];
+  const api = createApi(db, {
+    async lookupBgaPlayer(nickname) {
+      calls.push(nickname);
+      return { ok: false, not_found: true };
+    },
+  });
+  for (let index = 1; index <= 12; index += 1) await vote(api, { association_id: "POL", bga_nickname: `player${index}` });
+  const fill = () => api.call("POST /ccl/:tournamentId/fans-choice/votes/fill-bga-ids", { user: USERS.admin });
+
+  assert.deepEqual((await fill()).body.bga, { found: 0, not_found: 10, remaining: 2, error: null });
+  assert.deepEqual((await fill()).body.bga, { found: 0, not_found: 2, remaining: 0, error: null });
+  assert.equal(calls.length, 12);
 });
 
 test("admins see guest votes of players who have a verified site account", async (t) => {

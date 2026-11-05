@@ -26,6 +26,8 @@ const FANS_CHOICE_VOTES_SQL = `
     reject_reason TEXT,
     reviewed_at TEXT,
     reviewed_by TEXT,
+    -- When BGA did not know the nickname: Get players data does not look it up again.
+    bga_lookup_failed_at TEXT,
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (tournament_id) REFERENCES tournaments(id) ON DELETE CASCADE
@@ -57,9 +59,12 @@ const NICKNAME_MAX = 64;
 const REJECT_REASON_MAX = 300;
 const VERIFIED_REPLACED_REASON = "Replaced by the vote of the verified player";
 const VOTE_STATUSES = ["pending", "confirmed", "rejected", "cancelled"];
+const BGA_ID_PATTERN = /^[0-9]*[1-9][0-9]*$/;
+// Each lookup runs a BGA request; 10 keeps a click well under a minute.
+const BGA_LOOKUPS_PER_REQUEST = 10;
 const VOTE_FIELDS = "id, association_id, bga_nickname, status, created_at, updated_at";
 // Columns added after the first version of the table.
-const LATER_COLUMNS = ["bga_player_id", "reject_reason", "reviewed_at", "reviewed_by"];
+const LATER_COLUMNS = ["bga_player_id", "reject_reason", "reviewed_at", "reviewed_by", "bga_lookup_failed_at"];
 
 const text = (value) => String(value ?? "").trim().replace(/\s+/g, " ");
 const idKey = (value) => text(value).toUpperCase();
@@ -210,8 +215,14 @@ export function registerCclFansChoiceRoutes(app, {
   logAuditEvent = null,
   logger = console,
   now = () => new Date(),
+  // (nickname) => { ok, player_id } | { ok: false, not_found: true } | { ok: false, message }.
+  lookupBgaPlayer = null,
+  bgaLookupIntervalMs = 1000,
+  sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
 }) {
   if (!app || !db) throw new Error("app and db are required");
+  // One BGA lookup run at a time for all admins: BGA allows about one request a second.
+  let bgaLookupRunning = false;
 
   const handle = (failureMessage, handler) => async (req, res) => {
     try {
@@ -387,7 +398,7 @@ export function registerCclFansChoiceRoutes(app, {
       `
         SELECT v.id, v.association_id, a.name AS association_name, a.flag AS association_flag,
                v.bga_nickname, v.bga_player_id, v.user_id, v.status, v.reject_reason, v.ip_hash,
-               v.created_at, v.updated_at, v.reviewed_at, v.reviewed_by,
+               v.created_at, v.updated_at, v.reviewed_at, v.reviewed_by, v.bga_lookup_failed_at,
                (
                  SELECT COUNT(*) FROM ccl_fans_choice_votes o
                  WHERE o.tournament_id = v.tournament_id AND o.id <> v.id AND o.status <> 'cancelled'
@@ -473,46 +484,122 @@ export function registerCclFansChoiceRoutes(app, {
     return res.json({ ok: true, vote: updated });
   }));
 
-  // Tournament admins: BGA ids of guest votes from site profiles with the same nickname in any case
-  // (voters often type "Pandeyuk" for "pandeyuk"). A profile with exactly the same nickname wins over
+  // Tournament admins: BGA ids of guest votes. First the site profiles: the same nickname in any case
+  // (voters often type "Pandeyuk" for "pandeyuk"); a profile with exactly the same nickname wins over
   // the others; a nickname of several profiles stays without an id. NOCASE folds only Latin letters.
+  // Then BGA for the nicknames still without an id: at most BGA_LOOKUPS_PER_REQUEST per click,
+  // one lookup a second; a nickname BGA does not know is not looked up again (bga_lookup_failed_at).
   app.post(
     "/ccl/:tournamentId/fans-choice/votes/fill-bga-ids",
     requireAuthenticated,
     requireTrustedJsonRequest,
     handle("Failed to get players data", async (req, res) => {
       const { tournament } = await requireAdmin(req.user, req.params.tournamentId);
-      const matches = await dbAll(
-        db,
-        `
-          SELECT v.id AS vote_id, trim(g.id) AS bga_id,
-                 g.bga_nickname COLLATE BINARY = v.bga_nickname COLLATE BINARY AS exact
-          FROM ccl_fans_choice_votes v
-          JOIN profiles g ON g.bga_nickname COLLATE NOCASE = v.bga_nickname COLLATE NOCASE
-            AND g.deleted_at IS NULL
-          WHERE upper(trim(v.tournament_id)) = upper(trim(?))
-            AND v.player_id IS NULL
-            AND trim(COALESCE(v.bga_player_id, '')) = ''
-        `,
-        [tournament.id]
-      );
-      const matchesByVote = new Map();
-      matches.forEach((match) => matchesByVote.set(match.vote_id, [...(matchesByVote.get(match.vote_id) || []), match]));
-      let updatedCount = 0;
-      for (const [voteId, voteMatches] of matchesByVote) {
-        const exact = voteMatches.filter((match) => Number(match.exact) === 1);
-        const ids = [...new Set((exact.length ? exact : voteMatches).map((match) => match.bga_id))];
-        if (ids.length !== 1 || !/^[0-9]*[1-9][0-9]*$/.test(ids[0])) continue;
-        const result = await dbRun(
-          db,
-          "UPDATE ccl_fans_choice_votes SET bga_player_id = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
-          [ids[0], voteId]
-        );
-        updatedCount += result.changes;
+      if (bgaLookupRunning) throw requestError(409, "Getting players data is already running. Try again in a minute.");
+      bgaLookupRunning = true;
+      try {
+        const profilesCount = await fillBgaIdsFromProfiles(tournament.id);
+        const bga = await fillBgaIdsFromBga(tournament.id);
+        return res.json({ ok: true, updated_count: profilesCount + bga.found, profiles_count: profilesCount, bga });
+      } finally {
+        bgaLookupRunning = false;
       }
-      return res.json({ ok: true, updated_count: updatedCount });
     })
   );
+
+  async function fillBgaIdsFromProfiles(tournamentId) {
+    const matches = await dbAll(
+      db,
+      `
+        SELECT v.id AS vote_id, trim(g.id) AS bga_id,
+               g.bga_nickname COLLATE BINARY = v.bga_nickname COLLATE BINARY AS exact
+        FROM ccl_fans_choice_votes v
+        JOIN profiles g ON g.bga_nickname COLLATE NOCASE = v.bga_nickname COLLATE NOCASE
+          AND g.deleted_at IS NULL
+        WHERE upper(trim(v.tournament_id)) = upper(trim(?))
+          AND v.player_id IS NULL
+          AND trim(COALESCE(v.bga_player_id, '')) = ''
+      `,
+      [tournamentId]
+    );
+    const matchesByVote = new Map();
+    matches.forEach((match) => matchesByVote.set(match.vote_id, [...(matchesByVote.get(match.vote_id) || []), match]));
+    let updatedCount = 0;
+    for (const [voteId, voteMatches] of matchesByVote) {
+      const exact = voteMatches.filter((match) => Number(match.exact) === 1);
+      const ids = [...new Set((exact.length ? exact : voteMatches).map((match) => match.bga_id))];
+      if (ids.length !== 1 || !BGA_ID_PATTERN.test(ids[0])) continue;
+      const result = await dbRun(
+        db,
+        "UPDATE ccl_fans_choice_votes SET bga_player_id = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+        [ids[0], voteId]
+      );
+      updatedCount += result.changes;
+    }
+    return updatedCount;
+  }
+
+  // found/not_found: votes updated; remaining: nicknames left for the next click;
+  // error: BGA failed, the lookups stop until the next click.
+  async function fillBgaIdsFromBga(tournamentId) {
+    const result = { found: 0, not_found: 0, remaining: 0, error: null };
+    if (typeof lookupBgaPlayer !== "function") return result;
+    // Cancelled votes do not count, so they are not worth a BGA request.
+    const votes = await dbAll(
+      db,
+      `
+        SELECT id, bga_nickname FROM ccl_fans_choice_votes
+        WHERE upper(trim(tournament_id)) = upper(trim(?))
+          AND player_id IS NULL
+          AND trim(COALESCE(bga_player_id, '')) = ''
+          AND bga_lookup_failed_at IS NULL
+          AND status <> 'cancelled'
+        ORDER BY id
+      `,
+      [tournamentId]
+    );
+    const votesByNickname = new Map();
+    votes.forEach((vote) => {
+      const nicknameKey = text(vote.bga_nickname).toLowerCase();
+      votesByNickname.set(nicknameKey, [...(votesByNickname.get(nicknameKey) || []), vote]);
+    });
+    const queue = [...votesByNickname.values()];
+    let checked = 0;
+    for (const nicknameVotes of queue.slice(0, BGA_LOOKUPS_PER_REQUEST)) {
+      if (checked) await sleep(bgaLookupIntervalMs);
+      checked += 1;
+      const ids = nicknameVotes.map((vote) => vote.id);
+      const placeholders = ids.map(() => "?").join(", ");
+      let lookup;
+      try {
+        lookup = await lookupBgaPlayer(text(nicknameVotes[0].bga_nickname));
+      } catch (error) {
+        lookup = { ok: false, message: error?.message };
+      }
+      if (lookup?.ok && BGA_ID_PATTERN.test(String(lookup.player_id || ""))) {
+        const updated = await dbRun(
+          db,
+          `UPDATE ccl_fans_choice_votes SET bga_player_id = ?, updated_at = CURRENT_TIMESTAMP WHERE id IN (${placeholders})`,
+          [String(lookup.player_id), ...ids]
+        );
+        result.found += updated.changes;
+      } else if (lookup?.not_found) {
+        const updated = await dbRun(
+          db,
+          `UPDATE ccl_fans_choice_votes SET bga_lookup_failed_at = CURRENT_TIMESTAMP WHERE id IN (${placeholders})`,
+          ids
+        );
+        result.not_found += updated.changes;
+      } else {
+        logger.error?.("BGA player lookup failed", lookup?.message);
+        result.error = "BGA lookup failed. Try again later.";
+        checked -= 1;
+        break;
+      }
+    }
+    result.remaining = queue.length - checked;
+    return result;
+  }
 
   async function saveVerifiedVote({ req, tournament, association, playerId, accountId, ipHash }) {
     const nickname = text(req.user?.bga_nickname) || playerId;

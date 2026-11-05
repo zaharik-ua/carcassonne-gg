@@ -9440,7 +9440,7 @@
     });
     const fillButton = el("button", "cp-btn cp-btn-secondary", "Get players data");
     fillButton.type = "button";
-    fillButton.title = "Find BGA ids of the votes by nickname in the site profiles (case-insensitive)";
+    fillButton.title = "Find BGA ids of the votes by nickname (any case): first in the site profiles, then on BGA";
     controls.appendChild(statusFilterDropdown.root);
     controls.appendChild(duplicateFilterDropdown.root);
     controls.appendChild(fillButton);
@@ -9511,9 +9511,12 @@
         link.appendChild(nickname);
         wrap.appendChild(link);
       } else {
-        const missing = el("i", "fa-solid fa-circle-question cp-ccl-fc-no-bga");
-        missing.title = "BGA id not found. Use Get players data.";
-        missing.setAttribute("aria-label", "BGA id not found");
+        const notOnBga = !!vote.bga_lookup_failed_at;
+        const missing = el("i", `fa-solid ${notOnBga ? "fa-circle-xmark" : "fa-circle-question"} cp-ccl-fc-no-bga`);
+        missing.title = notOnBga
+          ? `No BGA player with this nickname (checked ${formatDate(vote.bga_lookup_failed_at)}).`
+          : "BGA id not found. Use Get players data.";
+        missing.setAttribute("aria-label", notOnBga ? "Not found on BGA" : "BGA id not found");
         wrap.appendChild(missing);
         wrap.appendChild(nickname);
       }
@@ -9548,9 +9551,15 @@
         await load();
       }
     };
+    // BGA is asked for at most 10 nicknames per click, so a long list takes several clicks.
     fillButton.addEventListener("click", () => run(async () => {
       const result = await requestTournamentJson(`${votesUrl}/fill-bga-ids`, { method: "POST", body: "{}" });
-      return `Updated BGA ids for ${Number(result?.updated_count) || 0} vote(s).`;
+      const bga = result?.bga || {};
+      const parts = [`Updated BGA ids for ${Number(result?.updated_count) || 0} vote(s).`];
+      if (Number(bga.not_found)) parts.push(`Not found on BGA: ${bga.not_found} vote(s).`);
+      if (bga.error) parts.push(bga.error);
+      if (Number(bga.remaining)) parts.push(`${bga.remaining} nickname(s) left to check on BGA: click Get players data again.`);
+      return parts.join(" ");
     }, "", "Failed to get players data."));
 
     // Rejected votes need a reason, cancelled ones may have one.
