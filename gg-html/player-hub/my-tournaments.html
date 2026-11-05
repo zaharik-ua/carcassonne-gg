@@ -9641,6 +9641,12 @@
     };
     const saveEdit = (vote) => {
       const reason = statusHasReason(editDraft.status) ? editDraft.reject_reason.trim() : "";
+      const nickname = editDraft.bga_nickname.trim().replace(/\s+/g, " ");
+      if (!nickname) {
+        editDraft.nicknameError = "Enter the BGA nickname.";
+        render();
+        return;
+      }
       if ((editDraft.status === "rejected" || editDraft.status === "review_later") && !reason) {
         editDraft.error = editDraft.status === "rejected"
           ? "Enter the reason for rejecting the vote."
@@ -9648,7 +9654,7 @@
         render();
         return;
       }
-      if (editDraft.status === vote.status && reason === (vote.reject_reason || "")) {
+      if (editDraft.status === vote.status && reason === (vote.reject_reason || "") && nickname === vote.bga_nickname) {
         editDraft = null;
         render();
         return;
@@ -9656,7 +9662,7 @@
       run(async () => {
         await requestTournamentJson(`${CCL_URL}/fans-choice/votes/${encodeURIComponent(vote.id)}`, {
           method: "PATCH",
-          body: JSON.stringify({ status: editDraft.status, reject_reason: reason }),
+          body: JSON.stringify({ status: editDraft.status, reject_reason: reason, bga_nickname: nickname }),
         });
         editDraft = null;
       }, "Vote saved.", "Failed to save the vote.");
@@ -9668,7 +9674,9 @@
         id: vote.id,
         status,
         reject_reason: vote.reject_reason || "",
+        bga_nickname: vote.bga_nickname || "",
         error: "",
+        nicknameError: "",
         focusReason: status !== vote.status && statusHasReason(status),
       };
       setStatus("");
@@ -9698,9 +9706,34 @@
         review.appendChild(createIconButton("fa-solid fa-ban", "Reject vote", () => startEdit(vote, "rejected"), "danger"));
         player.prepend(review);
       }
-      addCell(row, player);
       if (editDraft?.id === vote.id) {
         row.classList.add("cp-ccl-editing");
+        const onEditKeydown = (event) => {
+          if (event.key === "Enter") saveEdit(vote);
+          if (event.key === "Escape") {
+            editDraft = null;
+            render();
+          }
+        };
+        const nicknameCell = el("div", "cp-ccl-stack");
+        const nicknameInput = el("input", "cp-tournament-config-input");
+        nicknameInput.type = "text";
+        nicknameInput.maxLength = 64;
+        nicknameInput.value = editDraft.bga_nickname;
+        nicknameInput.placeholder = "BGA nickname";
+        nicknameInput.setAttribute("aria-label", "BGA nickname");
+        const nicknameError = editDraft.nicknameError ? el("span", "cp-ccl-field-error", editDraft.nicknameError) : null;
+        nicknameInput.addEventListener("input", () => {
+          editDraft.bga_nickname = nicknameInput.value;
+          if (editDraft.nicknameError) {
+            editDraft.nicknameError = "";
+            nicknameError?.remove();
+          }
+        });
+        nicknameInput.addEventListener("keydown", onEditKeydown);
+        nicknameCell.appendChild(nicknameInput);
+        if (nicknameError) nicknameCell.appendChild(nicknameError);
+        addCell(row, nicknameCell);
         const form = el("div", "cp-ccl-stack");
         const statusSelect = createTournamentDropdown(editDraft.status, CCL_FANS_CHOICE_STATUSES);
         statusSelect.root.querySelector("button")?.setAttribute("aria-label", "Vote status");
@@ -9726,13 +9759,7 @@
             reasonError?.remove();
           }
         });
-        reasonInput.addEventListener("keydown", (event) => {
-          if (event.key === "Enter") saveEdit(vote);
-          if (event.key === "Escape") {
-            editDraft = null;
-            render();
-          }
-        });
+        reasonInput.addEventListener("keydown", onEditKeydown);
         form.appendChild(statusSelect.root);
         form.appendChild(reasonInput);
         const reasonError = editDraft.error ? el("span", "cp-ccl-field-error", editDraft.error) : null;
@@ -9752,6 +9779,7 @@
         addCell(row, actions);
         return;
       }
+      addCell(row, player);
       addCell(row, el("span", `cp-ccl-chip cp-ccl-chip--vote-${vote.status}`, getStatusLabel(vote.status)));
       const actions = el("div", "cp-ccl-actions");
       const detailsOpen = openDetails.has(vote.id);

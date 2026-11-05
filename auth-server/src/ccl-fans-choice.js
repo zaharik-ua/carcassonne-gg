@@ -487,7 +487,8 @@ export function registerCclFansChoiceRoutes(app, {
     });
   }));
 
-  // Tournament admins: status of a guest vote; rejecting needs a reason.
+  // Tournament admins: status of a guest vote; rejecting needs a reason. bga_nickname (optional) corrects
+  // the nickname; another player's nickname also forgets what was found on BGA for the old one.
   app.patch("/ccl/fans-choice/votes/:id", requireAuthenticated, handle("Failed to update the vote", async (req, res) => {
     const id = Number(req.params.id);
     const vote = Number.isInteger(id) && id > 0
@@ -498,6 +499,10 @@ export function registerCclFansChoiceRoutes(app, {
     if (vote.player_id) throw requestError(400, "Votes of verified players are confirmed automatically");
     const input = normalizeVoteReview(req.body);
     if (input.error) throw requestError(400, input.error);
+    const nickname = req.body?.bga_nickname === undefined ? vote.bga_nickname : text(req.body.bga_nickname);
+    if (!nickname) throw requestError(400, "Enter the BGA nickname");
+    if (nickname.length > NICKNAME_MAX) throw requestError(400, `BGA nickname must be at most ${NICKNAME_MAX} characters`);
+    const samePlayer = nickname.toLowerCase() === text(vote.bga_nickname).toLowerCase();
 
     const reviewer = actorLabel(req.user);
     try {
@@ -505,13 +510,22 @@ export function registerCclFansChoiceRoutes(app, {
         db,
         `
           UPDATE ccl_fans_choice_votes
-          SET status = ?, reject_reason = ?, reviewed_at = CURRENT_TIMESTAMP, reviewed_by = ?, updated_at = CURRENT_TIMESTAMP
+          SET status = ?, reject_reason = ?, bga_nickname = ?, bga_player_id = ?, bga_lookup_failed_at = ?,
+              reviewed_at = CURRENT_TIMESTAMP, reviewed_by = ?, updated_at = CURRENT_TIMESTAMP
           WHERE id = ?
         `,
-        [input.value.status, input.value.reject_reason, reviewer, id]
+        [
+          input.value.status,
+          input.value.reject_reason,
+          nickname,
+          samePlayer ? vote.bga_player_id : null,
+          samePlayer ? vote.bga_lookup_failed_at : null,
+          reviewer,
+          id,
+        ]
       );
     } catch (error) {
-      // Restoring a rejected or cancelled vote whose nickname has voted again.
+      // The nickname has another live vote: restoring a voided vote or correcting the nickname to it.
       if (isUniqueViolation(error)) throw requestError(409, "This BGA nickname already has another active vote");
       throw error;
     }
@@ -520,10 +534,10 @@ export function registerCclFansChoiceRoutes(app, {
       entity_type: "ccl_fans_choice_vote",
       action: "update",
       record_id: String(id),
-      changes: Object.fromEntries(["status", "reject_reason"]
-        .filter((field) => (vote[field] ?? null) !== input.value[field])
-        .map((field) => [field, { old: vote[field] ?? null, new: input.value[field] }])),
-      metadata: { tournament_id: tournament.id, bga_nickname: vote.bga_nickname },
+      changes: Object.fromEntries(Object.entries({ ...input.value, bga_nickname: nickname })
+        .filter(([field, value]) => (vote[field] ?? null) !== value)
+        .map(([field, value]) => [field, { old: vote[field] ?? null, new: value }])),
+      metadata: { tournament_id: tournament.id, bga_nickname: nickname },
     });
     const updated = await dbGet(
       db,

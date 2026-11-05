@@ -331,6 +331,33 @@ test("an older table gets the review columns", async (t) => {
   assert.deepEqual(vote, { bga_nickname: "kasia", status: "review_later", created_at: "2026-11-04 10:00:00", dated: 1 });
 });
 
+test("admins correct the nickname of a guest vote", async (t) => {
+  const db = await createDatabase(t);
+  const api = createApi(db);
+  const guest = await vote(api, { association_id: "POL", bga_nickname: "Pandeyk" });
+  await vote(api, { association_id: "POL", bga_nickname: "other" });
+  const row = () => all(db, "SELECT bga_nickname, bga_player_id, bga_lookup_failed_at FROM ccl_fans_choice_votes WHERE id = ?", [guest.body.vote.id]);
+  await exec(db, `UPDATE ccl_fans_choice_votes SET bga_player_id = '999' WHERE bga_nickname = 'Pandeyk'`);
+  const edit = (bga_nickname) => review(api, guest.body.vote.id, { status: "pending", bga_nickname });
+
+  assert.equal((await edit("  ")).status, 400);
+  assert.equal((await edit("x".repeat(65))).status, 400);
+  assert.equal((await edit("OTHER")).status, 409);
+
+  // Only the case changes: still the same player, the BGA id stays.
+  assert.equal((await edit("PANDEYK")).status, 200);
+  assert.deepEqual(await row(), [{ bga_nickname: "PANDEYK", bga_player_id: "999", bga_lookup_failed_at: null }]);
+
+  // Another nickname: what BGA said about the old one no longer applies.
+  await exec(db, `UPDATE ccl_fans_choice_votes SET bga_lookup_failed_at = '2026-11-05 12:00:00' WHERE id = ${guest.body.vote.id}`);
+  assert.equal((await edit(" Pandeyuk ")).status, 200);
+  assert.deepEqual(await row(), [{ bga_nickname: "Pandeyuk", bga_player_id: null, bga_lookup_failed_at: null }]);
+
+  // Without the field the nickname stays.
+  assert.equal((await review(api, guest.body.vote.id, { status: "confirmed" })).status, 200);
+  assert.equal((await row())[0].bga_nickname, "Pandeyuk");
+});
+
 test("a vote put off for later needs a reason, stays live and shows in the results as under review", async (t) => {
   const db = await createDatabase(t);
   const api = createApi(db);
