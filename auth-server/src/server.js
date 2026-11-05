@@ -8443,7 +8443,8 @@ async function runBgaPlayerLookup(player) {
   const authServerRoot = path.resolve(__dirname, "..");
   const { stdout, stderr } = await execFileAsync(
     String(process.env.PYTHON_BIN || "python3").trim() || "python3",
-    [path.join(authServerRoot, "get_bga_player_avatar.py"), "--player", player],
+    // "--player=<value>": a nickname such as "-2toplay" would otherwise be read as an option.
+    [path.join(authServerRoot, "get_bga_player_avatar.py"), `--player=${player}`],
     { cwd: authServerRoot, env: process.env, timeout: 25000, maxBuffer: 1024 * 1024 }
   );
   const result = JSON.parse(stdout);

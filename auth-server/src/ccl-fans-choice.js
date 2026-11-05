@@ -59,6 +59,7 @@ const ASSOCIATION_ID_SQL = "COALESCE(NULLIF(trim(a.code), ''), printf('ASSOCIATI
 const NICKNAME_MAX = 64;
 const REJECT_REASON_MAX = 300;
 const VERIFIED_REPLACED_REASON = "Replaced by the vote of the verified player";
+const BGA_FAILURES_IN_ROW_TO_STOP = 3;
 const VOTE_STATUSES = ["pending", "review_later", "confirmed", "rejected", "cancelled"];
 const BGA_ID_PATTERN = /^[0-9]*[1-9][0-9]*$/;
 // reason: why the vote was rejected or cancelled, shown to the voter.
@@ -618,10 +619,11 @@ export function registerCclFansChoiceRoutes(app, {
       bgaLookups.delete(idKey(tournamentId));
       return null;
     }
-    // total/checked: nicknames; found/not_found: votes updated; error: BGA failed, the run stopped.
+    // total/checked/failed: nicknames (failed: BGA gave an error, left for the next click);
+    // found/not_found: votes updated; error: BGA kept failing, the run stopped.
     const state = {
       running: true, started_at: now().toISOString(), finished_at: null,
-      total: queue.length, checked: 0, found: 0, not_found: 0, error: null,
+      total: queue.length, checked: 0, failed: 0, found: 0, not_found: 0, error: null,
     };
     bgaLookups.set(idKey(tournamentId), state);
     bgaLookupRunning = true;
@@ -638,7 +640,9 @@ export function registerCclFansChoiceRoutes(app, {
     return state;
   }
 
+  // One nickname BGA fails on is skipped; several failures in a row mean BGA itself is down.
   async function runBgaLookup(state, queue) {
+    let failuresInRow = 0;
     for (const nicknameVotes of queue) {
       if (state.checked) await sleep(bgaLookupIntervalMs);
       const ids = nicknameVotes.map((vote) => vote.id);
@@ -664,10 +668,17 @@ export function registerCclFansChoiceRoutes(app, {
         );
         state.not_found += updated.changes;
       } else {
-        logger.error?.("BGA player lookup failed", lookup?.message);
-        state.error = "BGA lookup failed. Try again later.";
-        return;
+        logger.error?.("BGA player lookup failed", nicknameVotes[0].bga_nickname, lookup?.message);
+        state.checked += 1;
+        state.failed += 1;
+        failuresInRow += 1;
+        if (failuresInRow >= BGA_FAILURES_IN_ROW_TO_STOP) {
+          state.error = "BGA lookup failed. Try again later.";
+          return;
+        }
+        continue;
       }
+      failuresInRow = 0;
       state.checked += 1;
     }
   }

@@ -447,7 +447,7 @@ async function waitForBgaLookup(api) {
   return assert.fail("BGA lookup did not finish");
 }
 
-const bgaCounts = ({ total, checked, found, not_found, error }) => ({ total, checked, found, not_found, error });
+const bgaCounts = ({ total, checked, failed, found, not_found, error }) => ({ total, checked, failed, found, not_found, error });
 
 test("nicknames missing from the site profiles are looked up on BGA in the background", async (t) => {
   const db = await createDatabase(t);
@@ -471,7 +471,7 @@ test("nicknames missing from the site profiles are looked up on BGA in the backg
   assert.equal(first.body.bga_lookup.total, 2);
   // A second click during the run reports the same run instead of starting another one.
   assert.equal((await fill()).body.bga_lookup.running, true);
-  assert.deepEqual(bgaCounts(await waitForBgaLookup(api)), { total: 2, checked: 2, found: 1, not_found: 1, error: null });
+  assert.deepEqual(bgaCounts(await waitForBgaLookup(api)), { total: 2, checked: 2, failed: 0, found: 1, not_found: 1, error: null });
   assert.deepEqual(calls, ["Pandeyuk", "ghost"]);
   assert.deepEqual(
     await all(db, "SELECT bga_nickname, bga_player_id, bga_lookup_failed_at IS NOT NULL AS failed FROM ccl_fans_choice_votes ORDER BY id"),
@@ -491,7 +491,7 @@ test("nicknames missing from the site profiles are looked up on BGA in the backg
   await fill();
   assert.deepEqual(
     bgaCounts(await waitForBgaLookup(api)),
-    { total: 1, checked: 0, found: 0, not_found: 0, error: "BGA lookup failed. Try again later." }
+    { total: 1, checked: 1, failed: 1, found: 0, not_found: 0, error: null }
   );
   assert.deepEqual(calls, ["Pandeyuk", "ghost", "later"]);
   assert.equal((await all(db, "SELECT bga_lookup_failed_at FROM ccl_fans_choice_votes WHERE bga_nickname = 'later'"))[0].bga_lookup_failed_at, null);
@@ -509,8 +509,39 @@ test("one BGA run checks every nickname without a limit per click", async (t) =>
   for (let index = 1; index <= 12; index += 1) await vote(api, { association_id: "POL", bga_nickname: `player${index}` });
   await api.call("POST /ccl/:tournamentId/fans-choice/votes/fill-bga-ids", { user: USERS.admin });
 
-  assert.deepEqual(bgaCounts(await waitForBgaLookup(api)), { total: 12, checked: 12, found: 0, not_found: 12, error: null });
+  assert.deepEqual(bgaCounts(await waitForBgaLookup(api)), { total: 12, checked: 12, failed: 0, found: 0, not_found: 12, error: null });
   assert.equal(calls.length, 12);
+});
+
+test("a nickname BGA fails on is skipped; three failures in a row stop the run", async (t) => {
+  const db = await createDatabase(t);
+  const calls = [];
+  let broken = new Set(["-2toplay"]);
+  const api = createApi(db, {
+    async lookupBgaPlayer(nickname) {
+      calls.push(nickname);
+      if (broken.has(nickname)) return { ok: false, message: "Could not load the BGA avatar. Please try again." };
+      return { ok: true, player_id: String(100 + calls.length), bga_nickname: nickname };
+    },
+  });
+  for (const nickname of ["-2toplay", "anna", "bob"]) await vote(api, { association_id: "POL", bga_nickname: nickname });
+  const fill = () => api.call("POST /ccl/:tournamentId/fans-choice/votes/fill-bga-ids", { user: USERS.admin });
+
+  await fill();
+  assert.deepEqual(bgaCounts(await waitForBgaLookup(api)), { total: 3, checked: 3, failed: 1, found: 2, not_found: 0, error: null });
+  assert.deepEqual(calls, ["-2toplay", "anna", "bob"]);
+  // The failed nickname stays unmarked and is tried again on the next click.
+  assert.equal((await all(db, "SELECT bga_lookup_failed_at FROM ccl_fans_choice_votes WHERE bga_nickname = '-2toplay'"))[0].bga_lookup_failed_at, null);
+
+  for (const nickname of ["c1", "c2", "c3", "c4"]) await vote(api, { association_id: "POL", bga_nickname: nickname });
+  broken = new Set(["-2toplay", "c1", "c2", "c3", "c4"]);
+  calls.length = 0;
+  await fill();
+  assert.deepEqual(
+    bgaCounts(await waitForBgaLookup(api)),
+    { total: 5, checked: 3, failed: 3, found: 0, not_found: 0, error: "BGA lookup failed. Try again later." }
+  );
+  assert.deepEqual(calls, ["-2toplay", "c1", "c2"]);
 });
 
 test("admins see guest votes of players who have a verified site account", async (t) => {

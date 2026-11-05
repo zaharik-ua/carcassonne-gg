@@ -9610,7 +9610,9 @@
       const parts = [`BGA lookup finished: ${lookup.found} vote(s) updated.`];
       if (Number(lookup.not_found)) parts.push(`Not found on BGA: ${lookup.not_found} vote(s).`);
       if (lookup.error) {
-        parts.push(`${lookup.error} ${lookup.total - lookup.checked} nickname(s) left: click Get players data again.`);
+        parts.push(`${lookup.error} ${lookup.total - lookup.checked + (Number(lookup.failed) || 0)} nickname(s) left: click Get players data again.`);
+      } else if (Number(lookup.failed)) {
+        parts.push(`BGA could not check ${lookup.failed} nickname(s): click Get players data again to retry.`);
       }
       return parts.join(" ");
     };
