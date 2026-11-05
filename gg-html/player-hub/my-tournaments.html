@@ -2043,6 +2043,17 @@
     cursor: help;
   }
 
+  /* Confirm and Reject right after the nickname. */
+  .cp-ccl-fc-review {
+    display: inline-flex;
+    gap: 4px;
+    margin-left: 4px;
+  }
+
+  .cp-ccl-fc-review .cp-btn-danger {
+    margin-left: 0;
+  }
+
   .cp-ccl.cp-ccl--standalone {
     margin-top: 0;
     padding-top: 0;
@@ -9522,7 +9533,9 @@
         const missing = el("i", `fa-solid ${notOnBga ? "fa-circle-xmark is-not-on-bga" : "fa-circle-question"} cp-ccl-fc-no-bga`);
         missing.title = notOnBga
           ? `No BGA player with this nickname (checked ${formatDate(vote.bga_lookup_failed_at)}).`
-          : "BGA id not found. Use Get players data.";
+          : vote.status === "cancelled"
+            ? "BGA id not found. Cancelled votes are not looked up on BGA."
+            : "BGA id not found. Use Get players data.";
         missing.setAttribute("aria-label", notOnBga ? "Not found on BGA" : "BGA id not found");
         wrap.appendChild(missing);
         wrap.appendChild(nickname);
@@ -9561,6 +9574,8 @@
     // The site profiles are checked at once; BGA runs in the background and the list polls its progress.
     fillButton.addEventListener("click", () => run(async () => {
       const result = await requestTournamentJson(`${votesUrl}/fill-bga-ids`, { method: "POST", body: "{}" });
+      // The run may end before the list reloads: knowing it started, the list still reports how it ended.
+      if (result?.bga_lookup) bgaLookup = result.bga_lookup;
       const message = `Updated BGA ids for ${Number(result?.updated_count) || 0} vote(s) from the site profiles.`;
       return result?.bga_lookup ? message : `${message} No other nicknames to check on BGA.`;
     }, "", "Failed to get players data."));
@@ -9614,9 +9629,40 @@
       }, "Vote saved.", "Failed to save the vote.");
     };
 
+    // status: the status the form opens with; Reject opens it as rejected, ready for the reason.
+    const startEdit = (vote, status = vote.status || "pending") => {
+      editDraft = {
+        id: vote.id,
+        status,
+        reject_reason: vote.reject_reason || "",
+        error: "",
+        focusReason: status !== vote.status && statusHasReason(status),
+      };
+      setStatus("");
+      render();
+    };
+    const confirmVote = (vote) => run(async () => {
+      await requestTournamentJson(`${CCL_URL}/fans-choice/votes/${encodeURIComponent(vote.id)}`, {
+        method: "PATCH",
+        body: JSON.stringify({ status: "confirmed", reject_reason: "" }),
+      });
+    }, `Vote of ${vote.bga_nickname || "the player"} confirmed.`, "Failed to confirm the vote.");
+
     const renderRowCells = (row, vote) => {
       addCell(row, createAssociation(vote));
-      addCell(row, createPlayer(vote));
+      const player = createPlayer(vote);
+      // One click for the usual review outcomes; cancelled votes are restored only through Edit.
+      if (editDraft?.id !== vote.id) {
+        const review = el("span", "cp-ccl-fc-review");
+        if (vote.status === "pending" || vote.status === "rejected") {
+          review.appendChild(createIconButton("fa-solid fa-check", "Confirm vote", () => confirmVote(vote), "primary"));
+        }
+        if (vote.status === "pending" || vote.status === "confirmed") {
+          review.appendChild(createIconButton("fa-solid fa-ban", "Reject vote", () => startEdit(vote, "rejected"), "danger"));
+        }
+        if (review.children.length) player.appendChild(review);
+      }
+      addCell(row, player);
       if (editDraft?.id === vote.id) {
         row.classList.add("cp-ccl-editing");
         const form = el("div", "cp-ccl-stack");
@@ -9656,6 +9702,11 @@
         const reasonError = editDraft.error ? el("span", "cp-ccl-field-error", editDraft.error) : null;
         if (reasonError) form.appendChild(reasonError);
         addCell(row, form);
+        if (editDraft.focusReason) {
+          editDraft.focusReason = false;
+          // After render() has put the row on the page.
+          queueMicrotask(() => reasonInput.focus());
+        }
         const actions = el("div", "cp-ccl-actions");
         actions.appendChild(createIconButton("fa-solid fa-check", "Save vote", () => saveEdit(vote), "primary"));
         actions.appendChild(createIconButton("fa-solid fa-xmark", "Cancel", () => {
@@ -9675,25 +9726,7 @@
       });
       detailsButton.setAttribute("aria-expanded", String(detailsOpen));
       actions.appendChild(detailsButton);
-      // One click for the usual review outcome; cancelled votes are restored only through Edit.
-      if (vote.status === "pending" || vote.status === "rejected") {
-        actions.appendChild(createIconButton("fa-solid fa-check", "Confirm vote", () => run(async () => {
-          await requestTournamentJson(`${CCL_URL}/fans-choice/votes/${encodeURIComponent(vote.id)}`, {
-            method: "PATCH",
-            body: JSON.stringify({ status: "confirmed", reject_reason: "" }),
-          });
-        }, `Vote of ${vote.bga_nickname || "the player"} confirmed.`, "Failed to confirm the vote."), "primary"));
-      }
-      actions.appendChild(createIconButton("fa-solid fa-pencil", "Edit vote", () => {
-        editDraft = {
-          id: vote.id,
-          status: vote.status || "pending",
-          reject_reason: vote.reject_reason || "",
-          error: "",
-        };
-        setStatus("");
-        render();
-      }));
+      actions.appendChild(createIconButton("fa-solid fa-pencil", "Edit vote", () => startEdit(vote)));
       addCell(row, actions);
     };
     const renderDetailsRow = (vote) => {

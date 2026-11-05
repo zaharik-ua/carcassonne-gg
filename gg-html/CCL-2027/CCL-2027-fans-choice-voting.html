@@ -254,7 +254,7 @@
 
   .fc-reason {
     font-style: italic;
-    color: #555;
+    color: #8b1a1a;
   }
 
   /* Dropdown with search, as on the registration page. The menu stays in the flow so the iframe does not clip it. */
@@ -878,13 +878,7 @@
       textWrap.appendChild(el("div", "", "Your vote is confirmed."));
     } else if (rejected) {
       if (vote.reason) textWrap.appendChild(el("div", "fc-reason", `Reason: ${vote.reason}`));
-      const contact = el("div", "", votingOpen
-        ? "You can vote again. If you think this is a mistake, contact us at "
-        : "If you think this is a mistake, contact us at ");
-      const email = el("a", "", "carcassonne.gg@gmail.com");
-      email.href = "mailto:carcassonne.gg@gmail.com";
-      contact.append(email, document.createTextNode("."));
-      textWrap.appendChild(contact);
+      if (votingOpen) textWrap.appendChild(el("div", "", "If you think this is a mistake, you can vote again."));
     } else {
       textWrap.appendChild(el("div", "", "Your vote has been received and will be checked by the admins."));
       if (!verified && votingOpen) textWrap.appendChild(confirmHint());

@@ -8441,12 +8441,15 @@ registerTournamentRegistrationRoutes(app, {
 // BGA player by ID or nickname (any case): { ok, player_id, bga_nickname, avatar } or { ok: false, not_found }.
 async function runBgaPlayerLookup(player) {
   const authServerRoot = path.resolve(__dirname, "..");
-  const { stdout } = await execFileAsync(
+  const { stdout, stderr } = await execFileAsync(
     String(process.env.PYTHON_BIN || "python3").trim() || "python3",
     [path.join(authServerRoot, "get_bga_player_avatar.py"), "--player", player],
     { cwd: authServerRoot, env: process.env, timeout: 25000, maxBuffer: 1024 * 1024 }
   );
-  return JSON.parse(stdout);
+  const result = JSON.parse(stdout);
+  // The script answers with a generic message; the cause is only in its stderr.
+  if (!result?.ok && !result?.not_found) console.error("BGA player lookup failed", { player, stderr: String(stderr || "").trim() });
+  return result;
 }
 
 registerCclFansChoiceRoutes(app, {
