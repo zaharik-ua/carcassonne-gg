@@ -1,0 +1,160 @@
+<!doctype html>
+<html lang="uk">
+<head>
+<meta charset="utf-8">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Unbounded:wght@700;900&family=Montserrat:wght@600;700;800;900&family=Yellowtail&display=block" rel="stylesheet">
+<style>
+  :root {
+    --navy: #0f2a5c;
+    --blue: #2f6fc4;
+    --sky: #a9c8ec;
+    --yellow: #f6d64a;
+    --red: #e8383b;
+    --pink: #f7a3ae;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { width: 1080px; height: 1080px; background: #eaf2fb; overflow: hidden; }
+  body { position: relative; font-family: 'Montserrat', sans-serif; color: var(--navy); }
+  #bg { position: absolute; inset: 0; }
+
+  .title {
+    position: absolute; left: 100px; top: 34px; width: 880px; height: 281.5px;
+    filter: drop-shadow(0 8px 14px rgba(15, 42, 92, .12));
+  }
+
+  .final {
+    position: absolute; top: 344px; left: 0; right: 0; text-align: center;
+  }
+  .final .label {
+    display: inline-block;
+    font-family: 'Unbounded', sans-serif; font-weight: 900; font-size: 104px; line-height: 1;
+    letter-spacing: 6px; color: #fff;
+    -webkit-text-stroke: 5px var(--navy); paint-order: stroke fill;
+    text-shadow: 6px 7px 0 var(--navy);
+  }
+
+  .match {
+    position: absolute; top: 490px; left: 0; right: 0;
+    display: flex; justify-content: center; align-items: center; gap: 46px;
+  }
+  .player { width: 330px; display: flex; flex-direction: column; align-items: center; }
+  .avatar {
+    width: 250px; height: 250px; border-radius: 50%;
+    padding: 9px; background: linear-gradient(135deg, var(--blue) 0 50%, var(--yellow) 50% 100%);
+    box-shadow: 0 14px 34px rgba(15, 42, 92, .28);
+  }
+  .avatar img {
+    width: 100%; height: 100%; border-radius: 50%; display: block;
+    border: 7px solid #fff; object-fit: cover; background: #fff;
+  }
+  .name {
+    margin-top: 22px; padding: 12px 30px; border-radius: 999px;
+    background: var(--navy); color: #fff;
+    font-family: 'Unbounded', sans-serif; font-weight: 700; font-size: 38px; letter-spacing: 1px;
+    box-shadow: 0 8px 20px rgba(15, 42, 92, .25);
+  }
+  .vs {
+    margin-top: -70px;
+    font-family: 'Yellowtail', cursive; font-size: 132px; line-height: 1; color: var(--red);
+    -webkit-text-stroke: 3px #fff; paint-order: stroke fill;
+    text-shadow: 0 6px 18px rgba(15, 42, 92, .25);
+    transform: rotate(-8deg);
+  }
+
+  .info {
+    position: absolute; left: 40px; right: 40px; bottom: 40px; height: 140px;
+    background: rgba(255, 255, 255, .95); border-radius: 28px;
+    box-shadow: 0 12px 30px rgba(15, 42, 92, .18);
+    display: flex; align-items: center; white-space: nowrap;
+  }
+  .when { width: 330px; display: flex; flex-direction: column; align-items: center; gap: 4px; flex: none; }
+  .when .date { font-family: 'Montserrat', sans-serif; font-weight: 900; font-size: 42px; color: var(--navy); line-height: 1.05; }
+  .when .time {
+    display: flex; align-items: center; gap: 10px;
+    font-family: 'Montserrat', sans-serif; font-weight: 900; font-size: 42px; color: var(--blue); line-height: 1.05;
+  }
+  .when .time svg { width: 36px; height: 36px; }
+  .divider { width: 4px; height: 92px; border-radius: 2px; background: linear-gradient(var(--blue) 50%, var(--yellow) 50%); flex: none; }
+  .stream { flex: 1; display: flex; align-items: center; padding: 0 26px; gap: 20px; }
+  .stream .ch { width: 88px; height: 88px; border-radius: 50%; border: 4px solid #fff; box-shadow: 0 0 0 4px var(--red); flex: none; }
+  .stream .txt { display: flex; flex-direction: column; gap: 6px; }
+  .stream .top { display: flex; align-items: center; gap: 10px; font-weight: 800; font-size: 21px; color: #4a5d80; text-transform: uppercase; letter-spacing: 1.5px; }
+  .stream .top svg { height: 26px; width: auto; }
+  .stream .chan { font-weight: 900; font-size: 28px; color: var(--navy); line-height: 1.1; }
+</style>
+</head>
+<body>
+  <svg id="bg" viewBox="0 0 1080 1080" preserveAspectRatio="none"></svg>
+
+  <img class="title" src="ucocup-2026-title-cutout.png" alt="">
+
+  <div class="final"><span class="label">ФІНАЛ</span></div>
+
+  <div class="match">
+    <div class="player">
+      <div class="avatar"><img src="bazilyuk.png" alt=""></div>
+      <div class="name">bazilyuk</div>
+    </div>
+    <div class="vs">vs</div>
+    <div class="player">
+      <div class="avatar"><img src="maxdk9.png" alt=""></div>
+      <div class="name">maxdk9</div>
+    </div>
+  </div>
+
+  <div class="info">
+    <div class="when">
+      <div class="date">8 листопада</div>
+      <div class="time">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><circle cx="12" cy="12" r="9.5"/><path d="M12 6.5V12l3.8 2.4"/></svg>
+        19:00
+      </div>
+    </div>
+    <div class="divider"></div>
+    <div class="stream">
+      <img class="ch" src="Alexey's Carcassonne Channel.png" alt="">
+      <div class="txt">
+        <div class="top">
+          <svg viewBox="0 0 28 20"><rect width="28" height="20" rx="5" fill="#ff0000"/><path d="M11 5.5v9l8-4.5z" fill="#fff"/></svg>
+          Трансляція на YouTube
+        </div>
+        <div class="chan">Alexey's Carcassonne Channel</div>
+      </div>
+    </div>
+  </div>
+
+<script>
+  // Low-poly background in the cover's style: vertical columns of triangles,
+  // blue on the upper left, yellow on the lower right, with white-tinted facets
+  (function () {
+    let seed = 11;
+    const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+    const blue = [160, 199, 238], yellow = [255, 244, 154];
+    const tints = [0, 0, 0, .1, .18, .3, .45];
+    const tint = (c, t) => `rgb(${c.map(v => Math.round(v + (255 - v) * t)).join(',')})`;
+    const h = 92, w = h * Math.sqrt(3) / 2;
+    let out = '';
+    for (let i = -1; i * w < 1080 + w; i++) {
+      // points on the left and right edge of this column, offset by half a step
+      const pts = [];
+      for (let j = -2; j * h < 1080 + 2 * h; j++) {
+        pts.push([i * w, j * h + (i % 2 ? h / 2 : 0)]);
+        pts.push([(i + 1) * w, j * h + (i % 2 ? 0 : h / 2)]);
+      }
+      pts.sort((a, b) => a[1] - b[1]);
+      for (let k = 0; k + 2 < pts.length; k++) {
+        const tri = pts.slice(k, k + 3);
+        const cx = (tri[0][0] + tri[1][0] + tri[2][0]) / 3, cy = (tri[0][1] + tri[1][1] + tri[2][1]) / 3;
+        // split runs from the top right down to the bottom left
+        const d = cx - (820 - 560 * cy / 1080) + (rnd() - 0.5) * 260;
+        const base = d < 0 ? blue : yellow;
+        const t = rnd() < 0.07 ? 1 : tints[Math.floor(rnd() * tints.length)];
+        out += `<polygon points="${tri.map(p => p.map(v => v.toFixed(1)).join(',')).join(' ')}" fill="${tint(base, t)}" stroke="${tint(base, t)}" stroke-width=".6"/>`;
+      }
+    }
+    document.getElementById('bg').innerHTML = out;
+  })();
+</script>
+</body>
+</html>

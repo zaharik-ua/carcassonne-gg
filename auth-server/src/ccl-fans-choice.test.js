@@ -21,7 +21,7 @@ function close(db) {
 }
 
 const USERS = {
-  verifiedPl: { id: 1, player_id: "jan", bga_nickname: "Jan", association: "Poland" },
+  verifiedPl: { id: 1, player_id: "jan", bga_nickname: "Jan", association: "Portugal" },
   verifiedUa: { id: 2, player_id: "taras", bga_nickname: "taras", association: "UKR" },
   unverified: { id: 3, player_id: null },
   admin: { id: 10, admin: 1, email: "admin@example.com" },
@@ -53,7 +53,7 @@ async function createDatabase(t) {
       ('CCL-2026', 'Carcassonne Champions League 2026', 'Individuals', 'CCL'),
       ('ETCOC-2026', 'ETCOC 2026', 'Teams', 'ETCOC');
     INSERT INTO associations (code, name, flag) VALUES
-      ('POL', 'Poland', 'pl.png'), ('UKR', 'Ukraine', 'ua.png'), ('ESP', 'Spain', 'es.png');
+      ('PRT', 'Portugal', 'pt.png'), ('UKR', 'Ukraine', 'ua.png'), ('ESP', 'Spain', 'es.png');
     CREATE TABLE profiles (
       id TEXT PRIMARY KEY,
       bga_nickname TEXT,
@@ -134,7 +134,7 @@ test("state lists associations with eligibility and describes the viewer", async
   assert.equal(anonymous.body.voting.status, "open");
   assert.deepEqual(
     anonymous.body.associations.map((row) => [row.id, row.eligible, row.reason]),
-    [["POL", true, null], ["ESP", true, null], ["UKR", false, "Already has 4–5 spots in CCL 2027"]]
+    [["PRT", true, null], ["ESP", true, null], ["UKR", false, "Already has 4–5 spots in CCL 2027"]]
   );
   assert.deepEqual(anonymous.body.viewer, {
     authenticated: false, verified: false, player_id: null, bga_nickname: null, association_id: null, vote: null,
@@ -142,7 +142,7 @@ test("state lists associations with eligibility and describes the viewer", async
 
   const verified = await state(api, { user: USERS.verifiedPl });
   assert.equal(verified.body.viewer.verified, true);
-  assert.equal(verified.body.viewer.association_id, "POL");
+  assert.equal(verified.body.viewer.association_id, "PRT");
 
   const unverified = await state(api, { user: USERS.unverified });
   assert.equal(unverified.body.viewer.verified, false);
@@ -157,18 +157,18 @@ test("voting is accepted only inside the window", async (t) => {
   const api = createApi(db, { now: new Date("2026-11-04T16:59:59Z") });
 
   assert.equal((await state(api)).body.voting.status, "upcoming");
-  const early = await vote(api, { association_id: "POL", bga_nickname: "kasia" });
+  const early = await vote(api, { association_id: "PRT", bga_nickname: "kasia" });
   assert.equal(early.status, 409);
   assert.equal(early.body.message, "Voting has not started yet");
 
   api.clock.now = new Date("2026-11-04T17:00:00Z");
-  assert.equal((await vote(api, { association_id: "POL", bga_nickname: "first" })).status, 201);
+  assert.equal((await vote(api, { association_id: "PRT", bga_nickname: "first" })).status, 201);
   api.clock.now = new Date("2026-11-09T23:59:30Z");
-  assert.equal((await vote(api, { association_id: "POL", bga_nickname: "last" })).status, 201);
+  assert.equal((await vote(api, { association_id: "PRT", bga_nickname: "last" })).status, 201);
 
   api.clock.now = new Date("2026-11-10T00:00:00Z");
   assert.equal((await state(api)).body.voting.status, "closed");
-  assert.equal((await vote(api, { association_id: "POL", bga_nickname: "kasia" })).body.message, "Voting is closed");
+  assert.equal((await vote(api, { association_id: "PRT", bga_nickname: "kasia" })).body.message, "Voting is closed");
   assert.deepEqual((await all(db, "SELECT bga_nickname FROM ccl_fans_choice_votes ORDER BY id")).map((row) => row.bga_nickname), ["first", "last"]);
 });
 
@@ -187,10 +187,10 @@ test("a verified player's vote is confirmed and a new vote replaces it", async (
   const db = await createDatabase(t);
   const api = createApi(db);
 
-  const first = await vote(api, { association_id: "pol", bga_nickname: "ignored" }, USERS.verifiedUa);
+  const first = await vote(api, { association_id: "prt", bga_nickname: "ignored" }, USERS.verifiedUa);
   assert.equal(first.status, 201, JSON.stringify(first.body));
   assert.equal(first.body.vote.status, "confirmed");
-  assert.equal(first.body.vote.association_name, "Poland");
+  assert.equal(first.body.vote.association_name, "Portugal");
 
   const second = await vote(api, { association_id: "ESP" }, USERS.verifiedUa);
   assert.equal(second.status, 200);
@@ -214,9 +214,9 @@ test("guest votes wait for review and each nickname or account votes once", asyn
   const db = await createDatabase(t);
   const api = createApi(db);
 
-  assert.equal((await vote(api, { association_id: "POL" })).body.message, "Enter your BGA nickname");
+  assert.equal((await vote(api, { association_id: "PRT" })).body.message, "Enter your BGA nickname");
 
-  const guest = await vote(api, { association_id: "POL", bga_nickname: "  Kasia  K " });
+  const guest = await vote(api, { association_id: "PRT", bga_nickname: "  Kasia  K " });
   assert.equal(guest.status, 201, JSON.stringify(guest.body));
   assert.equal(guest.body.vote.status, "pending");
   assert.equal(guest.body.vote.bga_nickname, "Kasia K");
@@ -244,12 +244,12 @@ test("a verified vote takes over a guest vote with the same nickname", async (t)
   const api = createApi(db);
 
   const guest = await vote(api, { association_id: "ESP", bga_nickname: "JAN" });
-  const verified = await vote(api, { association_id: "POL" }, USERS.verifiedPl);
+  const verified = await vote(api, { association_id: "PRT" }, USERS.verifiedPl);
   assert.equal(verified.status, 200);
   assert.equal(verified.body.vote.id, guest.body.vote.id);
   assert.deepEqual(
     await all(db, "SELECT association_id, bga_nickname, player_id, status FROM ccl_fans_choice_votes"),
-    [{ association_id: "POL", bga_nickname: "Jan", player_id: "jan", status: "confirmed" }]
+    [{ association_id: "PRT", bga_nickname: "Jan", player_id: "jan", status: "confirmed" }]
   );
 });
 
@@ -257,9 +257,9 @@ test("a cancelled vote lets the voter vote again", async (t) => {
   const db = await createDatabase(t);
   const api = createApi(db);
 
-  const guest = await vote(api, { association_id: "POL", bga_nickname: "kasia" });
-  const player = await vote(api, { association_id: "POL" }, USERS.verifiedUa);
-  await exec(db, "UPDATE ccl_fans_choice_votes SET status = 'cancelled' WHERE association_id = 'POL'");
+  const guest = await vote(api, { association_id: "PRT", bga_nickname: "kasia" });
+  const player = await vote(api, { association_id: "PRT" }, USERS.verifiedUa);
+  await exec(db, "UPDATE ccl_fans_choice_votes SET status = 'cancelled' WHERE association_id = 'PRT'");
 
   const viewerVote = (await state(api, { user: USERS.verifiedUa })).body.viewer.vote;
   assert.deepEqual([viewerVote.id, viewerVote.status], [player.body.vote.id, "cancelled"]);
@@ -278,7 +278,7 @@ const review = (api, id, body, user = USERS.admin) => api.call("PATCH /ccl/fans-
 test("a rejected voter sees the reason and votes again; the rejected vote stays", async (t) => {
   const db = await createDatabase(t);
   const api = createApi(db);
-  const first = await vote(api, { association_id: "POL", bga_nickname: "kasia" });
+  const first = await vote(api, { association_id: "PRT", bga_nickname: "kasia" });
   await review(api, first.body.vote.id, { status: "rejected", reject_reason: "Not a real account" });
 
   const remembered = (await state(api, { query: { vote_id: String(first.body.vote.id) } })).body.remembered_vote;
@@ -291,16 +291,16 @@ test("a rejected voter sees the reason and votes again; the rejected vote stays"
   assert.deepEqual(
     await all(db, "SELECT bga_nickname, association_id, status, reject_reason FROM ccl_fans_choice_votes ORDER BY id"),
     [
-      { bga_nickname: "kasia", association_id: "POL", status: "rejected", reject_reason: "Not a real account" },
+      { bga_nickname: "kasia", association_id: "PRT", status: "rejected", reject_reason: "Not a real account" },
       { bga_nickname: "Kasia", association_id: "ESP", status: "pending", reject_reason: null },
     ]
   );
   // One live vote per nickname: a third vote and restoring the rejected one are refused.
-  assert.equal((await vote(api, { association_id: "POL", bga_nickname: "kasia" })).status, 409);
+  assert.equal((await vote(api, { association_id: "PRT", bga_nickname: "kasia" })).status, 409);
   assert.equal((await review(api, first.body.vote.id, { status: "confirmed" })).status, 409);
 
   // A verified player's guest vote that was rejected is not taken over: the player gets a new vote.
-  await vote(api, { association_id: "POL", bga_nickname: "taras" });
+  await vote(api, { association_id: "PRT", bga_nickname: "taras" });
   const tarasGuest = (await all(db, "SELECT id FROM ccl_fans_choice_votes WHERE bga_nickname = 'taras'"))[0];
   await review(api, tarasGuest.id, { status: "rejected", reject_reason: "Unknown voter" });
   const player = await vote(api, { association_id: "ESP" }, USERS.verifiedUa);
@@ -319,7 +319,7 @@ test("an older table gets the review columns", async (t) => {
       status TEXT NOT NULL, ip_hash TEXT, created_at TEXT, updated_at TEXT
     );
     INSERT INTO ccl_fans_choice_votes (tournament_id, association_id, bga_nickname, status, created_at)
-    VALUES ('CCL-2027', 'POL', 'kasia', 'pending', '2026-11-04 10:00:00');
+    VALUES ('CCL-2027', 'PRT', 'kasia', 'pending', '2026-11-04 10:00:00');
   `);
   await ensureCclFansChoiceSchema(db);
   await ensureCclFansChoiceSchema(db);
@@ -334,8 +334,8 @@ test("an older table gets the review columns", async (t) => {
 test("admins correct the nickname of a guest vote", async (t) => {
   const db = await createDatabase(t);
   const api = createApi(db);
-  const guest = await vote(api, { association_id: "POL", bga_nickname: "Pandeyk" });
-  await vote(api, { association_id: "POL", bga_nickname: "other" });
+  const guest = await vote(api, { association_id: "PRT", bga_nickname: "Pandeyk" });
+  await vote(api, { association_id: "PRT", bga_nickname: "other" });
   const row = () => all(db, "SELECT bga_nickname, bga_player_id, bga_lookup_failed_at FROM ccl_fans_choice_votes WHERE id = ?", [guest.body.vote.id]);
   await exec(db, `UPDATE ccl_fans_choice_votes SET bga_player_id = '999' WHERE bga_nickname = 'Pandeyk'`);
   const edit = (bga_nickname) => review(api, guest.body.vote.id, { status: "pending", bga_nickname });
@@ -361,7 +361,7 @@ test("admins correct the nickname of a guest vote", async (t) => {
 test("a vote put off for later needs a reason, stays live and shows in the results as under review", async (t) => {
   const db = await createDatabase(t);
   const api = createApi(db);
-  const guest = await vote(api, { association_id: "POL", bga_nickname: "kasia" });
+  const guest = await vote(api, { association_id: "PRT", bga_nickname: "kasia" });
   assert.equal((await review(api, guest.body.vote.id, { status: "review_later", reject_reason: " " })).status, 400);
   const later = await review(api, guest.body.vote.id, { status: "review_later", reject_reason: "Asked on BGA" });
   assert.equal(later.status, 200, JSON.stringify(later.body));
@@ -370,7 +370,7 @@ test("a vote put off for later needs a reason, stays live and shows in the resul
   // Still the live vote of the nickname: no second vote.
   assert.equal((await vote(api, { association_id: "ESP", bga_nickname: "Kasia" })).status, 409);
   const results = await api.call("GET /public/ccl/:tournamentId/fans-choice/results");
-  const poland = results.body.associations.find((row) => row.id === "POL");
+  const poland = results.body.associations.find((row) => row.id === "PRT");
   assert.deepEqual([poland.confirmed, poland.pending], [0, 1]);
   assert.deepEqual(
     poland.votes.map((row) => [row.status, row.reason]),
@@ -382,10 +382,10 @@ test("admins list guest votes with duplicates by player and by network", async (
   const db = await createDatabase(t);
   const api = createApi(db);
 
-  await vote(api, { association_id: "POL" }, USERS.verifiedPl, "10.0.0.1");
+  await vote(api, { association_id: "PRT" }, USERS.verifiedPl, "10.0.0.1");
   const kasia = await vote(api, { association_id: "ESP", bga_nickname: "kasia" }, null, "10.0.0.2");
   const other = await vote(api, { association_id: "ESP", bga_nickname: "pepe" }, null, "10.0.0.2");
-  const loner = await vote(api, { association_id: "POL", bga_nickname: "loner" }, null, "10.0.0.3");
+  const loner = await vote(api, { association_id: "PRT", bga_nickname: "loner" }, null, "10.0.0.3");
   // Kasia's BGA id is also the id of a verified voter.
   await exec(db, `UPDATE ccl_fans_choice_votes SET player_id = '111' WHERE bga_nickname = 'Jan'`);
   await exec(db, `UPDATE ccl_fans_choice_votes SET bga_player_id = '111' WHERE bga_nickname = 'kasia'`);
@@ -399,17 +399,17 @@ test("admins list guest votes with duplicates by player and by network", async (
     [
       [kasia.body.vote.id, "Spain", 1, 1],
       [other.body.vote.id, "Spain", 0, 1],
-      [loner.body.vote.id, "Poland", 0, 0],
+      [loner.body.vote.id, "Portugal", 0, 0],
     ]
   );
-  assert.equal(list.body.votes[0].association_flag, "pl.png");
+  assert.equal(list.body.votes[0].association_flag, "pt.png");
 });
 
 test("admins review guest votes; rejecting needs a reason", async (t) => {
   const db = await createDatabase(t);
   const api = createApi(db);
-  const guest = await vote(api, { association_id: "POL", bga_nickname: "kasia" });
-  const player = await vote(api, { association_id: "POL" }, USERS.verifiedUa);
+  const guest = await vote(api, { association_id: "PRT", bga_nickname: "kasia" });
+  const player = await vote(api, { association_id: "PRT" }, USERS.verifiedUa);
 
   assert.equal((await review(api, guest.body.vote.id, { status: "confirmed" }, USERS.stranger)).status, 403);
   const noReason = await review(api, guest.body.vote.id, { status: "rejected", reject_reason: "  " });
@@ -440,7 +440,7 @@ test("admins review guest votes; rejecting needs a reason", async (t) => {
 test("BGA ids of guest votes come from profiles with the same nickname in any case", async (t) => {
   const db = await createDatabase(t);
   const api = createApi(db);
-  for (const nickname of ["Kasia", "kasia2", "twin", "gone", "Pair"]) await vote(api, { association_id: "POL", bga_nickname: nickname });
+  for (const nickname of ["Kasia", "kasia2", "twin", "gone", "Pair"]) await vote(api, { association_id: "PRT", bga_nickname: nickname });
   // "kasia2" differs only in case; "kasia" loses to the exact "Kasia"; "pair" and "PAIR" are two profiles, neither exact.
   await exec(db, `
     INSERT INTO profiles (id, bga_nickname) VALUES ('555', 'KASIA2'), ('666', 'kasia'), ('777', 'pair'), ('888', 'PAIR')
@@ -487,7 +487,7 @@ test("nicknames missing from the site profiles are looked up on BGA in the backg
       return bga[nickname];
     },
   });
-  for (const nickname of ["Kasia", "Pandeyuk", "ghost"]) await vote(api, { association_id: "POL", bga_nickname: nickname });
+  for (const nickname of ["Kasia", "Pandeyuk", "ghost"]) await vote(api, { association_id: "PRT", bga_nickname: nickname });
   const fill = () => api.call("POST /ccl/:tournamentId/fans-choice/votes/fill-bga-ids", { user: USERS.admin });
 
   // Kasia is in the site profiles: no BGA request for her. The click answers before BGA does.
@@ -514,7 +514,7 @@ test("nicknames missing from the site profiles are looked up on BGA in the backg
   assert.equal((await fill()).body.bga_lookup, null);
 
   // A nickname BGA did not know is not looked up again; a BGA failure leaves the nickname for the next click.
-  await vote(api, { association_id: "POL", bga_nickname: "later" });
+  await vote(api, { association_id: "PRT", bga_nickname: "later" });
   await fill();
   assert.deepEqual(
     bgaCounts(await waitForBgaLookup(api)),
@@ -533,7 +533,7 @@ test("one BGA run checks every nickname without a limit per click", async (t) =>
       return { ok: false, not_found: true };
     },
   });
-  for (let index = 1; index <= 12; index += 1) await vote(api, { association_id: "POL", bga_nickname: `player${index}` });
+  for (let index = 1; index <= 12; index += 1) await vote(api, { association_id: "PRT", bga_nickname: `player${index}` });
   await api.call("POST /ccl/:tournamentId/fans-choice/votes/fill-bga-ids", { user: USERS.admin });
 
   assert.deepEqual(bgaCounts(await waitForBgaLookup(api)), { total: 12, checked: 12, failed: 0, found: 0, not_found: 12, error: null });
@@ -551,7 +551,7 @@ test("a nickname BGA fails on is skipped; three failures in a row stop the run",
       return { ok: true, player_id: String(100 + calls.length), bga_nickname: nickname };
     },
   });
-  for (const nickname of ["-2toplay", "anna", "bob"]) await vote(api, { association_id: "POL", bga_nickname: nickname });
+  for (const nickname of ["-2toplay", "anna", "bob"]) await vote(api, { association_id: "PRT", bga_nickname: nickname });
   const fill = () => api.call("POST /ccl/:tournamentId/fans-choice/votes/fill-bga-ids", { user: USERS.admin });
 
   await fill();
@@ -560,7 +560,7 @@ test("a nickname BGA fails on is skipped; three failures in a row stop the run",
   // The failed nickname stays unmarked and is tried again on the next click.
   assert.equal((await all(db, "SELECT bga_lookup_failed_at FROM ccl_fans_choice_votes WHERE bga_nickname = '-2toplay'"))[0].bga_lookup_failed_at, null);
 
-  for (const nickname of ["c1", "c2", "c3", "c4"]) await vote(api, { association_id: "POL", bga_nickname: nickname });
+  for (const nickname of ["c1", "c2", "c3", "c4"]) await vote(api, { association_id: "PRT", bga_nickname: nickname });
   broken = new Set(["-2toplay", "c1", "c2", "c3", "c4"]);
   calls.length = 0;
   await fill();
@@ -577,7 +577,7 @@ test("admins see guest votes of players who have a verified site account", async
   // Kasia (111) and twin (222) have verified accounts; the account of "gone" points to a deleted profile.
   await exec(db, "INSERT INTO users (bga_id) VALUES ('111'), ('222'), ('444')");
   for (const nickname of ["Kasia", "twin", "gone", "nobody"]) {
-    await vote(api, { association_id: "POL", bga_nickname: nickname });
+    await vote(api, { association_id: "PRT", bga_nickname: nickname });
   }
   // Once found, the BGA id decides: this "twin" vote is the other twin profile (333), without an account.
   await exec(db, "UPDATE ccl_fans_choice_votes SET bga_player_id = '333' WHERE bga_nickname = 'twin'");
@@ -594,16 +594,16 @@ test("admins see guest votes of players who have a verified site account", async
 test("cancelled votes keep an optional reason; a replaced guest vote gets one", async (t) => {
   const db = await createDatabase(t);
   const api = createApi(db);
-  const guest = await vote(api, { association_id: "POL", bga_nickname: "kasia" });
+  const guest = await vote(api, { association_id: "PRT", bga_nickname: "kasia" });
 
   const noReason = await review(api, guest.body.vote.id, { status: "cancelled" });
   assert.equal(noReason.status, 200, JSON.stringify(noReason.body));
   assert.equal(noReason.body.vote.reject_reason, null);
-  const withReason = await review(api, guest.body.vote.id, { status: "cancelled", reject_reason: "Poland got a 4th spot" });
-  assert.equal(withReason.body.vote.reject_reason, "Poland got a 4th spot");
+  const withReason = await review(api, guest.body.vote.id, { status: "cancelled", reject_reason: "Portugal got a 4th spot" });
+  assert.equal(withReason.body.vote.reject_reason, "Portugal got a 4th spot");
 
   // The verified player Jan already voted; a guest vote typed with his nickname is then replaced.
-  await vote(api, { association_id: "POL" }, USERS.verifiedPl);
+  await vote(api, { association_id: "PRT" }, USERS.verifiedPl);
   await exec(db, "UPDATE ccl_fans_choice_votes SET bga_nickname = 'Jan old' WHERE player_id = 'jan'");
   await vote(api, { association_id: "ESP", bga_nickname: "Jan" });
   await vote(api, { association_id: "ESP" }, USERS.verifiedPl);
@@ -619,9 +619,9 @@ test("cancelled votes keep an optional reason; a replaced guest vote gets one", 
 test("results count confirmed and pending votes and list every vote oldest first", async (t) => {
   const db = await createDatabase(t);
   const api = createApi(db);
-  await vote(api, { association_id: "POL", bga_nickname: "kasia" });
-  await vote(api, { association_id: "POL" }, USERS.verifiedUa);
-  const rejected = await vote(api, { association_id: "POL", bga_nickname: "bot1" });
+  await vote(api, { association_id: "PRT", bga_nickname: "kasia" });
+  await vote(api, { association_id: "PRT" }, USERS.verifiedUa);
+  const rejected = await vote(api, { association_id: "PRT", bga_nickname: "bot1" });
   const cancelled = await vote(api, { association_id: "ESP", bga_nickname: "pepe" });
   await review(api, rejected.body.vote.id, { status: "rejected", reject_reason: "Not a real account" });
   await review(api, cancelled.body.vote.id, { status: "cancelled", reject_reason: "Spain got a 4th spot" });
@@ -638,9 +638,9 @@ test("results count confirmed and pending votes and list every vote oldest first
   // Sorted by name; Ukraine has no votes and is not listed.
   assert.deepEqual(
     results.body.associations.map((row) => [row.id, row.confirmed, row.pending, row.votes.length]),
-    [["POL", 1, 1, 3], ["ESP", 0, 0, 1]]
+    [["PRT", 1, 1, 3], ["ESP", 0, 0, 1]]
   );
-  const poland = results.body.associations.find((row) => row.id === "POL");
+  const poland = results.body.associations.find((row) => row.id === "PRT");
   assert.deepEqual(
     poland.votes.map((row) => [row.bga_nickname, row.status, row.reason, row.bga_player_id, row.verified, row.voted_at]),
     [
