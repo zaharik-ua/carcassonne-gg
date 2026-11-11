@@ -100,7 +100,7 @@ export async function resolveCclAssociation(db, value) {
   return row ? { id: text(row.id), name: row.name, flag: row.flag || null } : null;
 }
 
-async function loadAssociationsById(db) {
+export async function loadAssociationsById(db) {
   const rows = await dbAll(db, `SELECT ${ASSOCIATION_ID_SQL} AS id, a.name, a.flag FROM associations a`);
   return new Map(rows.map((row) => [idKey(row.id), { id: text(row.id), name: row.name, flag: row.flag || null }]));
 }
@@ -144,7 +144,7 @@ async function loadPlayersWithoutLoginEmail(db, associationId) {
   return rows.map((row) => text(row.id)).filter(Boolean);
 }
 
-async function loadSlots(db, tournamentId) {
+export async function loadSlots(db, tournamentId) {
   return dbAll(
     db,
     `
@@ -180,7 +180,7 @@ async function loadEntries(db, tournamentId) {
   );
 }
 
-async function loadProfilesById(db, playerIds) {
+export async function loadProfilesById(db, playerIds) {
   const ids = [...new Set(playerIds.map(text).filter(Boolean))];
   if (!ids.length) return new Map();
   const rows = await dbAll(

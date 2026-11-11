@@ -285,10 +285,23 @@
     return String(tournament?.player_hub_visibility || "").trim().toLowerCase() === "hidden";
   }
 
+  function isCclTournament(tournament) {
+    const { type, category } = getTournamentClassification(tournament);
+    return type === "Individuals" && String(category || "").trim().toLowerCase() === "ccl";
+  }
+
+  // CCL: tournament admins and players who hold a slot (the server sets ccl_participant).
+  function canSeeCclTournament(tournament, authState = {}) {
+    const accessRole = String(tournament?.access_role || "").trim().toLowerCase();
+    return !!(authState.isAdminUser || accessRole === "admin" || tournament?.ccl_participant === true);
+  }
+
   function canSeeTournament(tournament, authState) {
-    if (isTournamentHiddenInPlayerHub(tournament) || !getTournamentClassification(tournament).supportsTeamTools) return false;
+    if (isTournamentHiddenInPlayerHub(tournament)) return false;
     if (!authState?.isAuthenticatedUser) return false;
     if (!authState.hasLinkedBgaId) return false;
+    if (isCclTournament(tournament)) return canSeeCclTournament(tournament, authState);
+    if (!getTournamentClassification(tournament).supportsTeamTools) return false;
     const accessType = getTournamentSubtype(tournament);
     if (authState.isAdminUser) return true;
     if (accessType === "Friendly") return !!authState.isCaptainUser;

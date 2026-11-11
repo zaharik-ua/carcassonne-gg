@@ -309,13 +309,20 @@ test("styled category dropdown replaces options and rejects stale selections", a
 test("both Player Hub menus keep official/Friendly permissions and exclude future and individual team-match links", () => {
   for (const page of ["hub", "menu"]) {
     const context = vm.createContext({});
-    load(context, page, ["getTournamentClassification", "normalizeTournamentAccessUsers", "getTournamentSubtype", "isTournamentHiddenInPlayerHub", "canSeeTournament"]);
+    load(context, page, ["getTournamentClassification", "normalizeTournamentAccessUsers", "getTournamentSubtype", "isTournamentHiddenInPlayerHub", "isCclTournament", "canSeeCclTournament", "canSeeTournament"]);
     const auth = { isAuthenticatedUser: true, hasLinkedBgaId: true, isCaptainUser: true, currentUserAuthId: "4" };
     for (const entry of TOURNAMENT_CATEGORIES) {
       const row = tournament(entry, { player_hub_visibility: "Visible" });
-      assert.equal(context.canSeeTournament(row, { ...auth, isAdminUser: true }), ["official", "friendly"].includes(entry.mode));
+      const isCcl = entry.name === "CCL";
+      assert.equal(context.canSeeTournament(row, { ...auth, isAdminUser: true }), isCcl || ["official", "friendly"].includes(entry.mode));
       assert.equal(context.canSeeTournament(row, auth), ["official", "friendly"].includes(entry.mode));
       assert.equal(context.canSeeTournament({ ...row, player_hub_visibility: "Hidden" }, { ...auth, isAdminUser: true }), false);
+      if (isCcl) {
+        // CCL matches are for tournament admins and players who hold a slot.
+        assert.equal(context.canSeeTournament({ ...row, access_role: "admin" }, auth), true);
+        assert.equal(context.canSeeTournament({ ...row, ccl_participant: true }, auth), true);
+        assert.equal(context.canSeeTournament({ ...row, ccl_participant: true, player_hub_visibility: "Hidden" }, auth), false);
+      }
     }
     const cup = tournament(TOURNAMENT_CATEGORIES[0], { player_hub_visibility: "Visible", access_users: [] });
     assert.equal(context.canSeeTournament(cup, auth), false);

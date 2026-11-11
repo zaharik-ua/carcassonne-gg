@@ -1,0 +1,382 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CCL 2027 Fans Choice Results</title>
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<!-- A standalone card for a screenshot: open the file, capture the 1080×1350 card. -->
+<style>
+  :root {
+    --navy: #15375c;
+    --ink: #1f2937;
+    --muted: #667085;
+    --line: #e8ecf2;
+    --page: #e9edf3;
+  }
+
+  * {
+    box-sizing: border-box;
+  }
+
+  body {
+    margin: 0;
+    padding: 24px;
+    background: var(--page);
+    font-family: 'Montserrat', 'Helvetica Neue', Arial, sans-serif;
+    color: var(--ink);
+  }
+
+  .card {
+    width: 1080px;
+    height: 1350px;
+    margin: 0 auto;
+    background: #fff;
+    border-radius: 28px;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    box-shadow: 0 10px 40px rgba(15, 28, 48, 0.12);
+  }
+
+  .card-head {
+    padding: 44px 56px 36px;
+    background: linear-gradient(120deg, #15375c 0%, #1f4a78 60%, #2a5d92 100%);
+    color: #fff;
+    position: relative;
+  }
+
+  .card-head::after {
+    content: "";
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    height: 6px;
+    background: linear-gradient(90deg, #ff3d6e 0%, #ff5e57 50%, #ff8a3d 100%);
+  }
+
+  .eyebrow {
+    font-size: 20px;
+    font-weight: 600;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    opacity: 0.75;
+  }
+
+  .title {
+    margin-top: 6px;
+    font-size: 56px;
+    font-weight: 800;
+    line-height: 1.05;
+  }
+
+  .subtitle {
+    margin-top: 14px;
+    font-size: 22px;
+    font-weight: 500;
+    opacity: 0.85;
+  }
+
+  .card-body {
+    flex: 1 1 auto;
+    padding: 36px 56px 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 30px;
+    min-height: 0;
+  }
+
+  .chart-row {
+    display: flex;
+    align-items: center;
+    gap: 44px;
+  }
+
+  .chart {
+    position: relative;
+    width: 460px;
+    height: 460px;
+    flex: 0 0 auto;
+  }
+
+  .chart svg {
+    width: 100%;
+    height: 100%;
+    display: block;
+  }
+
+  .chart-center {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    pointer-events: none;
+  }
+
+  .chart-total {
+    font-size: 64px;
+    font-weight: 800;
+    color: var(--navy);
+    line-height: 1;
+  }
+
+  .chart-total-label {
+    margin-top: 6px;
+    font-size: 18px;
+    font-weight: 600;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 2px;
+  }
+
+  /* The top associations next to the chart, with their slice colors. */
+  .top-list {
+    flex: 1 1 auto;
+    display: grid;
+    gap: 5px;
+  }
+
+  .top-item {
+    display: grid;
+    grid-template-columns: 30px minmax(0, 1fr) auto 60px;
+    align-items: center;
+    gap: 10px;
+    font-size: 19px;
+  }
+
+  .top-item .flag {
+    width: 30px;
+    height: 21px;
+  }
+
+  .flag {
+    width: 34px;
+    height: 24px;
+    object-fit: cover;
+    border-radius: 3px;
+    box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.08);
+  }
+
+  .name {
+    font-weight: 600;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .votes {
+    font-weight: 800;
+    color: var(--navy);
+    text-align: right;
+  }
+
+  .share {
+    font-size: 15px;
+    font-weight: 500;
+    color: var(--muted);
+    text-align: right;
+  }
+
+  /* Every other association, in two columns. */
+  .rest {
+    border-top: 1px solid var(--line);
+    padding-top: 22px;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 9px 48px;
+    align-content: start;
+  }
+
+  .rest-item {
+    display: grid;
+    grid-template-columns: 26px minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 10px;
+    font-size: 18px;
+  }
+
+  .rest-item .flag {
+    width: 26px;
+    height: 18px;
+  }
+
+  .rest-item .votes {
+    font-weight: 700;
+  }
+
+  .card-foot {
+    padding: 20px 56px 30px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 19px;
+    color: var(--muted);
+    border-top: 1px solid var(--line);
+  }
+
+  .card-foot strong {
+    color: var(--ink);
+  }
+
+  .site {
+    font-weight: 700;
+    color: var(--navy);
+  }
+</style>
+</head>
+<body>
+  <div class="card" id="card">
+    <div class="card-head">
+      <div class="eyebrow">CCL 2027 · Fans Choice</div>
+      <div class="title">Voting results</div>
+      <div class="subtitle" id="subtitle"></div>
+    </div>
+    <div class="card-body">
+      <div class="chart-row">
+        <div class="chart" id="chart"></div>
+        <div class="top-list" id="topList"></div>
+      </div>
+      <div class="rest" id="rest"></div>
+    </div>
+    <div class="card-foot">
+      <span>Live draw: <strong>November 10</strong> · YouTube <strong>Carcassonne Ukraine</strong></span>
+      <span class="site">carcassonne.gg</span>
+    </div>
+  </div>
+
+<script>
+(function () {
+  // Confirmed votes per association, final (voting closed November 9, 23:59 UTC).
+  const RESULTS = [
+    { name: "Brazil", flag: "https://carcassonne.gg/gallery/brazil.png", votes: 50 },
+    { name: "Uruguay", flag: "https://carcassonne.gg/gallery/uruguay.png", votes: 42 },
+    { name: "Colombia", flag: "https://carcassonne.gg/gallery/colombia.png", votes: 40 },
+    { name: "Belgium", flag: "https://carcassonne.gg/gallery/belgium.png", votes: 33 },
+    { name: "Belarus", flag: "https://carcassonne.gg/gallery/belarus.png", votes: 30 },
+    { name: "Spain", flag: "https://carcassonne.gg/gallery/spain.png", votes: 26 },
+    { name: "Catalonia", flag: "https://carcassonne.gg/gallery/catalonia.png", votes: 15 },
+    { name: "Taiwan", flag: "https://carcassonne.gg/gallery/taiwan.png", votes: 12 },
+    { name: "Hong Kong", flag: "https://carcassonne.gg/gallery/hong%20kong.png", votes: 10 },
+    { name: "Latvia", flag: "https://carcassonne.gg/gallery/latvia.png", votes: 10 },
+    { name: "Portugal", flag: "https://carcassonne.gg/gallery/portugal.png", votes: 10 },
+    { name: "Chile", flag: "https://carcassonne.gg/gallery/chile.png", votes: 9 },
+    { name: "Ecuador", flag: "https://carcassonne.gg/gallery/ecuador.png", votes: 9 },
+    { name: "Czech Republic", flag: "https://carcassonne.gg/gallery/czech-republic.png", votes: 8 },
+    { name: "Hungary", flag: "https://carcassonne.gg/gallery/hungary.png", votes: 8 },
+    { name: "Mexico", flag: "https://carcassonne.gg/gallery/mexico.png", votes: 8 },
+    { name: "Australia", flag: "https://carcassonne.gg/gallery/australia.png", votes: 6 },
+    { name: "Finland", flag: "https://carcassonne.gg/gallery/finland.png", votes: 6 },
+    { name: "United Kingdom", flag: "https://carcassonne.gg/gallery/united-kingdom.png", votes: 6 },
+    { name: "Italy", flag: "https://carcassonne.gg/gallery/italy.png", votes: 5 },
+    { name: "United States", flag: "https://carcassonne.gg/gallery/usa.png", votes: 4 },
+    { name: "France", flag: "https://carcassonne.gg/gallery/france.png", votes: 2 },
+    { name: "Guatemala", flag: "https://carcassonne.gg/gallery/guatemala.png", votes: 2 },
+    { name: "Thailand", flag: "https://carcassonne.gg/gallery/thailand.png", votes: 2 },
+    { name: "Iceland", flag: "https://carcassonne.gg/gallery/iceland.png", votes: 1 },
+    { name: "Israel", flag: "https://carcassonne.gg/gallery/israel.png", votes: 1 },
+    { name: "Malaysia", flag: "https://carcassonne.gg/gallery/malaysia.png", votes: 1 },
+    { name: "Netherlands", flag: "https://carcassonne.gg/gallery/netherlands.png", votes: 1 },
+    { name: "Peru", flag: "https://carcassonne.gg/gallery/peru.png", votes: 1 },
+    { name: "Romania", flag: "https://carcassonne.gg/gallery/romania.png", votes: 1 },
+  ];
+  // Associations with at least this many votes get their own slice; the rest share the grey "Others" slice.
+  const MIN_OWN_SLICE_VOTES = 7;
+  const COLORS = [
+    "#ff3d6e", "#ff8a3d", "#f5b82e", "#2bb673", "#1aa3c4", "#3d6fd9",
+    "#7b5cd6", "#c04fbf", "#15375c", "#8a9a2b", "#e0607e", "#f2a65a",
+    "#5bc0a5", "#6a9fe0", "#a07ad8", "#7d8b99",
+  ];
+  const OTHERS_COLOR = "#cfd6e0";
+
+  const rows = RESULTS.slice().sort((a, b) => b.votes - a.votes || a.name.localeCompare(b.name));
+  const total = rows.reduce((sum, row) => sum + row.votes, 0);
+  const top = rows.filter((row) => row.votes >= MIN_OWN_SLICE_VOTES);
+  const others = rows.filter((row) => row.votes < MIN_OWN_SLICE_VOTES);
+  const othersVotes = others.reduce((sum, row) => sum + row.votes, 0);
+  const percent = (votes) => `${((votes / total) * 100).toFixed(1)}%`;
+
+  function el(tag, className, text) {
+    const node = document.createElement(tag);
+    if (className) node.className = className;
+    if (text !== undefined) node.textContent = text;
+    return node;
+  }
+
+  function flag(row) {
+    const img = el("img", "flag");
+    img.src = row.flag;
+    img.alt = "";
+    return img;
+  }
+
+  document.getElementById("subtitle").textContent =
+    `${total} confirmed votes · ${rows.length} associations`;
+
+  // Donut chart: one SVG arc per slice, starting at 12 o'clock, clockwise.
+  const colorOf = (index) => COLORS[index % COLORS.length];
+  const slices = top.map((row, index) => ({ votes: row.votes, color: colorOf(index), flag: row.flag }));
+  if (othersVotes) slices.push({ votes: othersVotes, color: OTHERS_COLOR, label: `+${others.length}` });
+  const size = 400;
+  const radius = 190;
+  const inner = 118;
+  const center = size / 2;
+  // Room around the ring for the flags next to each slice.
+  const pad = 30;
+  const flagRadius = radius + 17;
+  const flagW = 24;
+  const flagH = 17;
+  const point = (angle, r) => [center + r * Math.sin(angle), center - r * Math.cos(angle)];
+  let angle = 0;
+  const markers = [];
+  const paths = slices.map((slice) => {
+    const sweep = (slice.votes / total) * Math.PI * 2;
+    const end = angle + sweep;
+    const large = sweep > Math.PI ? 1 : 0;
+    const [x1, y1] = point(angle, radius);
+    const [x2, y2] = point(end, radius);
+    const [x3, y3] = point(end, inner);
+    const [x4, y4] = point(angle, inner);
+    // The flag (or the "+N" of Others) sits outside the ring, in line with the middle of the slice.
+    const [fx, fy] = point(angle + sweep / 2, flagRadius);
+    const marker = slice.flag
+      ? `<rect x="${fx - flagW / 2 - 1}" y="${fy - flagH / 2 - 1}" width="${flagW + 2}" height="${flagH + 2}" rx="3" fill="#fff"/>`
+        + `<image href="${slice.flag}" x="${fx - flagW / 2}" y="${fy - flagH / 2}" width="${flagW}" height="${flagH}" preserveAspectRatio="xMidYMid slice"/>`
+      : `<text x="${fx}" y="${fy}" text-anchor="middle" dominant-baseline="central" font-size="14" font-weight="700" fill="#667085">${slice.label}</text>`;
+    markers.push(marker);
+    angle = end;
+    return `<path d="M${x1} ${y1} A${radius} ${radius} 0 ${large} 1 ${x2} ${y2} L${x3} ${y3} A${inner} ${inner} 0 ${large} 0 ${x4} ${y4} Z" fill="${slice.color}" stroke="#fff" stroke-width="3"/>`;
+  });
+  const chart = document.getElementById("chart");
+  chart.innerHTML = `<svg viewBox="${-pad} ${-pad} ${size + pad * 2} ${size + pad * 2}" role="img" aria-label="Fans Choice votes by association">${paths.join("")}${markers.join("")}</svg>`;
+  const centerText = el("div", "chart-center");
+  centerText.append(el("div", "chart-total", String(total)), el("div", "chart-total-label", "votes"));
+  chart.appendChild(centerText);
+
+  const topList = document.getElementById("topList");
+  top.forEach((row, index) => {
+    const item = el("div", "top-item");
+    item.append(flag(row), el("span", "name", row.name), el("span", "votes", String(row.votes)), el("span", "share", percent(row.votes)));
+    topList.appendChild(item);
+  });
+  if (othersVotes) {
+    const item = el("div", "top-item");
+    item.append(el("span"), el("span", "name", "Others"), el("span", "votes", String(othersVotes)), el("span", "share", percent(othersVotes)));
+    topList.appendChild(item);
+  }
+
+  // Ranking reads down the first column, then the second.
+  const rest = document.getElementById("rest");
+  rest.style.gridTemplateRows = `repeat(${Math.ceil(others.length / 2)}, auto)`;
+  rest.style.gridAutoFlow = "column";
+  others.forEach((row) => {
+    const item = el("div", "rest-item");
+    item.append(flag(row), el("span", "name", row.name), el("span", "votes", String(row.votes)));
+    rest.appendChild(item);
+  });
+})();
+</script>
+</body>
+</html>

@@ -671,6 +671,149 @@
     margin-top: 8px;
   }
 
+  .news-table-block {
+    margin: 10px 0;
+    max-width: 100%;
+    overflow-x: auto;
+    padding: 0 2px 3px 0;
+  }
+
+  .news-table {
+    background: #fff;
+    border-collapse: collapse;
+    border-radius: 2px;
+    box-shadow: 1.4px 1.4px 2px #b2b2b2;
+    overflow: hidden;
+    /* Auto layout keeps the column ratios but never squeezes a column below its header. */
+    table-layout: auto;
+    width: 100%;
+  }
+
+  .news-table-width-75 > .news-table {
+    width: 75%;
+  }
+
+  .news-table-width-50 > .news-table {
+    width: 50%;
+  }
+
+  .news-table-align-center > .news-table {
+    margin-left: auto;
+    margin-right: auto;
+  }
+
+  .news-table-align-right > .news-table {
+    margin-left: auto;
+  }
+
+  .news-table th,
+  .news-table td {
+    overflow-wrap: break-word;
+    padding: 6px 8px;
+    text-align: left;
+    vertical-align: top;
+  }
+
+  .news-table th {
+    background-color: var(--main-bg-color, #2C6DA3);
+    color: var(--accent-text-color, #fff);
+    font-size: 14px;
+    font-weight: 600;
+    line-height: 1.3;
+    white-space: nowrap;
+  }
+
+  .news-table th + th {
+    border-left: 1px solid rgba(255, 255, 255, 0.25);
+  }
+
+  .news-table td {
+    border-top: 1px solid #ccc;
+    color: #333;
+    font-size: 14px;
+    line-height: 1.4;
+  }
+
+  .news-table td + td {
+    border-left: 1px solid #e3e7ed;
+  }
+
+  .news-table tbody tr:nth-child(even) td {
+    background: #f7f9fb;
+  }
+
+  .news-table .news-table-cell-center {
+    text-align: center;
+  }
+
+  .news-table .news-table-cell-right {
+    text-align: right;
+  }
+
+  .news-table-plain > .news-table tbody tr:nth-child(even) td {
+    background: #fff;
+  }
+
+  .news-table-first-col > .news-table tbody tr td:first-child {
+    background: #eef2f7;
+    font-weight: 600;
+  }
+
+  .news-table-compact > .news-table th,
+  .news-table-compact > .news-table td {
+    font-size: 13px;
+    line-height: 1.3;
+    padding: 3px 6px;
+  }
+
+  .news-table th p,
+  .news-table td p {
+    margin: 0 0 6px;
+  }
+
+  .news-table th p:last-child,
+  .news-table td p:last-child {
+    margin-bottom: 0;
+  }
+
+  .news-table ol,
+  .news-table ul {
+    margin: 2px 0 6px 18px;
+    padding: 0;
+  }
+
+  .news-table th a,
+  .news-table th .news-section-title {
+    color: inherit;
+  }
+
+  .news-table .news-section-title {
+    font-size: 15px;
+    margin: 0 0 4px;
+  }
+
+  .news-table img {
+    height: auto;
+    max-width: 100%;
+  }
+
+  @media (max-width: 600px) {
+    .news-table-width-75 > .news-table,
+    .news-table-width-50 > .news-table {
+      width: 100%;
+    }
+  }
+
+  img.news-inline-icon {
+    display: inline-block;
+    width: 22px;
+    height: 22px;
+    max-width: none;
+    margin: 0 2px;
+    object-fit: contain;
+    vertical-align: middle;
+  }
+
   .cp-news-desc img {
     display: none;
   }
@@ -783,6 +926,21 @@
     border-radius: 4px;
     background: #f3f4f6;
     cursor: pointer;
+  }
+
+  .cp-news-editor-area img.news-inline-icon {
+    display: inline-block;
+    width: 22px;
+    height: 22px;
+    max-width: none;
+    aspect-ratio: auto;
+    margin: 0 2px;
+    border: 0;
+    border-radius: 0;
+    background: none;
+    object-fit: contain;
+    vertical-align: middle;
+    cursor: text;
   }
 
   .cp-news-editor-area img.cp-news-editor-image-selected {
@@ -981,6 +1139,160 @@
     opacity: 0.7;
   }
 
+  .cp-news-editor-area .news-table th,
+  .cp-news-editor-area .news-table td {
+    cursor: text;
+    outline: none;
+  }
+
+  .cp-news-editor-area .news-table tbody tr td.cp-news-table-cell-active {
+    background: #f2f8fd;
+    box-shadow: inset 0 0 0 2px #1a73b7;
+  }
+
+  .cp-news-editor-area .news-table th.cp-news-table-cell-active {
+    box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.85);
+  }
+
+  .cp-news-table-controls {
+    align-items: center;
+    background: #f8fafc;
+    border: 1px solid #dbe2ea;
+    border-radius: 4px;
+    color: #667085;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px 6px;
+    margin-bottom: 5px;
+    padding: 4px 6px;
+    user-select: none;
+  }
+
+  .cp-news-editor-area .news-table-block {
+    overflow: visible;
+    position: relative;
+  }
+
+  /* The panel floats over the text so showing it never shifts the table under the pointer. */
+  .cp-news-editor-area .news-table-block > .cp-news-table-controls {
+    background: #f2f8fd;
+    border-color: #9cc3e5;
+    bottom: calc(100% + 4px);
+    box-shadow: 0 6px 18px rgba(15, 28, 48, 0.16);
+    display: none;
+    left: 0;
+    margin: 0;
+    position: absolute;
+    right: 0;
+    z-index: 5;
+  }
+
+  .cp-news-editor-area .news-table-block.cp-news-table-active > .cp-news-table-controls {
+    display: flex;
+  }
+
+  .cp-news-editor-area .news-table-block > .cp-news-table-controls.cp-news-table-controls--below {
+    bottom: auto;
+    top: calc(100% + 4px);
+  }
+
+  .cp-news-table-controls-group {
+    align-items: center;
+    display: inline-flex;
+    gap: 3px;
+  }
+
+  .cp-news-table-controls-group + .cp-news-table-controls-group {
+    border-left: 1px solid #dbe2ea;
+    padding-left: 6px;
+  }
+
+  .cp-news-table-controls-label {
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    margin-right: 2px;
+    text-transform: uppercase;
+  }
+
+  .cp-news-editor-area .news-table tbody tr td.cp-news-table-cell-selected {
+    background: #d6e8f8;
+    box-shadow: inset 0 0 0 1px #1a73b7;
+  }
+
+  .cp-news-editor-area .news-table th.cp-news-table-cell-selected {
+    background-image: linear-gradient(rgba(255, 255, 255, 0.28), rgba(255, 255, 255, 0.28));
+    box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.85);
+  }
+
+  .cp-news-table-controls-group[hidden] {
+    display: none;
+  }
+
+  .cp-news-table-selection-group .cp-news-table-controls-label {
+    color: #1a73b7;
+  }
+
+  .cp-news-editor-status-action {
+    background: none;
+    border: 0;
+    color: #1a73b7;
+    cursor: pointer;
+    font: inherit;
+    margin-left: 6px;
+    padding: 0;
+    text-decoration: underline;
+  }
+
+  .cp-news-table-controls-spacer {
+    flex: 1 1 auto;
+  }
+
+  .cp-news-table-action {
+    align-items: center;
+    background: #fff;
+    border: 1px solid #c8ced8;
+    border-radius: 4px;
+    color: #2f3947;
+    cursor: pointer;
+    display: inline-flex;
+    font: inherit;
+    font-size: 11px;
+    font-weight: 600;
+    gap: 4px;
+    height: 24px;
+    line-height: 1;
+    padding: 0 7px;
+    white-space: nowrap;
+  }
+
+  .cp-news-table-insert-icon {
+    fill: none;
+    flex: 0 0 auto;
+    height: 15px;
+    stroke: currentColor;
+    stroke-linecap: round;
+    width: 15px;
+  }
+
+  .cp-news-table-action:hover,
+  .cp-news-table-action:focus-visible {
+    border-color: #1a73b7;
+    color: #1a73b7;
+  }
+
+  .cp-news-table-action--danger:hover,
+  .cp-news-table-action--danger:focus-visible {
+    border-color: #b42318;
+    color: #b42318;
+  }
+
+  .cp-news-table-action:disabled {
+    border-color: #dbe2ea;
+    color: #98a2b3;
+    cursor: not-allowed;
+  }
+
   .cp-news-editor-image-marker {
     display: inline-block;
     width: 0;
@@ -1028,6 +1340,261 @@
     color: #c62828;
     font-size: 12px;
     font-weight: 600;
+  }
+
+  .cp-news-table-dialog-section {
+    display: grid;
+    gap: 6px;
+  }
+
+  .cp-news-table-dialog-label {
+    color: #333;
+    font-size: 12px;
+    font-weight: 600;
+  }
+
+  .cp-news-table-width-options {
+    border: 1px solid #c8ced8;
+    border-radius: 4px;
+    display: inline-flex;
+    overflow: hidden;
+    width: max-content;
+  }
+
+  .cp-news-table-width-option {
+    background: #fff;
+    border: 0;
+    color: #2f3947;
+    cursor: pointer;
+    font: inherit;
+    font-size: 13px;
+    padding: 6px 14px;
+  }
+
+  .cp-news-table-width-option + .cp-news-table-width-option {
+    border-left: 1px solid #c8ced8;
+  }
+
+  .cp-news-table-width-option.active {
+    background: #1a73b7;
+    color: #fff;
+  }
+
+  .cp-news-table-width-option:disabled {
+    background: #f3f4f6;
+    color: #98a2b3;
+    cursor: not-allowed;
+  }
+
+  .cp-news-table-width-option:disabled.active {
+    background: #c9d6e3;
+    color: #fff;
+  }
+
+  .cp-news-table-ratio-inputs {
+    align-items: flex-start;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px 4px;
+  }
+
+  .cp-news-table-ratio-field {
+    color: #667085;
+    display: grid;
+    font-size: 11px;
+    gap: 2px;
+    max-width: 84px;
+  }
+
+  .cp-news-table-ratio-field span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .cp-news-table-ratio-stepper {
+    border: 1px solid #c8ced8;
+    border-radius: 4px;
+    display: inline-flex;
+    height: 30px;
+    overflow: hidden;
+    width: max-content;
+  }
+
+  .cp-news-table-ratio-stepper button {
+    align-items: center;
+    background: #f8fafc;
+    border: 0;
+    color: #2f3947;
+    cursor: pointer;
+    display: inline-flex;
+    font-size: 10px;
+    justify-content: center;
+    padding: 0;
+    width: 24px;
+  }
+
+  .cp-news-table-ratio-stepper button:hover:not(:disabled),
+  .cp-news-table-ratio-stepper button:focus-visible {
+    background: #eef5fb;
+    color: #1a73b7;
+  }
+
+  .cp-news-table-ratio-stepper button:disabled {
+    color: #c0c6d0;
+    cursor: not-allowed;
+  }
+
+  .cp-news-table-ratio-stepper input {
+    border: 0;
+    border-left: 1px solid #c8ced8;
+    border-right: 1px solid #c8ced8;
+    border-radius: 0;
+    box-sizing: border-box;
+    font: inherit;
+    font-size: 14px;
+    height: 100%;
+    outline: none;
+    padding: 0 2px;
+    text-align: center;
+    width: 32px;
+  }
+
+  .cp-news-table-ratio-stepper:focus-within {
+    border-color: #1a73b7;
+    box-shadow: 0 0 0 2px rgba(26, 115, 183, 0.18);
+  }
+
+  .cp-news-table-col-align {
+    border: 1px solid #c8ced8;
+    border-radius: 4px;
+    display: inline-flex;
+    overflow: hidden;
+    width: max-content;
+  }
+
+  .cp-news-table-col-align button {
+    align-items: center;
+    background: #fff;
+    border: 0;
+    color: #667085;
+    cursor: pointer;
+    display: inline-flex;
+    font-size: 10px;
+    height: 20px;
+    justify-content: center;
+    padding: 0;
+    width: 18px;
+  }
+
+  .cp-news-table-col-align button + button {
+    border-left: 1px solid #c8ced8;
+  }
+
+  .cp-news-table-col-align button.active {
+    background: #1a73b7;
+    color: #fff;
+  }
+
+  .cp-news-table-style-options {
+    display: grid;
+    gap: 6px 14px;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .cp-news-table-style-options label {
+    align-items: center;
+    color: #2f3947;
+    cursor: pointer;
+    display: flex;
+    font-size: 13px;
+    gap: 6px;
+  }
+
+  .cp-news-table-ratio-separator {
+    color: #98a2b3;
+    font-size: 13px;
+    line-height: 30px;
+    padding-top: 15px;
+  }
+
+  .cp-news-table-ratio-track {
+    background: #eef2f6;
+    border-radius: 3px;
+  }
+
+  .cp-news-table-ratio-preview {
+    border-radius: 3px;
+    display: flex;
+    height: 26px;
+    overflow: hidden;
+  }
+
+  .cp-news-table-ratio-preview span {
+    align-items: center;
+    background: var(--main-bg-color, #2C6DA3);
+    color: var(--accent-text-color, #fff);
+    display: flex;
+    font-size: 11px;
+    font-weight: 600;
+    justify-content: center;
+    min-width: 0;
+    overflow: hidden;
+  }
+
+  .cp-news-icon-list {
+    border: 1px solid #dbe2ea;
+    border-radius: 4px;
+    display: flex;
+    flex-direction: column;
+    max-height: 340px;
+    overflow-y: auto;
+  }
+
+  .cp-news-icon-list .cp-dd-option {
+    gap: 8px;
+    padding: 6px 8px;
+  }
+
+  .cp-news-icon-list .cp-dd-option:focus-visible {
+    background: #e4f0fb;
+    outline: none;
+  }
+
+  .cp-news-icon-option-img {
+    flex: 0 0 24px;
+    height: 24px;
+    object-fit: contain;
+    width: 24px;
+  }
+
+  .cp-news-icon-group {
+    background: #f8fafc;
+    border-top: 1px solid #edf1f6;
+    color: #667085;
+    flex: 0 0 auto;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    padding: 5px 8px;
+    position: sticky;
+    text-transform: uppercase;
+    top: 0;
+    z-index: 1;
+  }
+
+  .cp-news-icon-group:first-child {
+    border-top: 0;
+  }
+
+  .cp-news-icon-empty {
+    color: #667085;
+    font-size: 13px;
+    padding: 10px;
+  }
+
+  .cp-news-table-ratio-preview span + span {
+    border-left: 1px solid rgba(255, 255, 255, 0.5);
   }
 
   .cp-modal-overlay {
@@ -3310,6 +3877,140 @@
     }
   }
 
+  let newsInlineIconLibraryPromise = null;
+
+  function fetchNewsInlineIconLibrary() {
+    if (!newsInlineIconLibraryPromise) {
+      newsInlineIconLibraryPromise = fetch(ICONS_URL, { method: "GET", credentials: "include" })
+        .then(async (response) => {
+          const data = await response.json().catch(() => ({}));
+          if (!response.ok || !Array.isArray(data?.icons)) {
+            throw new Error(data?.message || "Failed to load icons.");
+          }
+          return data.icons
+            .map((icon) => ({
+              url: toApiAbsoluteUrl(icon?.icon_link || ""),
+              name: String(icon?.name || icon?.id || "").trim(),
+              category: String(icon?.category || "").trim() || "Other",
+            }))
+            .filter((icon) => icon.url && icon.name);
+        })
+        .catch((error) => {
+          newsInlineIconLibraryPromise = null;
+          throw error;
+        });
+    }
+    return newsInlineIconLibraryPromise;
+  }
+
+  const NEWS_TABLE_WIDTH_OPTIONS = [100, 75, 50];
+  const NEWS_TABLE_ALIGN_OPTIONS = ["left", "center", "right"];
+  const NEWS_TABLE_MAX_COLUMNS = 12;
+  const NEWS_TABLE_MAX_COLUMN_RATIO = 20;
+
+  function normalizeNewsTableWidth(value) {
+    const width = Number.parseInt(String(value || "").replace(/%$/, ""), 10);
+    return NEWS_TABLE_WIDTH_OPTIONS.includes(width) ? width : 100;
+  }
+
+  function normalizeNewsTableAlign(value) {
+    const align = String(value || "").trim().toLowerCase();
+    return NEWS_TABLE_ALIGN_OPTIONS.includes(align) ? align : "left";
+  }
+
+  function normalizeNewsTableColumnRatios(value, columnCount) {
+    const ratios = String(Array.isArray(value) ? value.join(",") : value || "")
+      .split(/[\s,x×:]+/i)
+      .filter(Boolean)
+      .map((item) => Number(item));
+    const isValid = ratios.length === columnCount
+      && ratios.every((ratio) => Number.isInteger(ratio) && ratio >= 1 && ratio <= NEWS_TABLE_MAX_COLUMN_RATIO);
+    return isValid ? ratios : Array.from({ length: columnCount }, () => 1);
+  }
+
+  function normalizeNewsTableColumnAligns(value, columnCount) {
+    const aligns = String(Array.isArray(value) ? value.join(",") : value || "").split(",");
+    return Array.from({ length: columnCount }, (_, index) => normalizeNewsTableAlign(aligns[index]));
+  }
+
+  function readNewsTableLayout(block) {
+    const table = block?.querySelector(":scope > table");
+    const columnCount = table?.rows?.[0]?.cells.length || 0;
+    const data = block?.dataset || {};
+    return {
+      width: normalizeNewsTableWidth(data.newsTableWidth),
+      align: normalizeNewsTableAlign(data.newsTableAlign),
+      ratios: normalizeNewsTableColumnRatios(data.newsTableCols, columnCount),
+      columnAligns: normalizeNewsTableColumnAligns(data.newsTableColAligns, columnCount),
+      striped: data.newsTableStriped !== "false",
+      compact: data.newsTableCompact === "true",
+      firstColumnHeader: data.newsTableFirstCol === "true",
+    };
+  }
+
+  // Merges `changes` into the block's current layout and re-applies classes, data attributes,
+  // column widths and per-cell alignment, so saved HTML renders correctly without any script.
+  function applyNewsTableLayout(block, changes = {}) {
+    const table = block?.querySelector(":scope > table");
+    if (!table) return;
+    const rows = Array.from(table.rows);
+    const columnCount = rows[0]?.cells.length || 0;
+    const layout = { ...readNewsTableLayout(block), ...changes };
+    const safeWidth = normalizeNewsTableWidth(layout.width);
+    const safeAlign = safeWidth === 100 ? "left" : normalizeNewsTableAlign(layout.align);
+    const ratios = normalizeNewsTableColumnRatios(layout.ratios, columnCount);
+    const columnAligns = normalizeNewsTableColumnAligns(layout.columnAligns, columnCount);
+    const isStriped = layout.striped !== false;
+    const isCompact = layout.compact === true;
+    const hasFirstColumnHeader = layout.firstColumnHeader === true;
+    const setFlag = (key, value) => {
+      if (value === null) {
+        delete block.dataset[key];
+      } else {
+        block.dataset[key] = value;
+      }
+    };
+
+    NEWS_TABLE_WIDTH_OPTIONS.forEach((option) => {
+      block.classList.toggle(`news-table-width-${option}`, option === safeWidth);
+    });
+    NEWS_TABLE_ALIGN_OPTIONS.forEach((option) => {
+      block.classList.toggle(`news-table-align-${option}`, option !== "left" && option === safeAlign);
+    });
+    block.classList.toggle("news-table-plain", !isStriped);
+    block.classList.toggle("news-table-compact", isCompact);
+    block.classList.toggle("news-table-first-col", hasFirstColumnHeader);
+    block.dataset.newsTable = "true";
+    block.dataset.newsTableWidth = String(safeWidth);
+    setFlag("newsTableAlign", safeAlign === "left" ? null : safeAlign);
+    block.dataset.newsTableCols = ratios.join(",");
+    setFlag("newsTableColAligns", columnAligns.every((align) => align === "left") ? null : columnAligns.join(","));
+    setFlag("newsTableHeader", table.tHead ? null : "false");
+    setFlag("newsTableStriped", isStriped ? null : "false");
+    setFlag("newsTableCompact", isCompact ? "true" : null);
+    setFlag("newsTableFirstCol", hasFirstColumnHeader ? "true" : null);
+
+    rows.forEach((row) => {
+      Array.from(row.cells).forEach((cell, index) => {
+        cell.classList.toggle("news-table-cell-center", columnAligns[index] === "center");
+        cell.classList.toggle("news-table-cell-right", columnAligns[index] === "right");
+      });
+    });
+
+    let colgroup = Array.from(table.children).find((child) => child.tagName?.toUpperCase() === "COLGROUP") || null;
+    if (!colgroup) {
+      colgroup = document.createElement("colgroup");
+      table.insertBefore(colgroup, table.firstChild);
+    }
+    colgroup.innerHTML = "";
+    const total = ratios.reduce((sum, ratio) => sum + ratio, 0) || 1;
+    ratios.forEach((ratio) => {
+      const col = document.createElement("col");
+      col.style.width = `${Number(((ratio / total) * 100).toFixed(4))}%`;
+      colgroup.appendChild(col);
+    });
+  }
+
   function sanitizeNewsDescriptionHtml(rawHtml, options = {}) {
     const raw = String(rawHtml || "").trim();
     if (!raw) return "";
@@ -3326,6 +4027,22 @@
       if (/^https?:\/\//i.test(src)) return src;
       if (/^\/uploads\/images\//i.test(src)) return src;
       return "";
+    };
+
+    const isInlineIconElement = (node) => (
+      node?.nodeType === Node.ELEMENT_NODE
+      && node.tagName?.toUpperCase() === "IMG"
+      && node.classList?.contains("news-inline-icon")
+    );
+
+    const createSafeInlineIcon = (node) => {
+      const src = normalizeImageSrc(node.getAttribute("src"));
+      if (!src) return null;
+      const icon = document.createElement("img");
+      icon.className = "news-inline-icon";
+      icon.setAttribute("src", toApiAbsoluteUrl(src));
+      icon.alt = String(node.getAttribute("alt") || "").trim();
+      return icon;
     };
 
     const isNewsQuoteBlockElement = (node) => (
@@ -3386,6 +4103,84 @@
       )
     );
 
+    const isNewsTableBlockElement = (node) => (
+      node?.nodeType === Node.ELEMENT_NODE
+      && (
+        node.tagName?.toUpperCase() === "TABLE"
+        || node.classList?.contains("news-table-block")
+        || String(node.getAttribute?.("data-news-table") || "").trim().toLowerCase() === "true"
+      )
+    );
+
+    const getNewsTableCells = (table) => Array.from(table?.rows || [])
+      .flatMap((row) => Array.from(row.cells || []));
+
+    const flattenNestedNewsTable = (node) => {
+      const table = node.tagName.toUpperCase() === "TABLE" ? node : node.querySelector("table");
+      const fragment = document.createDocumentFragment();
+      getNewsTableCells(table).forEach((cell) => {
+        const cellContent = document.createElement("template");
+        cellContent.innerHTML = sanitizeNewsDescriptionHtml(cell.innerHTML, options);
+        fragment.appendChild(cellContent.content);
+      });
+      return fragment;
+    };
+
+    const sanitizeNewsTable = (node) => {
+      const isBareTable = node.tagName.toUpperCase() === "TABLE";
+      const sourceTable = isBareTable ? node : node.querySelector("table");
+      const sourceRows = Array.from(sourceTable?.rows || []);
+      if (!sourceRows.length) return null;
+      const columnCount = Math.min(
+        NEWS_TABLE_MAX_COLUMNS,
+        Math.max(1, ...sourceRows.map((row) => row.cells.length))
+      );
+      const sourceAttr = (name) => (isBareTable ? null : node.getAttribute(name));
+      const hasHeaderRow = sourceAttr("data-news-table-header") !== "false";
+      const headerRow = hasHeaderRow ? (sourceTable.tHead?.rows?.[0] || sourceRows[0]) : null;
+      const bodyRows = sourceRows.filter((row) => row !== headerRow);
+      const cellOptions = { ...options, insideTable: true };
+
+      const createRow = (sourceRow, cellTag) => {
+        const row = document.createElement("tr");
+        const sourceCells = Array.from(sourceRow?.cells || []);
+        for (let index = 0; index < columnCount; index += 1) {
+          const cell = document.createElement(cellTag);
+          cell.innerHTML = sourceCells[index]
+            ? sanitizeNewsDescriptionHtml(sourceCells[index].innerHTML, cellOptions)
+            : "";
+          if (!cell.innerHTML.trim()) cell.innerHTML = "<p><br></p>";
+          row.appendChild(cell);
+        }
+        return row;
+      };
+
+      const block = document.createElement("div");
+      block.className = "news-table-block";
+      const table = document.createElement("table");
+      table.className = "news-table";
+      if (headerRow) {
+        const thead = document.createElement("thead");
+        thead.appendChild(createRow(headerRow, "th"));
+        table.appendChild(thead);
+      }
+      const tbody = document.createElement("tbody");
+      bodyRows.forEach((row) => tbody.appendChild(createRow(row, "td")));
+      if (!tbody.children.length) tbody.appendChild(createRow(null, "td"));
+      table.appendChild(tbody);
+      block.appendChild(table);
+      applyNewsTableLayout(block, {
+        width: sourceAttr("data-news-table-width"),
+        align: sourceAttr("data-news-table-align"),
+        ratios: sourceAttr("data-news-table-cols"),
+        columnAligns: sourceAttr("data-news-table-col-aligns"),
+        striped: sourceAttr("data-news-table-striped") !== "false",
+        compact: sourceAttr("data-news-table-compact") === "true",
+        firstColumnHeader: sourceAttr("data-news-table-first-col") === "true",
+      });
+      return block;
+    };
+
     const normalizeExpandableLabel = (node, fallback) => (
       String(node?.textContent || "").replace(/\s+/g, " ").trim() || fallback
     );
@@ -3432,7 +4227,7 @@
     const hasQuoteInlineContent = (node) => {
       if (!node) return false;
       return !!String(node.textContent || "").trim()
-        || !!node.querySelector?.("br,[data-news-selection-marker]");
+        || !!node.querySelector?.("br,img,[data-news-selection-marker]");
     };
 
     const trimQuoteInlineContent = (node) => {
@@ -3480,6 +4275,7 @@
         return marker;
       }
       if (tagName === "BR") return document.createElement("br");
+      if (isInlineIconElement(node)) return createSafeInlineIcon(node);
 
       const sanitizeChildren = (target) => {
         Array.from(node.childNodes).forEach((child) => {
@@ -3668,6 +4464,9 @@
         marker.setAttribute("aria-hidden", "true");
         return marker;
       }
+      if (isNewsTableBlockElement(node)) {
+        return options.insideTable === true ? flattenNestedNewsTable(node) : sanitizeNewsTable(node);
+      }
       if (isNewsAccordionGroupElement(node)) {
         return sanitizeNewsAccordionGroup(node);
       }
@@ -3698,6 +4497,7 @@
           if (!safeChild) return;
           if (
             safeChild.nodeType === Node.ELEMENT_NODE
+            && !isInlineIconElement(safeChild)
             && ["P", "OL", "UL", "LI", "IMG", "DIV", "BLOCKQUOTE", "H1", "H2", "H3", "H4", "H5", "H6"].includes(safeChild.tagName.toUpperCase())
           ) {
             sectionTitle.appendChild(document.createTextNode(safeChild.textContent || ""));
@@ -3705,7 +4505,7 @@
           }
           sectionTitle.appendChild(safeChild);
         });
-        return sectionTitle.textContent.trim() ? sectionTitle : null;
+        return sectionTitle.textContent.trim() || sectionTitle.querySelector("img") ? sectionTitle : null;
       }
 
       const outputTag = tagName === "B"
@@ -3725,6 +4525,7 @@
       }
 
       if (outputTag === "IMG") {
+        if (isInlineIconElement(node)) return createSafeInlineIcon(node);
         const src = normalizeImageSrc(node.getAttribute("src"));
         if (!src) return null;
         const safeImage = document.createElement("img");
@@ -3767,7 +4568,8 @@
         || node.classList?.contains("news-section-title")
         || node.classList?.contains("news-accordion-group")
         || node.classList?.contains("news-accordion-block")
-        || node.classList?.contains("news-spoiler-block");
+        || node.classList?.contains("news-spoiler-block")
+        || node.classList?.contains("news-table-block");
     };
 
     const hasParagraphContent = (paragraph) => !!(
@@ -3787,7 +4589,11 @@
 
       Array.from(output.childNodes).forEach((child) => {
         if (child.nodeType === Node.TEXT_NODE && !child.textContent.trim()) {
-          child.remove();
+          if (paragraph) {
+            paragraph.appendChild(child);
+          } else {
+            child.remove();
+          }
           return;
         }
 
@@ -3813,7 +4619,7 @@
 
     wrapLooseTopLevelInlineContent();
 
-    Array.from(output.querySelectorAll("img")).forEach((image) => {
+    Array.from(output.querySelectorAll("img:not(.news-inline-icon)")).forEach((image) => {
       const parent = image.parentElement;
       const isAlreadyImageRow = parent?.tagName?.toUpperCase() === "P"
         && Array.from(parent.childNodes).every((child) => (
@@ -3841,9 +4647,10 @@
     const hasSectionTitle = !!output.querySelector(".news-section-title");
     const hasExpandableBlock = !!output.querySelector(".news-accordion-group,.news-accordion-block,.news-spoiler-block");
     const hasSelectionMarker = preserveSelectionMarkers && !!output.querySelector("[data-news-selection-marker]");
-    if (!output.textContent.trim() && !output.querySelector("img") && !hasQuoteBlock && !hasSectionTitle && !hasExpandableBlock && !hasSelectionMarker) return "";
+    const hasTableBlock = !!output.querySelector(".news-table-block");
+    if (!output.textContent.trim() && !output.querySelector("img") && !hasQuoteBlock && !hasSectionTitle && !hasExpandableBlock && !hasSelectionMarker && !hasTableBlock) return "";
     if (
-      (output.textContent.trim() || output.querySelector("img") || hasQuoteBlock || hasSectionTitle || hasExpandableBlock || hasSelectionMarker)
+      (output.textContent.trim() || output.querySelector("img") || hasQuoteBlock || hasSectionTitle || hasExpandableBlock || hasSelectionMarker || hasTableBlock)
       && !Array.from(output.children).some((child) => (
         ["P", "OL", "UL", "H2", "DETAILS"].includes(child.tagName.toUpperCase())
         || child.classList?.contains("news-quote-block")
@@ -3851,6 +4658,7 @@
         || child.classList?.contains("news-accordion-group")
         || child.classList?.contains("news-accordion-block")
         || child.classList?.contains("news-spoiler-block")
+        || child.classList?.contains("news-table-block")
       ))
     ) {
       const paragraph = document.createElement("p");
@@ -3892,9 +4700,18 @@
     let pendingImageUploadPreserveSource = false;
     let externallyDisabled = false;
 
-    const setEditorStatus = (message, isError = false) => {
+    const setEditorStatus = (message, isError = false, action = null) => {
       editorStatus.textContent = String(message || "").trim();
       editorStatus.style.color = isError ? "#c62828" : "#667085";
+      if (action?.label && typeof action.onClick === "function") {
+        const actionButton = document.createElement("button");
+        actionButton.type = "button";
+        actionButton.className = "cp-news-editor-status-action";
+        actionButton.textContent = action.label;
+        actionButton.addEventListener("mousedown", (event) => event.preventDefault());
+        actionButton.addEventListener("click", action.onClick, { once: true });
+        editorStatus.appendChild(actionButton);
+      }
     };
 
     const runCommand = (command, value = null, shouldNormalize = true) => {
@@ -4047,6 +4864,8 @@
     const getImageFromNode = (node) => {
       const element = node?.nodeType === Node.ELEMENT_NODE ? node : node?.parentElement;
       const image = element?.closest?.("img") || null;
+      // Inline icons behave like text characters, not like selectable block images.
+      if (image?.classList.contains("news-inline-icon")) return null;
       return image && editor.contains(image) ? image : null;
     };
 
@@ -4615,6 +5434,14 @@
         return;
       }
 
+      const currentTableBlock = blockNode.classList?.contains("news-table-block")
+        ? getTableBlockFromNode(targetRange.commonAncestorContainer)
+        : null;
+      if (currentTableBlock) {
+        currentTableBlock.insertAdjacentElement("afterend", blockNode);
+        return;
+      }
+
       const marker = document.createElement("span");
       marker.className = "cp-news-editor-image-marker";
       marker.dataset.newsBlockMarker = "true";
@@ -4706,6 +5533,1235 @@
       paragraph.appendChild(document.createElement("br"));
       block.parentNode.insertBefore(paragraph, block.nextSibling);
       return paragraph;
+    };
+
+    let activeTableCell = null;
+    let isTableDialogOpen = false;
+    let selectedTableCells = [];
+    let cellSelectionAnchor = null;
+    let cellDragState = null;
+    // Table operations change the DOM directly, outside the browser's undo history, so they keep their own.
+    const tableUndoStack = [];
+    let isTableUndoLatest = false;
+
+    const getTableBlockFromNode = (node) => {
+      const block = getElementFromRangeNode(node)?.closest?.(".news-table-block") || null;
+      return block && editor.contains(block) ? block : null;
+    };
+
+    const getTableCellFromNode = (node) => {
+      const cell = getElementFromRangeNode(node)?.closest?.("th,td") || null;
+      return cell && editor.contains(cell) && cell.closest(".news-table-block") ? cell : null;
+    };
+
+    const getTableParts = (block) => {
+      const table = block?.querySelector(":scope > table") || null;
+      const headerRow = table?.tHead?.rows?.[0] || null;
+      const bodyRows = Array.from(table?.tBodies?.[0]?.rows || []);
+      return {
+        table,
+        headerRow,
+        bodyRows,
+        allRows: [headerRow, ...bodyRows].filter(Boolean),
+        columnCount: (headerRow || bodyRows[0])?.cells.length || 0,
+      };
+    };
+
+    const getActiveCellInTable = (block) => (
+      activeTableCell && block?.contains(activeTableCell) && activeTableCell.closest(".news-table-block") === block
+        ? activeTableCell
+        : null
+    );
+
+    const createEditableTableCell = (cellTag, text = "") => {
+      const cell = document.createElement(cellTag);
+      const paragraph = document.createElement("p");
+      if (text) {
+        paragraph.textContent = text;
+      } else {
+        paragraph.appendChild(document.createElement("br"));
+      }
+      cell.appendChild(paragraph);
+      cell.contentEditable = externallyDisabled || pendingImageUploads > 0 ? "false" : "true";
+      cell.spellcheck = true;
+      return cell;
+    };
+
+    // A table outline (two rows or two columns) with "+" on the side where the new one is added.
+    const TABLE_INSERT_ICONS = {
+      "row-above": ["M2.5 7.5h11v7h-11z M2.5 11h11", "M8 1v5 M5.5 3.5h5"],
+      "row-below": ["M2.5 1.5h11v7h-11z M2.5 5h11", "M8 10v5 M5.5 12.5h5"],
+      "col-left": ["M7.5 2.5h7v11h-7z M11 2.5v11", "M1 8h5 M3.5 5.5v5"],
+      "col-right": ["M1.5 2.5h7v11h-7z M5 2.5v11", "M10 8h5 M12.5 5.5v5"],
+    };
+
+    const createTableInsertIcon = ([tablePath, plusPath]) => {
+      const svgNs = "http://www.w3.org/2000/svg";
+      const svg = document.createElementNS(svgNs, "svg");
+      svg.setAttribute("class", "cp-news-table-insert-icon");
+      svg.setAttribute("viewBox", "0 0 16 16");
+      svg.setAttribute("aria-hidden", "true");
+      [[tablePath, "1.2"], [plusPath, "1.8"]].forEach(([d, strokeWidth]) => {
+        const path = document.createElementNS(svgNs, "path");
+        path.setAttribute("d", d);
+        path.setAttribute("stroke-width", strokeWidth);
+        svg.appendChild(path);
+      });
+      return svg;
+    };
+
+    const createTableActionButton = (action, title, iconClass, textValue = "", extraClass = "") => {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = `cp-news-table-action${extraClass ? ` ${extraClass}` : ""}`;
+      button.contentEditable = "false";
+      button.dataset.newsTableAction = action;
+      button.title = title;
+      button.setAttribute("aria-label", title);
+      if (TABLE_INSERT_ICONS[action]) {
+        button.appendChild(createTableInsertIcon(TABLE_INSERT_ICONS[action]));
+      } else {
+        const icon = document.createElement("i");
+        icon.className = iconClass;
+        icon.setAttribute("aria-hidden", "true");
+        button.appendChild(icon);
+      }
+      if (textValue) button.appendChild(document.createTextNode(textValue));
+      return button;
+    };
+
+    const createTableControls = () => {
+      const controls = document.createElement("div");
+      controls.className = "cp-news-table-controls";
+      controls.contentEditable = "false";
+      const createGroup = (labelText, buttonsList) => {
+        const group = document.createElement("span");
+        group.className = "cp-news-table-controls-group";
+        if (labelText) {
+          const label = document.createElement("span");
+          label.className = "cp-news-table-controls-label";
+          label.textContent = labelText;
+          group.appendChild(label);
+        }
+        buttonsList.forEach((button) => group.appendChild(button));
+        return group;
+      };
+      controls.appendChild(createGroup("Row", [
+        createTableActionButton("row-above", "Add row above"),
+        createTableActionButton("row-below", "Add row below"),
+        createTableActionButton("row-duplicate", "Duplicate row", "fa-regular fa-clone"),
+        createTableActionButton("row-up", "Move row up", "fa-solid fa-arrow-up"),
+        createTableActionButton("row-down", "Move row down", "fa-solid fa-arrow-down"),
+        createTableActionButton("row-delete", "Delete row", "fa-solid fa-trash-can", "", "cp-news-table-action--danger"),
+      ]));
+      controls.appendChild(createGroup("Column", [
+        createTableActionButton("col-left", "Add column to the left"),
+        createTableActionButton("col-right", "Add column to the right"),
+        createTableActionButton("col-move-left", "Move column left", "fa-solid fa-arrow-left"),
+        createTableActionButton("col-move-right", "Move column right", "fa-solid fa-arrow-right"),
+        createTableActionButton("col-delete", "Delete column", "fa-solid fa-trash-can", "", "cp-news-table-action--danger"),
+      ]));
+      const selectionGroup = createGroup("Cells", [
+        createTableActionButton("cells-bold", "Bold selected cells (Ctrl/Cmd+B)", "fa-solid fa-bold"),
+        createTableActionButton("cells-italic", "Italic selected cells (Ctrl/Cmd+I)", "fa-solid fa-italic"),
+        createTableActionButton("cells-clear", "Clear selected cells (Delete)", "fa-solid fa-eraser", "", "cp-news-table-action--danger"),
+      ]);
+      selectionGroup.classList.add("cp-news-table-selection-group");
+      selectionGroup.hidden = true;
+      controls.appendChild(selectionGroup);
+      const spacer = document.createElement("span");
+      spacer.className = "cp-news-table-controls-spacer";
+      controls.appendChild(spacer);
+      controls.appendChild(createGroup("", [
+        createTableActionButton("layout", "Table and column widths", "fa-solid fa-sliders", "Layout"),
+        createTableActionButton("remove", "Remove table", "fa-solid fa-xmark", "", "cp-news-table-action--danger"),
+      ]));
+      return controls;
+    };
+
+    const updateTableControls = (block) => {
+      const controls = block?.querySelector(":scope > .cp-news-table-controls");
+      if (!controls) return;
+      const isBusy = externallyDisabled || pendingImageUploads > 0;
+      const { bodyRows, columnCount } = getTableParts(block);
+      const cell = getActiveCellInTable(block);
+      const isHeaderCell = cell?.tagName?.toUpperCase() === "TH";
+      const canAddColumn = columnCount < NEWS_TABLE_MAX_COLUMNS;
+      const bodyRowIndex = cell && !isHeaderCell ? bodyRows.indexOf(cell.closest("tr")) : -1;
+      const columnIndex = cell ? cell.cellIndex : -1;
+      const disabledStates = {
+        "row-above": isBusy || !cell || isHeaderCell,
+        "row-below": isBusy,
+        "row-duplicate": isBusy || bodyRowIndex < 0,
+        "row-up": isBusy || bodyRowIndex <= 0,
+        "row-down": isBusy || bodyRowIndex < 0 || bodyRowIndex >= bodyRows.length - 1,
+        "row-delete": isBusy || !cell || isHeaderCell || bodyRows.length <= 1,
+        "col-left": isBusy || !canAddColumn,
+        "col-right": isBusy || !canAddColumn,
+        "col-move-left": isBusy || columnIndex <= 0,
+        "col-move-right": isBusy || columnIndex < 0 || columnIndex >= columnCount - 1,
+        "col-delete": isBusy || !cell || columnCount <= 1,
+        layout: isBusy,
+        remove: isBusy,
+        "cells-bold": isBusy,
+        "cells-italic": isBusy,
+        "cells-clear": isBusy,
+      };
+      const selectedCount = selectedTableCells[0]?.closest(".news-table-block") === block ? selectedTableCells.length : 0;
+      const selectionGroup = controls.querySelector(".cp-news-table-selection-group");
+      if (selectionGroup) {
+        selectionGroup.hidden = selectedCount < 2;
+        const selectionLabel = selectionGroup.querySelector(".cp-news-table-controls-label");
+        if (selectionLabel) selectionLabel.textContent = `${selectedCount} cells`;
+      }
+      const isActive = !!cell || selectedCount > 1;
+      block.classList.toggle("cp-news-table-active", isActive);
+      controls.querySelectorAll("[data-news-table-action]").forEach((button) => {
+        button.disabled = disabledStates[button.dataset.newsTableAction] === true;
+      });
+      if (isActive) {
+        // Above the table when the editor has room for the panel there, otherwise below it.
+        const roomAbove = block.getBoundingClientRect().top - editor.getBoundingClientRect().top + editor.scrollTop;
+        controls.classList.toggle("cp-news-table-controls--below", roomAbove < controls.offsetHeight + 8);
+      }
+    };
+
+    const setActiveTableCell = (cell) => {
+      const nextCell = cell && editor.contains(cell) ? cell : null;
+      if (activeTableCell && activeTableCell !== nextCell) {
+        activeTableCell.classList.remove("cp-news-table-cell-active");
+      }
+      activeTableCell = nextCell;
+      if (activeTableCell) activeTableCell.classList.add("cp-news-table-cell-active");
+      editor.querySelectorAll(".news-table-block").forEach(updateTableControls);
+    };
+
+    const enhanceTableBlock = (block) => {
+      if (!block) return;
+      block.contentEditable = "false";
+      let controls = Array.from(block.children).find((child) => child.classList?.contains("cp-news-table-controls")) || null;
+      if (!controls) {
+        controls = createTableControls();
+        block.insertBefore(controls, block.firstChild);
+      }
+      const isBusy = externallyDisabled || pendingImageUploads > 0;
+      getTableParts(block).allRows.forEach((row) => {
+        Array.from(row.cells).forEach((cell) => {
+          cell.contentEditable = isBusy ? "false" : "true";
+          cell.spellcheck = true;
+        });
+      });
+      updateTableControls(block);
+    };
+
+    const enhanceTableBlocksInEditor = () => {
+      editor.querySelectorAll(".news-table-block").forEach((block) => {
+        enhanceTableBlock(block);
+        ensureEditableParagraphAfter(block);
+      });
+    };
+
+    const createEditableTableBlock = (columnCount = 3, rowCount = 2) => {
+      const block = document.createElement("div");
+      block.className = "news-table-block";
+      const table = document.createElement("table");
+      table.className = "news-table";
+      const thead = document.createElement("thead");
+      const headerRow = document.createElement("tr");
+      for (let index = 0; index < columnCount; index += 1) {
+        headerRow.appendChild(createEditableTableCell("th", `Column ${index + 1}`));
+      }
+      thead.appendChild(headerRow);
+      const tbody = document.createElement("tbody");
+      for (let rowIndex = 0; rowIndex < rowCount; rowIndex += 1) {
+        const row = document.createElement("tr");
+        for (let index = 0; index < columnCount; index += 1) {
+          row.appendChild(createEditableTableCell("td"));
+        }
+        tbody.appendChild(row);
+      }
+      table.appendChild(thead);
+      table.appendChild(tbody);
+      block.appendChild(table);
+      applyNewsTableLayout(block);
+      enhanceTableBlock(block);
+      return block;
+    };
+
+    const focusTableCell = (cell, selectContents = false) => {
+      if (!cell || !editor.contains(cell)) return;
+      const range = document.createRange();
+      range.selectNodeContents(cell.querySelector(":scope > p:last-child") || cell);
+      if (!selectContents) range.collapse(false);
+      try {
+        cell.focus({ preventScroll: true });
+      } catch (_error) {
+        cell.focus();
+      }
+      const selection = window.getSelection();
+      selection?.removeAllRanges();
+      selection?.addRange(range);
+      savedEditorRange = range.cloneRange();
+      setActiveTableCell(cell);
+    };
+
+    const insertDescriptionTable = () => {
+      pushTableUndo("insert table");
+      const block = createEditableTableBlock();
+      insertBlockAtCurrentSelection(block);
+      ensureEditableParagraphAfter(block);
+      setSelectedImage(null);
+      focusTableCell(block.querySelector("th"), true);
+      updateToolbarState();
+      setEditorStatus("Table added. Tab moves between cells; use the table panel for rows, columns and widths.");
+    };
+
+    const addTableRow = (block, position, focusColumnIndex = null) => {
+      const { table, columnCount } = getTableParts(block);
+      const tbody = table?.tBodies?.[0];
+      if (!tbody || !columnCount) return;
+      const cell = getActiveCellInTable(block);
+      const referenceRow = cell?.tagName?.toUpperCase() === "TD" ? cell.closest("tr") : null;
+      const row = document.createElement("tr");
+      for (let index = 0; index < columnCount; index += 1) {
+        row.appendChild(createEditableTableCell("td"));
+      }
+      if (referenceRow) {
+        tbody.insertBefore(row, position === "above" ? referenceRow : referenceRow.nextSibling);
+      } else if (cell) {
+        tbody.insertBefore(row, tbody.firstChild);
+      } else {
+        tbody.appendChild(row);
+      }
+      applyNewsTableLayout(block);
+      const columnIndex = focusColumnIndex ?? (cell ? cell.cellIndex : 0);
+      focusTableCell(row.cells[columnIndex] || row.cells[0]);
+      updateToolbarState();
+      setEditorStatus("Row added.");
+    };
+
+    const duplicateTableRow = (block) => {
+      const cell = getActiveCellInTable(block);
+      if (!cell || cell.tagName.toUpperCase() !== "TD") return;
+      const row = cell.closest("tr");
+      const copy = row.cloneNode(true);
+      copy.querySelectorAll(".cp-news-table-cell-active").forEach((node) => {
+        node.classList.remove("cp-news-table-cell-active");
+      });
+      row.after(copy);
+      focusTableCell(copy.cells[cell.cellIndex] || copy.cells[0]);
+      updateToolbarState();
+      setEditorStatus("Row duplicated.");
+    };
+
+    const moveTableRow = (block, direction) => {
+      const { bodyRows } = getTableParts(block);
+      const cell = getActiveCellInTable(block);
+      if (!cell || cell.tagName.toUpperCase() !== "TD") return;
+      const row = cell.closest("tr");
+      const rowIndex = bodyRows.indexOf(row);
+      if (direction === "up" && rowIndex > 0) {
+        row.parentNode.insertBefore(row, bodyRows[rowIndex - 1]);
+      } else if (direction === "down" && rowIndex >= 0 && rowIndex < bodyRows.length - 1) {
+        row.parentNode.insertBefore(bodyRows[rowIndex + 1], row);
+      } else {
+        return;
+      }
+      focusTableCell(cell);
+      updateToolbarState();
+      setEditorStatus(`Row moved ${direction}.`);
+    };
+
+    const moveTableColumn = (block, direction) => {
+      const { allRows, columnCount } = getTableParts(block);
+      const cell = getActiveCellInTable(block);
+      if (!cell) return;
+      const columnIndex = cell.cellIndex;
+      const targetIndex = direction === "left" ? columnIndex - 1 : columnIndex + 1;
+      if (targetIndex < 0 || targetIndex >= columnCount) return;
+      const { ratios, columnAligns } = readNewsTableLayout(block);
+      allRows.forEach((row) => {
+        const current = row.cells[columnIndex];
+        const target = row.cells[targetIndex];
+        if (direction === "left") {
+          row.insertBefore(current, target);
+        } else {
+          row.insertBefore(target, current);
+        }
+      });
+      [ratios[columnIndex], ratios[targetIndex]] = [ratios[targetIndex], ratios[columnIndex]];
+      [columnAligns[columnIndex], columnAligns[targetIndex]] = [columnAligns[targetIndex], columnAligns[columnIndex]];
+      applyNewsTableLayout(block, { ratios, columnAligns });
+      focusTableCell(cell);
+      updateToolbarState();
+      setEditorStatus(`Column moved ${direction}.`);
+    };
+
+    const replaceTableCellTag = (cell, cellTag) => {
+      const replacement = document.createElement(cellTag);
+      replacement.className = cell.className;
+      replacement.contentEditable = cell.contentEditable;
+      replacement.spellcheck = true;
+      while (cell.firstChild) replacement.appendChild(cell.firstChild);
+      cell.replaceWith(replacement);
+      return replacement;
+    };
+
+    // Turning the header row off keeps its content as the first data row; turning it on promotes the first data row.
+    const setTableHeaderRow = (block, enabled) => {
+      const { table, headerRow, bodyRows, columnCount } = getTableParts(block);
+      const tbody = table?.tBodies?.[0];
+      if (!tbody || !!headerRow === enabled) return;
+      if (enabled) {
+        const promotedRow = bodyRows[0];
+        Array.from(promotedRow.cells).forEach((cell) => replaceTableCellTag(cell, "th"));
+        const thead = document.createElement("thead");
+        thead.appendChild(promotedRow);
+        table.insertBefore(thead, tbody);
+        if (!tbody.rows.length) {
+          const row = document.createElement("tr");
+          for (let index = 0; index < columnCount; index += 1) {
+            row.appendChild(createEditableTableCell("td"));
+          }
+          tbody.appendChild(row);
+        }
+      } else {
+        Array.from(headerRow.cells).forEach((cell) => replaceTableCellTag(cell, "td"));
+        tbody.insertBefore(headerRow, tbody.firstChild);
+        table.tHead.remove();
+      }
+      setActiveTableCell(null);
+    };
+
+    const deleteTableRow = (block) => {
+      const { bodyRows } = getTableParts(block);
+      const cell = getActiveCellInTable(block);
+      if (!cell || cell.tagName.toUpperCase() !== "TD" || bodyRows.length <= 1) return;
+      const row = cell.closest("tr");
+      const rowIndex = bodyRows.indexOf(row);
+      const columnIndex = cell.cellIndex;
+      const nextRow = bodyRows[rowIndex + 1] || bodyRows[rowIndex - 1] || null;
+      row.remove();
+      setActiveTableCell(null);
+      if (nextRow) focusTableCell(nextRow.cells[columnIndex] || nextRow.cells[0]);
+      updateToolbarState();
+      setEditorStatus("Row deleted.");
+    };
+
+    const addTableColumn = (block, position) => {
+      const { headerRow, allRows, columnCount } = getTableParts(block);
+      if (!columnCount || columnCount >= NEWS_TABLE_MAX_COLUMNS) return;
+      const cell = getActiveCellInTable(block);
+      const insertIndex = cell
+        ? cell.cellIndex + (position === "right" ? 1 : 0)
+        : (position === "right" ? columnCount : 0);
+      const { ratios, columnAligns } = readNewsTableLayout(block);
+      allRows.forEach((row) => {
+        const isHeader = row === headerRow;
+        const newCell = createEditableTableCell(isHeader ? "th" : "td", isHeader ? `Column ${columnCount + 1}` : "");
+        row.insertBefore(newCell, row.cells[insertIndex] || null);
+      });
+      ratios.splice(insertIndex, 0, 1);
+      columnAligns.splice(insertIndex, 0, "left");
+      applyNewsTableLayout(block, { ratios, columnAligns });
+      const focusRow = cell?.closest("tr") || allRows[0];
+      focusTableCell(focusRow.cells[insertIndex], focusRow === headerRow);
+      updateToolbarState();
+      setEditorStatus("Column added.");
+    };
+
+    const deleteTableColumn = (block) => {
+      const { allRows, columnCount } = getTableParts(block);
+      const cell = getActiveCellInTable(block);
+      if (!cell || columnCount <= 1) return;
+      const columnIndex = cell.cellIndex;
+      const focusRow = cell.closest("tr");
+      const { ratios, columnAligns } = readNewsTableLayout(block);
+      allRows.forEach((row) => row.cells[columnIndex]?.remove());
+      ratios.splice(columnIndex, 1);
+      columnAligns.splice(columnIndex, 1);
+      applyNewsTableLayout(block, { ratios, columnAligns });
+      setActiveTableCell(null);
+      focusTableCell(focusRow.cells[columnIndex] || focusRow.cells[columnIndex - 1]);
+      updateToolbarState();
+      setEditorStatus("Column deleted.");
+    };
+
+    const removeTableBlock = (block) => {
+      if (!block || !editor.contains(block)) return;
+      const nextBlock = block.nextElementSibling;
+      block.remove();
+      setActiveTableCell(null);
+      if (!editor.children.length) editor.innerHTML = "<p><br></p>";
+      if (nextBlock?.isConnected && nextBlock.matches("p,h2")) {
+        const range = document.createRange();
+        range.selectNodeContents(nextBlock);
+        range.collapse(true);
+        restoreSelectionRange(range);
+        savedEditorRange = range.cloneRange();
+      } else {
+        placeCaretAtEnd();
+      }
+      updateToolbarState();
+      setEditorStatus("Table removed.");
+    };
+
+    const moveToAdjacentTableCell = (cell, backwards) => {
+      const block = getTableBlockFromNode(cell);
+      const { headerRow, bodyRows } = getTableParts(block);
+      const cells = [headerRow, ...bodyRows].filter(Boolean).flatMap((row) => Array.from(row.cells));
+      const index = cells.indexOf(cell);
+      if (index < 0) return;
+      if (backwards) {
+        if (index > 0) focusTableCell(cells[index - 1], true);
+        return;
+      }
+      if (index < cells.length - 1) {
+        focusTableCell(cells[index + 1], true);
+        return;
+      }
+      setActiveTableCell(cell);
+      pushTableUndo("add row");
+      addTableRow(block, "below", 0);
+    };
+
+    const placeCaretInTextBlock = (textBlock, atEnd) => {
+      const range = document.createRange();
+      range.selectNodeContents(textBlock);
+      range.collapse(!atEnd);
+      restoreSelectionRange(range);
+      savedEditorRange = range.cloneRange();
+    };
+
+    const insertTextRowNextToTable = (block, isAbove) => {
+      if (!block?.parentNode) return;
+      const paragraph = document.createElement("p");
+      paragraph.appendChild(document.createElement("br"));
+      block.parentNode.insertBefore(paragraph, isAbove ? block : block.nextSibling);
+      setActiveTableCell(null);
+      placeCaretInTextBlock(paragraph, false);
+      updateToolbarState();
+    };
+
+    const getCellLineHeight = (cellStyle) => (
+      parseFloat(cellStyle.lineHeight) || (parseFloat(cellStyle.fontSize) || 14) * 1.4
+    );
+
+    const isCaretOnFirstLineOfCell = (range, cell) => {
+      if (!range?.collapsed) return false;
+      const beforeRange = document.createRange();
+      beforeRange.selectNodeContents(cell);
+      beforeRange.setEnd(range.startContainer, range.startOffset);
+      const before = beforeRange.cloneContents();
+      // A line break or an earlier block before the caret means it is below the first line.
+      if (before.querySelector("br") || before.childElementCount > 1) return false;
+      const caretRect = range.getClientRects()[0];
+      if (!caretRect?.height) return true;
+      const cellStyle = window.getComputedStyle(cell);
+      const lineHeight = getCellLineHeight(cellStyle);
+      const firstLineBottom = cell.getBoundingClientRect().top + (parseFloat(cellStyle.paddingTop) || 0) + lineHeight;
+      return caretRect.top < firstLineBottom - lineHeight / 2;
+    };
+
+    const isCaretOnLastLineOfCell = (range, cell) => {
+      if (!range?.collapsed) return false;
+      const afterRange = document.createRange();
+      afterRange.selectNodeContents(cell);
+      afterRange.setStart(range.endContainer, range.endOffset);
+      const after = afterRange.cloneContents();
+      // A later block, or a line break with more content after it, means the caret is above the last line.
+      // A trailing <br> is only the placeholder of an empty or finished line.
+      if (after.childElementCount > 1 || Array.from(after.querySelectorAll("br")).some((br) => br.nextSibling)) {
+        return false;
+      }
+      const caretRect = range.getClientRects()[0];
+      if (!caretRect?.height) return true;
+      const lineHeight = getCellLineHeight(window.getComputedStyle(cell));
+      // The content's own bottom: the cell itself stretches to the tallest cell of its row.
+      const contentRange = document.createRange();
+      contentRange.selectNodeContents(cell);
+      return caretRect.bottom > contentRange.getBoundingClientRect().bottom - lineHeight / 2;
+    };
+
+    // Puts the caret on the first or last line of a cell, as close as possible to the horizontal position x.
+    const placeCaretInCellAtX = (cell, x, atTop) => {
+      cell.scrollIntoView({ block: "nearest" });
+      const cellStyle = window.getComputedStyle(cell);
+      const cellRect = cell.getBoundingClientRect();
+      const contentRange = document.createRange();
+      contentRange.selectNodeContents(cell);
+      const contentRect = contentRange.getBoundingClientRect();
+      const lineHeight = getCellLineHeight(cellStyle);
+      const pointX = Math.min(
+        Math.max(x, cellRect.left + (parseFloat(cellStyle.paddingLeft) || 0) + 1),
+        cellRect.right - (parseFloat(cellStyle.paddingRight) || 0) - 1
+      );
+      const pointY = atTop ? contentRect.top + lineHeight / 2 : contentRect.bottom - lineHeight / 2;
+      let range = document.caretRangeFromPoint?.(pointX, pointY) || null;
+      if (!range && document.caretPositionFromPoint) {
+        const position = document.caretPositionFromPoint(pointX, pointY);
+        if (position) {
+          range = document.createRange();
+          range.setStart(position.offsetNode, position.offset);
+        }
+      }
+      if (!range || !cell.contains(range.startContainer)) {
+        range = document.createRange();
+        range.selectNodeContents(cell.querySelector(`:scope > p:${atTop ? "first" : "last"}-child`) || cell);
+      }
+      range.collapse(true);
+      try {
+        cell.focus({ preventScroll: true });
+      } catch (_error) {
+        cell.focus();
+      }
+      const selection = window.getSelection();
+      selection?.removeAllRanges();
+      selection?.addRange(range);
+      savedEditorRange = range.cloneRange();
+      setActiveTableCell(cell);
+      updateToolbarState();
+    };
+
+    // ArrowUp/ArrowDown on the first/last line of a cell move to the cell above/below in the same column.
+    // Past the top or bottom row the caret leaves the table: into the text next to it,
+    // or into a new text row when there is none (e.g. the table is first, or two tables touch).
+    const handleVerticalArrowInTable = (range, cell, isUp) => {
+      const block = getTableBlockFromNode(cell);
+      if (!block) return false;
+      if (!(isUp ? isCaretOnFirstLineOfCell(range, cell) : isCaretOnLastLineOfCell(range, cell))) return false;
+      const rows = getTableParts(block).allRows;
+      const targetRow = rows[rows.indexOf(cell.closest("tr")) + (isUp ? -1 : 1)];
+      if (targetRow) {
+        const caretX = range.getClientRects()[0]?.left ?? cell.getBoundingClientRect().left;
+        placeCaretInCellAtX(targetRow.cells[cell.cellIndex] || targetRow.cells[targetRow.cells.length - 1], caretX, !isUp);
+        return true;
+      }
+      const sibling = isUp ? block.previousElementSibling : block.nextElementSibling;
+      if (!sibling || sibling.classList.contains("news-table-block")) {
+        insertTextRowNextToTable(block, isUp);
+        return true;
+      }
+      if (sibling.matches("p,h2")) {
+        setActiveTableCell(null);
+        placeCaretInTextBlock(sibling, isUp);
+        updateToolbarState();
+        return true;
+      }
+      return false;
+    };
+
+    const removeEmptyTextRowNextToTable = (textBlock) => {
+      const previous = textBlock.previousElementSibling;
+      const next = textBlock.nextElementSibling;
+      const isTable = (node) => !!node?.classList?.contains("news-table-block");
+      // The row after a trailing table is the only place to type below it.
+      if (isTable(previous) && !next) return;
+      textBlock.remove();
+      if (previous && !isTable(previous)) {
+        placeCaretInTextBlock(previous, true);
+      } else if (next && !isTable(next)) {
+        placeCaretInTextBlock(next, false);
+      } else if (isTable(previous)) {
+        const cells = previous.querySelectorAll(":scope > table > tbody > tr > td");
+        focusTableCell(cells[cells.length - 1]);
+      } else if (isTable(next)) {
+        focusTableCell(next.querySelector(":scope > table > thead > tr > th, :scope > table > tbody > tr > td"));
+      }
+      updateToolbarState();
+    };
+
+    // Returns true when the key was handled here, so the browser must not delete a table.
+    const handleDeleteKeyNextToTable = (range, key) => {
+      if (!range?.collapsed) return false;
+      const textBlock = getElementFromRangeNode(range.startContainer)?.closest?.("p,h2") || null;
+      if (!textBlock || !editor.contains(textBlock) || textBlock.closest("th,td")) return false;
+      const previousIsTable = !!textBlock.previousElementSibling?.classList?.contains("news-table-block");
+      const nextIsTable = !!textBlock.nextElementSibling?.classList?.contains("news-table-block");
+      if (!previousIsTable && !nextIsTable) return false;
+      if (!String(textBlock.textContent || "").trim() && !textBlock.querySelector("img")) {
+        removeEmptyTextRowNextToTable(textBlock);
+        return true;
+      }
+      if (key === "Backspace" ? !previousIsTable : !nextIsTable) return false;
+      const edgeRange = document.createRange();
+      edgeRange.selectNodeContents(textBlock);
+      if (key === "Backspace") {
+        edgeRange.setEnd(range.startContainer, range.startOffset);
+      } else {
+        edgeRange.setStart(range.endContainer, range.endOffset);
+      }
+      const edgeContent = edgeRange.cloneContents();
+      return !String(edgeContent.textContent || "").trim() && !edgeContent.querySelector("img");
+    };
+
+    const showTableLayoutDialog = (block) => {
+      if (!block || !editor.contains(block)) return;
+      const { headerRow, columnCount } = getTableParts(block);
+      if (!columnCount) return;
+      const returnCell = getActiveCellInTable(block);
+      const initialLayout = readNewsTableLayout(block);
+      let selectedWidth = initialLayout.width;
+      let selectedAlign = initialLayout.align;
+      const { ratios } = initialLayout;
+      const selectedColumnAligns = initialLayout.columnAligns.slice();
+      isTableDialogOpen = true;
+      hideFloatingToolbar();
+
+      const overlay = document.createElement("div");
+      overlay.style.position = "fixed";
+      overlay.style.inset = "0";
+      overlay.style.background = "rgba(24, 31, 41, 0.42)";
+      overlay.style.display = "flex";
+      overlay.style.alignItems = "center";
+      overlay.style.justifyContent = "center";
+      overlay.style.padding = "16px";
+      overlay.style.zIndex = "1000";
+
+      const dialog = document.createElement("div");
+      dialog.style.width = "100%";
+      dialog.style.maxWidth = "520px";
+      dialog.style.background = "#fff";
+      dialog.style.border = "1px solid #d8dee8";
+      dialog.style.borderRadius = "8px";
+      dialog.style.boxShadow = "0 16px 36px rgba(15, 28, 48, 0.22)";
+      dialog.style.padding = "16px";
+      dialog.style.display = "grid";
+      dialog.style.gap = "14px";
+      dialog.style.maxHeight = "calc(100vh - 32px)";
+      dialog.style.overflowY = "auto";
+      dialog.style.boxSizing = "border-box";
+
+      const title = document.createElement("div");
+      title.textContent = "Table layout";
+      title.style.fontSize = "16px";
+      title.style.fontWeight = "700";
+      title.style.color = "#222";
+
+      const createSection = (labelText) => {
+        const section = document.createElement("div");
+        section.className = "cp-news-table-dialog-section";
+        const label = document.createElement("div");
+        label.className = "cp-news-table-dialog-label";
+        label.textContent = labelText;
+        section.appendChild(label);
+        return section;
+      };
+
+      const previewTrack = document.createElement("div");
+      previewTrack.className = "cp-news-table-ratio-track";
+      const preview = document.createElement("div");
+      preview.className = "cp-news-table-ratio-preview";
+      previewTrack.appendChild(preview);
+
+      const ratioInputs = [];
+      const ratioSteppers = [];
+      const readRatios = () => ratioInputs.map((input) => Number(input.value));
+      const areRatiosValid = (values) => values.every((ratio) => (
+        Number.isInteger(ratio) && ratio >= 1 && ratio <= NEWS_TABLE_MAX_COLUMN_RATIO
+      ));
+      const renderPreview = () => {
+        const values = readRatios();
+        const previewAlign = selectedWidth === 100 ? "left" : selectedAlign;
+        preview.style.width = `${selectedWidth}%`;
+        preview.style.marginLeft = previewAlign === "left" ? "0" : "auto";
+        preview.style.marginRight = previewAlign === "center" ? "auto" : "0";
+        alignOptions.querySelectorAll(".cp-news-table-width-option").forEach((item) => {
+          item.disabled = selectedWidth === 100;
+          item.classList.toggle("active", item.dataset.align === previewAlign);
+        });
+        preview.innerHTML = "";
+        const safeValues = values.map((ratio) => (areRatiosValid([ratio]) ? ratio : 1));
+        safeValues.forEach((ratio, index) => {
+          const segment = document.createElement("span");
+          segment.style.flex = `${ratio} 1 0`;
+          segment.textContent = String(values[index] || "?");
+          preview.appendChild(segment);
+        });
+        ratioSteppers.forEach(({ input, minusButton, plusButton }) => {
+          const value = Number(input.value);
+          minusButton.disabled = Number.isInteger(value) && value <= 1;
+          plusButton.disabled = Number.isInteger(value) && value >= NEWS_TABLE_MAX_COLUMN_RATIO;
+        });
+      };
+
+      const widthSection = createSection("Table width");
+      const widthOptions = document.createElement("div");
+      widthOptions.className = "cp-news-table-width-options";
+      NEWS_TABLE_WIDTH_OPTIONS.forEach((option) => {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = "cp-news-table-width-option";
+        button.textContent = `${option}%`;
+        button.classList.toggle("active", option === selectedWidth);
+        button.addEventListener("click", () => {
+          selectedWidth = option;
+          widthOptions.querySelectorAll(".cp-news-table-width-option").forEach((item) => {
+            item.classList.toggle("active", item === button);
+          });
+          renderPreview();
+        });
+        widthOptions.appendChild(button);
+      });
+      widthSection.appendChild(widthOptions);
+
+      const alignSection = createSection("Table position");
+      const alignOptions = document.createElement("div");
+      alignOptions.className = "cp-news-table-width-options";
+      [
+        ["left", "Left", "fa-solid fa-align-left"],
+        ["center", "Center", "fa-solid fa-align-center"],
+        ["right", "Right", "fa-solid fa-align-right"],
+      ].forEach(([option, labelText, iconClass]) => {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = "cp-news-table-width-option";
+        button.dataset.align = option;
+        const icon = document.createElement("i");
+        icon.className = iconClass;
+        icon.setAttribute("aria-hidden", "true");
+        button.appendChild(icon);
+        button.appendChild(document.createTextNode(` ${labelText}`));
+        button.addEventListener("click", () => {
+          selectedAlign = option;
+          renderPreview();
+        });
+        alignOptions.appendChild(button);
+      });
+      alignSection.appendChild(alignOptions);
+
+      const ratioSection = createSection("Columns");
+      const ratioRow = document.createElement("div");
+      ratioRow.className = "cp-news-table-ratio-inputs";
+      ratios.forEach((ratio, index) => {
+        if (index > 0) {
+          const separator = document.createElement("span");
+          separator.className = "cp-news-table-ratio-separator";
+          separator.textContent = "×";
+          ratioRow.appendChild(separator);
+        }
+        const field = document.createElement("div");
+        field.className = "cp-news-table-ratio-field";
+        const caption = document.createElement("span");
+        const headerText = String(headerRow?.cells[index]?.textContent || "").replace(/\s+/g, " ").trim();
+        caption.textContent = headerText || `Column ${index + 1}`;
+        caption.title = caption.textContent;
+        // A text field, not type=number: the mouse wheel must not change the value.
+        const input = document.createElement("input");
+        input.type = "text";
+        input.inputMode = "numeric";
+        input.autocomplete = "off";
+        input.maxLength = 2;
+        input.value = String(ratio);
+        input.setAttribute("aria-label", `${caption.textContent} width`);
+        input.addEventListener("input", () => {
+          input.value = input.value.replace(/\D/g, "");
+          renderPreview();
+        });
+        ratioInputs.push(input);
+
+        const createStepButton = (delta, iconClass, label) => {
+          const button = document.createElement("button");
+          button.type = "button";
+          button.title = label;
+          button.setAttribute("aria-label", label);
+          const icon = document.createElement("i");
+          icon.className = iconClass;
+          icon.setAttribute("aria-hidden", "true");
+          button.appendChild(icon);
+          button.addEventListener("click", () => {
+            const current = Number.parseInt(input.value, 10);
+            const next = Number.isInteger(current) ? current + delta : 1;
+            input.value = String(Math.min(NEWS_TABLE_MAX_COLUMN_RATIO, Math.max(1, next)));
+            renderPreview();
+          });
+          return button;
+        };
+        const stepper = document.createElement("div");
+        stepper.className = "cp-news-table-ratio-stepper";
+        const minusButton = createStepButton(-1, "fa-solid fa-minus", `Decrease ${caption.textContent} width`);
+        const plusButton = createStepButton(1, "fa-solid fa-plus", `Increase ${caption.textContent} width`);
+        stepper.appendChild(minusButton);
+        stepper.appendChild(input);
+        stepper.appendChild(plusButton);
+        ratioSteppers.push({ input, minusButton, plusButton });
+
+        const alignGroup = document.createElement("div");
+        alignGroup.className = "cp-news-table-col-align";
+        [
+          ["left", "fa-solid fa-align-left"],
+          ["center", "fa-solid fa-align-center"],
+          ["right", "fa-solid fa-align-right"],
+        ].forEach(([option, iconClass]) => {
+          const button = document.createElement("button");
+          button.type = "button";
+          button.dataset.align = option;
+          button.title = `Align ${caption.textContent} ${option}`;
+          button.setAttribute("aria-label", button.title);
+          button.classList.toggle("active", selectedColumnAligns[index] === option);
+          const icon = document.createElement("i");
+          icon.className = iconClass;
+          icon.setAttribute("aria-hidden", "true");
+          button.appendChild(icon);
+          button.addEventListener("click", () => {
+            selectedColumnAligns[index] = option;
+            alignGroup.querySelectorAll("button").forEach((item) => {
+              item.classList.toggle("active", item === button);
+            });
+          });
+          alignGroup.appendChild(button);
+        });
+
+        field.appendChild(caption);
+        field.appendChild(stepper);
+        field.appendChild(alignGroup);
+        ratioRow.appendChild(field);
+      });
+      ratioSection.appendChild(ratioRow);
+      ratioSection.appendChild(previewTrack);
+
+      const styleSection = createSection("Style");
+      const styleOptions = document.createElement("div");
+      styleOptions.className = "cp-news-table-style-options";
+      const createStyleOption = (labelText, checked) => {
+        const option = document.createElement("label");
+        const checkbox = document.createElement("input");
+        checkbox.type = "checkbox";
+        checkbox.checked = checked;
+        option.appendChild(checkbox);
+        option.appendChild(document.createTextNode(labelText));
+        styleOptions.appendChild(option);
+        return checkbox;
+      };
+      const headerRowInput = createStyleOption("Header row", !!headerRow);
+      const stripedInput = createStyleOption("Striped rows", initialLayout.striped);
+      const firstColumnInput = createStyleOption("First column as header", initialLayout.firstColumnHeader);
+      const compactInput = createStyleOption("Compact", initialLayout.compact);
+      styleSection.appendChild(styleOptions);
+
+      const error = document.createElement("div");
+      error.className = "cp-news-link-dialog-error";
+
+      const actions = document.createElement("div");
+      actions.style.display = "flex";
+      actions.style.justifyContent = "flex-end";
+      actions.style.gap = "8px";
+
+      const equalBtn = document.createElement("button");
+      equalBtn.type = "button";
+      equalBtn.className = "cp-btn cp-btn-secondary";
+      equalBtn.textContent = "Equal widths";
+      equalBtn.style.marginRight = "auto";
+
+      const cancelBtn = document.createElement("button");
+      cancelBtn.type = "button";
+      cancelBtn.className = "cp-btn cp-btn-secondary";
+      cancelBtn.textContent = "Cancel";
+
+      const saveBtn = document.createElement("button");
+      saveBtn.type = "button";
+      saveBtn.className = "cp-btn cp-btn-primary";
+      saveBtn.textContent = "Apply";
+
+      const closeModal = () => {
+        isTableDialogOpen = false;
+        overlay.remove();
+        if (returnCell?.isConnected) {
+          focusTableCell(returnCell);
+        } else {
+          focusEditor();
+        }
+      };
+
+      equalBtn.addEventListener("click", () => {
+        ratioInputs.forEach((input) => {
+          input.value = "1";
+        });
+        renderPreview();
+      });
+      cancelBtn.addEventListener("click", closeModal);
+      overlay.addEventListener("click", (event) => {
+        if (event.target === overlay) closeModal();
+      });
+      dialog.addEventListener("keydown", (event) => {
+        if (event.key === "Escape") closeModal();
+        if (event.key === "Enter" && event.target?.tagName?.toUpperCase() === "INPUT") {
+          event.preventDefault();
+          saveBtn.click();
+        }
+      });
+      saveBtn.addEventListener("click", () => {
+        error.textContent = "";
+        const values = readRatios();
+        if (!areRatiosValid(values)) {
+          error.textContent = `Each column width must be a whole number from 1 to ${NEWS_TABLE_MAX_COLUMN_RATIO}.`;
+          return;
+        }
+        if (editor.contains(block)) {
+          pushTableUndo("table layout");
+          setTableHeaderRow(block, headerRowInput.checked);
+          applyNewsTableLayout(block, {
+            ratios: values,
+            width: selectedWidth,
+            align: selectedAlign,
+            columnAligns: selectedColumnAligns,
+            striped: stripedInput.checked,
+            compact: compactInput.checked,
+            firstColumnHeader: firstColumnInput.checked,
+          });
+          const positionText = selectedWidth === 100 ? "" : `, ${selectedAlign}`;
+          setEditorStatus(`Table layout updated: ${selectedWidth}% width${positionText}, columns ${values.join(" × ")}.`);
+          updateToolbarState();
+        }
+        closeModal();
+      });
+
+      actions.appendChild(equalBtn);
+      actions.appendChild(cancelBtn);
+      actions.appendChild(saveBtn);
+      dialog.appendChild(title);
+      dialog.appendChild(widthSection);
+      dialog.appendChild(alignSection);
+      dialog.appendChild(ratioSection);
+      dialog.appendChild(styleSection);
+      dialog.appendChild(error);
+      dialog.appendChild(actions);
+      overlay.appendChild(dialog);
+      document.body.appendChild(overlay);
+      renderPreview();
+      ratioInputs[0]?.focus();
+      ratioInputs[0]?.select();
+    };
+
+    // Positions instead of node references: normalization rebuilds the cells.
+    const getTableCellPosition = (cell) => {
+      const block = getTableBlockFromNode(cell);
+      if (!block) return null;
+      return {
+        blockIndex: Array.from(editor.querySelectorAll(".news-table-block")).indexOf(block),
+        rowIndex: getTableParts(block).allRows.indexOf(cell.closest("tr")),
+        columnIndex: cell.cellIndex,
+      };
+    };
+
+    const findTableCellByPosition = (position) => {
+      if (!position) return null;
+      const block = editor.querySelectorAll(".news-table-block")[position.blockIndex];
+      return getTableParts(block).allRows[position.rowIndex]?.cells[position.columnIndex] || null;
+    };
+
+    const pushTableUndo = (label) => {
+      tableUndoStack.push({
+        html: editor.innerHTML,
+        label,
+        focus: activeTableCell ? getTableCellPosition(activeTableCell) : null,
+      });
+      if (tableUndoStack.length > 20) tableUndoStack.shift();
+      isTableUndoLatest = true;
+    };
+
+    const undoTableChange = () => {
+      const entry = tableUndoStack.pop();
+      if (!entry) return false;
+      isTableUndoLatest = tableUndoStack.length > 0;
+      preserveEditorScroll(() => {
+        editor.innerHTML = entry.html;
+        normalizeEditorHtml();
+        const cell = findTableCellByPosition(entry.focus);
+        if (cell) {
+          focusTableCell(cell);
+        } else {
+          focusEditor();
+        }
+      });
+      updateToolbarState();
+      setEditorStatus(`Undone: ${entry.label}.`);
+      return true;
+    };
+
+    const TABLE_ACTION_UNDO_LABELS = {
+      "row-above": "add row",
+      "row-below": "add row",
+      "row-duplicate": "duplicate row",
+      "row-up": "move row",
+      "row-down": "move row",
+      "row-delete": "delete row",
+      "col-left": "add column",
+      "col-right": "add column",
+      "col-move-left": "move column",
+      "col-move-right": "move column",
+      "col-delete": "delete column",
+      remove: "remove table",
+    };
+
+    const setSelectedTableCells = (cells) => {
+      selectedTableCells.forEach((cell) => cell.classList.remove("cp-news-table-cell-selected"));
+      selectedTableCells = cells.length > 1 ? cells : [];
+      selectedTableCells.forEach((cell) => cell.classList.add("cp-news-table-cell-selected"));
+      editor.querySelectorAll(".news-table-block").forEach(updateTableControls);
+    };
+
+    const clearTableCellSelection = () => {
+      if (selectedTableCells.length) setSelectedTableCells([]);
+    };
+
+    // Selects the rectangle of cells between two corner cells of the same table.
+    const selectTableCellRange = (fromCell, toCell) => {
+      const block = getTableBlockFromNode(fromCell);
+      if (!block || getTableBlockFromNode(toCell) !== block) return;
+      const rows = getTableParts(block).allRows;
+      const fromRow = rows.indexOf(fromCell.closest("tr"));
+      const toRow = rows.indexOf(toCell.closest("tr"));
+      if (fromRow < 0 || toRow < 0) return;
+      const cells = [];
+      for (let rowIndex = Math.min(fromRow, toRow); rowIndex <= Math.max(fromRow, toRow); rowIndex += 1) {
+        const firstColumn = Math.min(fromCell.cellIndex, toCell.cellIndex);
+        const lastColumn = Math.max(fromCell.cellIndex, toCell.cellIndex);
+        for (let columnIndex = firstColumn; columnIndex <= lastColumn; columnIndex += 1) {
+          const cell = rows[rowIndex].cells[columnIndex];
+          if (cell) cells.push(cell);
+        }
+      }
+      setSelectedTableCells(cells);
+    };
+
+    const INLINE_FORMAT_TAGS = {
+      bold: ["STRONG", "B"],
+      italic: ["EM", "I"],
+    };
+
+    const getFormattableTextNodes = (cell) => {
+      const walker = document.createTreeWalker(cell, NodeFilter.SHOW_TEXT);
+      const nodes = [];
+      let node = walker.nextNode();
+      while (node) {
+        if (String(node.textContent || "").trim() && !node.parentElement?.closest("button")) nodes.push(node);
+        node = walker.nextNode();
+      }
+      return nodes;
+    };
+
+    const hasInlineFormat = (node, cell, tags) => {
+      let element = node.parentElement;
+      while (element && element !== cell) {
+        if (tags.includes(element.tagName)) return true;
+        element = element.parentElement;
+      }
+      return false;
+    };
+
+    // Applies the format to every selected cell unless all of their text already has it, then removes it.
+    const toggleSelectedCellsFormat = (format) => {
+      if (selectedTableCells.length < 2) return false;
+      const tags = INLINE_FORMAT_TAGS[format];
+      const textNodes = selectedTableCells.flatMap((cell) => (
+        getFormattableTextNodes(cell).map((node) => ({ cell, node }))
+      ));
+      if (!textNodes.length) {
+        setEditorStatus("Selected cells have no text to format.");
+        return true;
+      }
+      const shouldApply = textNodes.some(({ cell, node }) => !hasInlineFormat(node, cell, tags));
+      pushTableUndo(format);
+      if (shouldApply) {
+        textNodes.forEach(({ cell, node }) => {
+          if (hasInlineFormat(node, cell, tags)) return;
+          const wrapper = document.createElement(tags[0].toLowerCase());
+          node.replaceWith(wrapper);
+          wrapper.appendChild(node);
+        });
+      } else {
+        selectedTableCells.forEach((cell) => {
+          cell.querySelectorAll(tags.join(",").toLowerCase()).forEach((element) => {
+            element.replaceWith(...element.childNodes);
+          });
+        });
+      }
+      setEditorStatus(`${format === "bold" ? "Bold" : "Italic"} ${shouldApply ? "applied to" : "removed from"} ${selectedTableCells.length} cells.`);
+      updateToolbarState();
+      return true;
+    };
+
+    const clearSelectedTableCells = () => {
+      if (selectedTableCells.length < 2) return false;
+      const snapshot = selectedTableCells.map((cell) => ({
+        position: getTableCellPosition(cell),
+        html: cell.innerHTML,
+      }));
+      pushTableUndo("clear cells");
+      selectedTableCells.forEach((cell) => {
+        cell.innerHTML = "<p><br></p>";
+      });
+      const clearedCount = selectedTableCells.length;
+      updateToolbarState();
+      setEditorStatus(`Cleared ${clearedCount} cells.`, false, {
+        label: "Undo",
+        onClick: () => {
+          snapshot.forEach(({ position, html }) => {
+            const cell = findTableCellByPosition(position);
+            if (cell) cell.innerHTML = html;
+          });
+          setEditorStatus(`Restored ${clearedCount} cells.`);
+        },
+      });
+      return true;
+    };
+
+    const startTableCellDrag = (anchorCell) => {
+      cellDragState = { anchor: anchorCell, lastCell: null };
+      const handleMove = (moveEvent) => {
+        const overCell = getTableCellFromNode(moveEvent.target);
+        if (!cellDragState || !overCell || overCell === cellDragState.lastCell) return;
+        if (getTableBlockFromNode(overCell) !== getTableBlockFromNode(cellDragState.anchor)) return;
+        if (overCell === cellDragState.anchor && !cellDragState.lastCell) return;
+        cellDragState.lastCell = overCell;
+        selectTableCellRange(cellDragState.anchor, overCell);
+        window.getSelection()?.removeAllRanges();
+      };
+      const handleUp = () => {
+        document.removeEventListener("mousemove", handleMove);
+        document.removeEventListener("mouseup", handleUp);
+        const lastCell = cellDragState?.lastCell;
+        cellDragState = null;
+        // Keep a caret in the last cell so keyboard shortcuts reach the editor.
+        if (lastCell && selectedTableCells.length > 1) focusTableCell(lastCell);
+      };
+      document.addEventListener("mousemove", handleMove);
+      document.addEventListener("mouseup", handleUp);
+    };
+
+    const handleTableAction = (block, action) => {
+      if (!block || !editor.contains(block)) return;
+      if (action === "cells-bold" || action === "cells-italic") {
+        toggleSelectedCellsFormat(action === "cells-bold" ? "bold" : "italic");
+        return;
+      }
+      if (action === "cells-clear") {
+        clearSelectedTableCells();
+        return;
+      }
+      clearTableCellSelection();
+      if (TABLE_ACTION_UNDO_LABELS[action]) pushTableUndo(TABLE_ACTION_UNDO_LABELS[action]);
+      preserveEditorScroll(() => {
+        if (action === "row-above" || action === "row-below") {
+          addTableRow(block, action === "row-above" ? "above" : "below");
+        } else if (action === "row-duplicate") {
+          duplicateTableRow(block);
+        } else if (action === "row-up" || action === "row-down") {
+          moveTableRow(block, action === "row-up" ? "up" : "down");
+        } else if (action === "col-move-left" || action === "col-move-right") {
+          moveTableColumn(block, action === "col-move-left" ? "left" : "right");
+        } else if (action === "row-delete") {
+          deleteTableRow(block);
+        } else if (action === "col-left" || action === "col-right") {
+          addTableColumn(block, action === "col-left" ? "left" : "right");
+        } else if (action === "col-delete") {
+          deleteTableColumn(block);
+        } else if (action === "remove") {
+          removeTableBlock(block);
+        }
+      });
+      if (action === "layout") showTableLayoutDialog(block);
     };
 
     const getSelectedSafeHtml = (range) => {
@@ -4928,7 +6984,7 @@
         : range.startContainer.parentElement;
       const block = element?.closest?.(".news-section-title,h1,h2,h3,h4,h5,h6,p,div") || null;
       if (!block || block === editor || !editor.contains(block)) return null;
-      if (block.matches?.(".news-accordion-group,.news-accordion-content,.news-spoiler-content,.news-accordion-block,.news-spoiler-block")) return null;
+      if (block.matches?.(".news-accordion-group,.news-accordion-content,.news-spoiler-content,.news-accordion-block,.news-spoiler-block,.news-table-block,.cp-news-table-controls")) return null;
       if (getQuoteBlockFromNode(block)) return null;
       if (block.querySelector?.("img")) return null;
       return block;
@@ -5164,6 +7220,186 @@
       input.select();
     };
 
+    let isIconDialogOpen = false;
+
+    const insertInlineIconAtRange = (range, icon) => {
+      let targetRange = range && editor.contains(range.commonAncestorContainer) ? range.cloneRange() : null;
+      const targetElement = targetRange ? getElementFromRangeNode(targetRange.startContainer) : null;
+      const isInsideControls = !!targetElement?.closest?.(".cp-news-table-controls,.cp-news-accordion-controls,button");
+      if (!targetRange || isInsideControls) {
+        let paragraph = Array.from(editor.children).reverse().find((child) => child.tagName === "P") || null;
+        if (!paragraph) {
+          paragraph = document.createElement("p");
+          editor.appendChild(paragraph);
+        }
+        targetRange = document.createRange();
+        targetRange.selectNodeContents(paragraph);
+        targetRange.collapse(false);
+      }
+      const image = document.createElement("img");
+      image.className = "news-inline-icon";
+      image.src = icon.url;
+      image.alt = icon.name;
+      targetRange.deleteContents();
+      targetRange.insertNode(image);
+      placeCaretAfter(image);
+      setSelectedImage(null);
+      updateToolbarState();
+      setEditorStatus(`Icon "${icon.name}" added.`);
+    };
+
+    const showIconDialog = () => {
+      const savedRange = rememberEditorSelection() || (savedEditorRange ? savedEditorRange.cloneRange() : null);
+      isIconDialogOpen = true;
+      hideFloatingToolbar();
+
+      const overlay = document.createElement("div");
+      overlay.style.position = "fixed";
+      overlay.style.inset = "0";
+      overlay.style.background = "rgba(24, 31, 41, 0.42)";
+      overlay.style.display = "flex";
+      overlay.style.alignItems = "center";
+      overlay.style.justifyContent = "center";
+      overlay.style.padding = "16px";
+      overlay.style.zIndex = "1000";
+
+      const dialog = document.createElement("div");
+      dialog.style.width = "100%";
+      dialog.style.maxWidth = "420px";
+      dialog.style.background = "#fff";
+      dialog.style.border = "1px solid #d8dee8";
+      dialog.style.borderRadius = "8px";
+      dialog.style.boxShadow = "0 16px 36px rgba(15, 28, 48, 0.22)";
+      dialog.style.padding = "16px";
+      dialog.style.display = "grid";
+      dialog.style.gap = "10px";
+
+      const title = document.createElement("div");
+      title.textContent = "Add icon";
+      title.style.fontSize = "16px";
+      title.style.fontWeight = "700";
+      title.style.color = "#222";
+
+      const searchWrap = document.createElement("div");
+      searchWrap.className = "cp-dd-search";
+      searchWrap.style.padding = "0";
+      searchWrap.style.border = "0";
+      const searchInput = document.createElement("input");
+      searchInput.type = "text";
+      searchInput.placeholder = "Type to filter...";
+      searchInput.disabled = true;
+      searchWrap.appendChild(searchInput);
+
+      const list = document.createElement("div");
+      list.className = "cp-news-icon-list";
+      const renderListMessage = (message) => {
+        list.innerHTML = "";
+        const empty = document.createElement("div");
+        empty.className = "cp-news-icon-empty";
+        empty.textContent = message;
+        list.appendChild(empty);
+      };
+      renderListMessage("Loading icons...");
+
+      const actions = document.createElement("div");
+      actions.style.display = "flex";
+      actions.style.justifyContent = "flex-end";
+      const cancelBtn = document.createElement("button");
+      cancelBtn.type = "button";
+      cancelBtn.className = "cp-btn cp-btn-secondary";
+      cancelBtn.textContent = "Cancel";
+      actions.appendChild(cancelBtn);
+
+      const closeModal = () => {
+        isIconDialogOpen = false;
+        overlay.remove();
+        if (savedRange && editor.contains(savedRange.commonAncestorContainer)) {
+          restoreSelectionRange(savedRange);
+        } else {
+          focusEditor();
+        }
+      };
+
+      const chooseIcon = (icon) => {
+        isIconDialogOpen = false;
+        overlay.remove();
+        preserveEditorScroll(() => insertInlineIconAtRange(savedRange, icon));
+      };
+
+      let icons = [];
+      const renderIcons = () => {
+        const query = String(searchInput.value || "").trim().toLowerCase();
+        const visible = icons.filter((icon) => (
+          !query || `${icon.name} ${icon.category}`.toLowerCase().includes(query)
+        ));
+        if (!visible.length) {
+          renderListMessage(icons.length ? "Nothing found." : "No icons yet.");
+          return;
+        }
+        list.innerHTML = "";
+        let currentCategory = null;
+        visible.forEach((icon) => {
+          if (icon.category !== currentCategory) {
+            currentCategory = icon.category;
+            const group = document.createElement("div");
+            group.className = "cp-news-icon-group";
+            group.textContent = currentCategory;
+            list.appendChild(group);
+          }
+          const option = document.createElement("button");
+          option.type = "button";
+          option.className = "cp-dd-option";
+          const image = document.createElement("img");
+          image.className = "cp-news-icon-option-img";
+          image.src = icon.url;
+          image.alt = "";
+          image.loading = "lazy";
+          const label = document.createElement("span");
+          label.className = "cp-dd-option-label";
+          label.textContent = icon.name;
+          option.appendChild(image);
+          option.appendChild(label);
+          option.addEventListener("click", () => chooseIcon(icon));
+          list.appendChild(option);
+        });
+      };
+
+      cancelBtn.addEventListener("click", closeModal);
+      overlay.addEventListener("click", (event) => {
+        if (event.target === overlay) closeModal();
+      });
+      dialog.addEventListener("keydown", (event) => {
+        if (event.key === "Escape") closeModal();
+      });
+      searchInput.addEventListener("input", renderIcons);
+      searchInput.addEventListener("keydown", (event) => {
+        if (event.key !== "Enter") return;
+        event.preventDefault();
+        list.querySelector(".cp-dd-option")?.click();
+      });
+
+      dialog.appendChild(title);
+      dialog.appendChild(searchWrap);
+      dialog.appendChild(list);
+      dialog.appendChild(actions);
+      overlay.appendChild(dialog);
+      document.body.appendChild(overlay);
+      cancelBtn.focus();
+
+      fetchNewsInlineIconLibrary()
+        .then((library) => {
+          if (!overlay.isConnected) return;
+          icons = library;
+          searchInput.disabled = false;
+          renderIcons();
+          searchInput.focus();
+        })
+        .catch((error) => {
+          if (!overlay.isConnected) return;
+          renderListMessage(error?.message || "Failed to load icons.");
+        });
+    };
+
     const uploadDescriptionImageFile = async (file, preserveSource = false) => {
       const sizeError = getImageUploadSizeError(file);
       if (sizeError) throw new Error(sizeError);
@@ -5360,14 +7596,14 @@
         label: "Bold",
         iconClass: "fa-solid fa-bold",
         title: "Bold (Ctrl/Cmd+B)",
-        onClick: () => runCommand("bold"),
+        onClick: () => toggleSelectedCellsFormat("bold") || runCommand("bold"),
       },
       {
         key: "italic",
         label: "Italic",
         iconClass: "fa-solid fa-italic",
         title: "Italic (Ctrl/Cmd+I)",
-        onClick: () => runCommand("italic"),
+        onClick: () => toggleSelectedCellsFormat("italic") || runCommand("italic"),
       },
       {
         key: "ordered",
@@ -5410,6 +7646,20 @@
         iconClass: "fa-solid fa-eye",
         title: "Add spoiler",
         onClick: () => insertDescriptionExpandableBlock("spoiler"),
+      },
+      {
+        key: "table",
+        label: "Table",
+        iconClass: "fa-solid fa-table",
+        title: "Add table",
+        onClick: () => insertDescriptionTable(),
+      },
+      {
+        key: "icon",
+        label: "Icon",
+        iconClass: "fa-solid fa-icons",
+        title: "Add icon",
+        onClick: () => showIconDialog(),
       },
       {
         key: "image",
@@ -5466,8 +7716,12 @@
         preserveEditorState: true,
       }) || "<p><br></p>";
       selectedImageNode = null;
+      activeTableCell = null;
+      selectedTableCells = [];
+      cellSelectionAnchor = null;
       enhanceQuoteBlocksInEditor();
       enhanceExpandableBlocksInEditor();
+      enhanceTableBlocksInEditor();
       if (markerState && !restoreSelectionFromMarkers(markerState)) {
         placeCaretAtEnd();
       }
@@ -5527,7 +7781,7 @@
 
     const updateFloatingToolbarState = (range) => {
       const isBusy = externallyDisabled || pendingImageUploads > 0;
-      if (isBusy || isLinkDialogOpen || isImagePickerOpen) {
+      if (isBusy || isLinkDialogOpen || isImagePickerOpen || isTableDialogOpen || isIconDialogOpen) {
         hideFloatingToolbar();
         return;
       }
@@ -5564,6 +7818,10 @@
       ).forEach((field) => {
         field.contentEditable = isBusy ? "false" : "true";
       });
+      editor.querySelectorAll(".news-table-block th,.news-table-block td").forEach((cell) => {
+        cell.contentEditable = isBusy ? "false" : "true";
+      });
+      setActiveTableCell(getTableCellFromNode(activeRange?.startContainer));
       imageFileInput.disabled = isBusy;
       editor.contentEditable = isBusy ? "false" : "true";
       updateFloatingToolbarState(activeRange);
@@ -5574,12 +7832,76 @@
     } catch (_error) {}
 
     editor.addEventListener("keydown", (event) => {
+      const isUndoKey = (event.ctrlKey || event.metaKey) && !event.shiftKey && !event.altKey
+        && String(event.key || "").toLowerCase() === "z";
+      if (isUndoKey && isTableUndoLatest) {
+        event.preventDefault();
+        undoTableChange();
+        return;
+      }
       if ((event.key === "Backspace" || event.key === "Delete") && selectedImageNode && editor.contains(selectedImageNode)) {
         event.preventDefault();
         removeSelectedImage();
         return;
       }
+      if (selectedTableCells.length > 1) {
+        const selectionKey = String(event.key || "").toLowerCase();
+        const hasModifier = event.ctrlKey || event.metaKey;
+        if (event.key === "Backspace" || event.key === "Delete") {
+          event.preventDefault();
+          clearSelectedTableCells();
+          return;
+        }
+        if (hasModifier && (selectionKey === "b" || selectionKey === "i")) {
+          event.preventDefault();
+          toggleSelectedCellsFormat(selectionKey === "b" ? "bold" : "italic");
+          return;
+        }
+        if (event.key === "Escape") {
+          event.preventDefault();
+          clearTableCellSelection();
+          return;
+        }
+        if (!["Shift", "Control", "Meta", "Alt"].includes(event.key)) clearTableCellSelection();
+      }
       const activeRange = getSelectionRange();
+      const activeCellForKey = getTableCellFromNode(activeRange?.startContainer);
+      const isSelectAllKey = (event.ctrlKey || event.metaKey) && !event.shiftKey && !event.altKey
+        && String(event.key || "").toLowerCase() === "a";
+      // Table cells, accordion and spoiler fields are editing hosts of their own:
+      // the browser's select-all would take the whole editor instead of the field.
+      const activeNestedField = isSelectAllKey
+        ? getElementFromRangeNode(activeRange?.startContainer)?.closest?.('[contenteditable="true"]')
+        : null;
+      if (activeNestedField && activeNestedField !== editor && editor.contains(activeNestedField)) {
+        event.preventDefault();
+        const fieldRange = document.createRange();
+        fieldRange.selectNodeContents(activeNestedField);
+        const selection = window.getSelection();
+        selection?.removeAllRanges();
+        selection?.addRange(fieldRange);
+        savedEditorRange = fieldRange.cloneRange();
+        updateToolbarState();
+        return;
+      }
+      if (event.key === "Tab" && activeCellForKey && !event.ctrlKey && !event.metaKey && !event.altKey) {
+        event.preventDefault();
+        preserveEditorScroll(() => moveToAdjacentTableCell(activeCellForKey, event.shiftKey));
+        return;
+      }
+      if (
+        (event.key === "ArrowUp" || event.key === "ArrowDown")
+        && activeCellForKey
+        && !event.shiftKey && !event.ctrlKey && !event.metaKey && !event.altKey
+        && handleVerticalArrowInTable(activeRange, activeCellForKey, event.key === "ArrowUp")
+      ) {
+        event.preventDefault();
+        return;
+      }
+      if ((event.key === "Backspace" || event.key === "Delete") && handleDeleteKeyNextToTable(activeRange, event.key)) {
+        event.preventDefault();
+        return;
+      }
       const activeQuoteAuthor = getQuoteFieldFromRange(activeRange, ".news-quote-author");
       const activeQuoteText = getQuoteFieldFromRange(activeRange, ".news-quote-text");
       const activeExpandableLabel = activeRange
@@ -5695,6 +8017,8 @@
       updateToolbarState();
     });
     editor.addEventListener("input", () => {
+      // After typing, Ctrl/Cmd+Z belongs to the browser's own undo again.
+      isTableUndoLatest = false;
       rememberEditorSelection();
       if (selectedImageNode && !editor.contains(selectedImageNode)) {
         selectedImageNode = null;
@@ -5702,10 +8026,27 @@
       updateToolbarState();
     });
     editor.addEventListener("mousedown", (event) => {
-      const structureActionButton = event.target?.closest?.(".cp-news-structure-action") || null;
+      const structureActionButton = event.target?.closest?.(".cp-news-structure-action,.cp-news-table-action") || null;
       if (structureActionButton && editor.contains(structureActionButton)) {
         event.preventDefault();
         return;
+      }
+      const pointerCell = event.button === 0 ? getTableCellFromNode(event.target) : null;
+      if (pointerCell && !event.target.closest(".cp-news-table-controls,button")) {
+        const pointerBlock = getTableBlockFromNode(pointerCell);
+        const anchorCell = cellSelectionAnchor && getTableBlockFromNode(cellSelectionAnchor) === pointerBlock
+          ? cellSelectionAnchor
+          : getActiveCellInTable(pointerBlock);
+        if (event.shiftKey && anchorCell && anchorCell !== pointerCell) {
+          event.preventDefault();
+          selectTableCellRange(anchorCell, pointerCell);
+          return;
+        }
+        clearTableCellSelection();
+        cellSelectionAnchor = pointerCell;
+        startTableCellDrag(pointerCell);
+      } else if (!event.target.closest(".cp-news-table-controls")) {
+        clearTableCellSelection();
       }
       const quoteRemoveButton = event.target?.closest?.(".cp-news-quote-remove") || null;
       if (quoteRemoveButton && editor.contains(quoteRemoveButton)) {
@@ -5714,6 +8055,15 @@
       }
     });
     editor.addEventListener("click", (event) => {
+      const tableActionButton = event.target?.closest?.(".cp-news-table-action") || null;
+      if (tableActionButton && editor.contains(tableActionButton)) {
+        event.preventDefault();
+        event.stopPropagation();
+        if (!tableActionButton.disabled) {
+          handleTableAction(getTableBlockFromNode(tableActionButton), tableActionButton.dataset.newsTableAction);
+        }
+        return;
+      }
       const structureActionButton = event.target?.closest?.(".cp-news-structure-action") || null;
       if (structureActionButton && editor.contains(structureActionButton)) {
         event.preventDefault();
@@ -5771,7 +8121,7 @@
     });
     editor.addEventListener("blur", (event) => {
       if (event.relatedTarget && editor.contains(event.relatedTarget)) return;
-      if (!isLinkDialogOpen && !isImagePickerOpen) {
+      if (!isLinkDialogOpen && !isImagePickerOpen && !isTableDialogOpen && !isIconDialogOpen) {
         normalizeEditorHtml();
         hideFloatingToolbar();
       }
@@ -5786,6 +8136,7 @@
 
     enhanceQuoteBlocksInEditor();
     enhanceExpandableBlocksInEditor();
+    enhanceTableBlocksInEditor();
     const firstExpandableBlock = editor.querySelector(".news-accordion-block,.news-spoiler-block");
     if (firstExpandableBlock && !editor.querySelector(".news-accordion-block[open],.news-spoiler-block[open]")) {
       setEditorExpandableState(firstExpandableBlock, true, false);
@@ -10891,10 +13242,11 @@
     const previewSource = document.createElement("div");
     previewSource.innerHTML = sanitizeNewsDescriptionHtml(initialHtml) || "";
     previewSource.querySelectorAll("br").forEach((lineBreak) => lineBreak.replaceWith(" "));
+    previewSource.querySelectorAll("img.news-inline-icon").forEach((icon) => icon.remove());
     previewSource.querySelectorAll("img").forEach((image) => {
       image.replaceWith(`${String(image.alt || "Image").trim() || "Image"} `);
     });
-    previewSource.querySelectorAll("p, li, h2, blockquote, .news-quote-author, .news-quote-text").forEach((block) => {
+    previewSource.querySelectorAll("p, li, h2, blockquote, th, td, .news-quote-author, .news-quote-text").forEach((block) => {
       block.appendChild(document.createTextNode(" "));
     });
     const previewText = String(previewSource.textContent || "").replace(/\s+/g, " ").trim();

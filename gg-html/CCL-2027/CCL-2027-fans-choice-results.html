@@ -116,6 +116,12 @@
     cursor: help;
   }
 
+  .fcr-share {
+    min-width: 34px;
+    font-size: 12px;
+    color: #6f7785;
+  }
+
   .fcr-pending-icon {
     font-family: "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif;
     font-size: 12px;
@@ -362,14 +368,38 @@
     return `${count} ${word}${count === 1 ? "" : "s"}`;
   }
 
+  function isClosed() {
+    return data?.voting?.status === "closed";
+  }
+
+  // Share of all confirmed votes: "12%", "5%"; under 1% with one decimal, "0,5%"; never below "0,1%".
+  function sharePercent(confirmed) {
+    const total = data.totals.confirmed;
+    return total ? (confirmed / total) * 100 : 0;
+  }
+
+  function formatShare(confirmed) {
+    const share = sharePercent(confirmed);
+    if (!share) return "0%";
+    if (share >= 1) return `${Math.round(share)}%`;
+    const tenths = Math.max(1, Math.round(share * 10));
+    return tenths >= 10 ? "1%" : `0,${tenths}%`;
+  }
+
+  // Bigger shares read bolder: up to 2% - 400, 3-6% - 500, 7% and more - 600 (by the shown, rounded value).
+  function shareWeight(confirmed) {
+    const shown = Math.round(sharePercent(confirmed));
+    return shown <= 2 ? 400 : shown <= 6 ? 500 : 600;
+  }
+
   function renderSummary() {
     const summary = el("div", "fcr-summary");
     const totals = el("div", "fcr-totals");
     totals.appendChild(el("strong", "", plural(data.totals.confirmed, "confirmed vote")));
-    if (data.totals.pending) totals.appendChild(document.createTextNode(` · ${data.totals.pending} under review`));
+    if (data.totals.pending && !isClosed()) totals.appendChild(document.createTextNode(` · ${data.totals.pending} under review`));
     summary.appendChild(totals);
     const voting = data.voting || {};
-    const note = voting.status === "closed"
+    const note = isClosed()
       ? "Voting is closed"
       : voting.status === "upcoming"
         ? `Voting opens ${formatDeadline(voting.opens_at)}`
@@ -455,6 +485,10 @@
     const fill = el("div", "fcr-bar-fill");
     fill.style.width = `${(fillShare * 100).toFixed(1)}%`;
     track.appendChild(fill);
+    // Once voting is closed: the share of all confirmed votes instead of the votes under review.
+    const share = el("span", "fcr-share", formatShare(association.confirmed));
+    share.style.fontWeight = shareWeight(association.confirmed);
+    share.title = "Share of all confirmed votes";
     // Votes under review: "+N 👀"; empty when there are none, so the bars stay aligned.
     const pending = el("span", "fcr-pending");
     if (association.pending) {
@@ -466,7 +500,7 @@
     }
 
     const counts = el("div", "fcr-counts");
-    counts.append(confirmed, pending);
+    counts.append(confirmed, isClosed() ? share : pending);
     head.append(country, track, counts, el("i", "fa-solid fa-chevron-down fcr-chevron"));
     head.addEventListener("click", () => {
       if (openAssociations.has(association.id)) openAssociations.delete(association.id);
@@ -533,7 +567,7 @@
 
   // The results update while voting is open; refreshes pause in a hidden tab.
   setInterval(() => {
-    if (document.visibilityState === "visible" && data?.voting?.status !== "closed") load();
+    if (document.visibilityState === "visible" && !isClosed()) load();
   }, REFRESH_MS);
 
   // Lets the parent page fit the iframe to the content, if it listens.

@@ -100,6 +100,7 @@ import {
 import { ensureGameReplaysSchema as ensureGameReplaysSchemaForDb } from "./bga-replay-schema.js";
 import { ensureCclSchema } from "./ccl-schema.js";
 import { registerCclRoutes } from "./ccl-routes.js";
+import { registerCclMatchRoutes } from "./ccl-match-routes.js";
 import { CCL_DEADLINE_FIELDS, isCclTournament } from "./ccl-slots.js";
 import {
   ensureTournamentRegistrationsSchema,
@@ -5751,6 +5752,20 @@ function ensureDuelsSchema() {
         addColumnIfMissing(columns, "duels", "cancelled_by_player_id", "TEXT");
         addColumnIfMissing(columns, "duels", "cancellation_reason", "TEXT");
         addColumnIfMissing(columns, "duels", "cancelled_at", "TEXT");
+        // CCL matches (source_type = 'ccl'): stage, round and the time the two players agree on.
+        addColumnIfMissing(columns, "duels", "stage", "TEXT");
+        addColumnIfMissing(columns, "duels", "group_name", "TEXT");
+        addColumnIfMissing(columns, "duels", "round_name", "TEXT");
+        addColumnIfMissing(columns, "duels", "round_order", "INTEGER");
+        addColumnIfMissing(columns, "duels", "deadline_utc", "TEXT");
+        addColumnIfMissing(columns, "duels", "proposed_time_utc", "TEXT");
+        addColumnIfMissing(columns, "duels", "proposed_time_by_player_id", "TEXT");
+        addColumnIfMissing(
+          columns,
+          "duels",
+          "proposed_time_status",
+          "TEXT CHECK (proposed_time_status IS NULL OR proposed_time_status IN ('pending', 'accepted', 'change_pending'))"
+        );
         db.run(
           "UPDATE duels SET ranking = 1 WHERE ranking IS NULL",
           (normalizeErr) => {
@@ -8424,6 +8439,13 @@ registerBgaReplayAdminRoutes(app, {
 });
 
 registerCclRoutes(app, {
+  db,
+  requireAuthenticated,
+  getAuditActor,
+  logAuditEvent,
+});
+
+registerCclMatchRoutes(app, {
   db,
   requireAuthenticated,
   getAuditActor,

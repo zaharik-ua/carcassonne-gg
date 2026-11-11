@@ -1908,6 +1908,90 @@
       grid-template-columns: repeat(2, minmax(0, 1fr));
     }
   }
+
+  .cp-ccl-list {
+    border: 1px solid #ccc;
+    border-radius: 6px;
+    margin: 4px 0 12px;
+    background: #fff;
+  }
+
+  .cp-ccl-match + .cp-ccl-match {
+    border-top: 1px solid #ccc;
+  }
+
+  .cp-ccl-match .cp-match-row {
+    border-top: none;
+  }
+
+  .cp-ccl-match .cp-match-time {
+    width: 58px;
+    min-width: 58px;
+  }
+
+  .cp-ccl-avatar {
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    object-fit: cover;
+    flex: 0 0 auto;
+  }
+
+  .cp-ccl-me {
+    font-weight: 700;
+  }
+
+  .cp-ccl-score {
+    margin-left: auto;
+    padding-left: 8px;
+  }
+
+  .cp-ccl-meta {
+    margin-top: 2px;
+    font-size: 11px;
+    color: #667286;
+  }
+
+  .cp-ccl-actions {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 6px;
+    margin-left: 8px;
+  }
+
+  .cp-ccl-proposal-in-modal {
+    margin: 0;
+  }
+
+  .cp-ccl-modal-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr 90px;
+    gap: 8px;
+  }
+
+  .cp-ccl-filter {
+    max-width: 220px;
+    height: 30px;
+    border: 1px solid #c8ced8;
+    border-radius: 4px;
+    font-size: 14px;
+  }
+
+  @media (max-width: 520px) {
+    .cp-ccl-match .cp-match-row {
+      flex-wrap: wrap;
+    }
+
+    .cp-ccl-actions {
+      width: 100%;
+      margin: 6px 0 0;
+    }
+
+    .cp-ccl-modal-grid {
+      grid-template-columns: 1fr 1fr;
+    }
+  }
 </style>
 
 <div class="captain-wrap">
@@ -8645,6 +8729,498 @@
     contentEl.appendChild(form);
   }
 
+  // ---- CCL: player-vs-player matches (duels with source_type = 'ccl') ----
+  const CCL_MATCHES_URL = (tournamentId) => `${AUTH_BASE}/ccl/${encodeURIComponent(tournamentId)}/matches`;
+  const CCL_MATCH_URL = (matchId) => `${AUTH_BASE}/ccl/matches/${encodeURIComponent(matchId)}`;
+  const CCL_STAGE_LABELS = { Q1: "Q1", Q2: "Q2", Q3: "Q3", Main: "League Stage", Playoffs: "Playoffs" };
+  const cclStageFilters = new Map();
+
+  function isCclTournament(tournament) {
+    const { type, category } = getTournamentClassification(tournament);
+    return type === "Individuals" && String(category || "").trim().toLowerCase() === "ccl";
+  }
+
+  // Tournament admins and players who hold a slot (the server sets ccl_participant).
+  function canSeeCclTournament(tournament, authState = {}) {
+    const accessRole = String(tournament?.access_role || "").trim().toLowerCase();
+    return !!(authState.isAdminUser || accessRole === "admin" || tournament?.ccl_participant === true);
+  }
+
+  function cclPlayerName(player) {
+    return String(player?.bga_nickname || player?.name || player?.id || "TBD").trim();
+  }
+
+  function cclOpponent(match) {
+    return match.my_side === 1 ? match.player_2 : match.player_1;
+  }
+
+  function isCclActiveProposal(match) {
+    return ["pending", "change_pending"].includes(String(match?.proposed_time_status || "").toLowerCase())
+      && hasValue(match?.proposed_time_utc)
+      && hasValue(match?.proposed_time_by_player_id);
+  }
+
+  // Each player's local time, from the timezone of their association's team; own player first.
+  function cclLocalTimeLines(match, timeUtc) {
+    const players = match.my_side === 2 ? [match.player_2, match.player_1] : [match.player_1, match.player_2];
+    return players.filter(Boolean).map((player) => {
+      const timezone = String(player.timezone || "").trim() || "UTC";
+      return `${cclPlayerName(player)}: ${formatTeamLocalDateTime(timezone, timeUtc)} (${timezone})`;
+    });
+  }
+
+  function cclLocalTimeHtml(match, timeUtc) {
+    return cclLocalTimeLines(match, timeUtc).map((line) => `<div class="cp-time-local-line">${esc(line)}</div>`).join("");
+  }
+
+  async function cclRequest(url, method, body) {
+    const response = await fetch(url, {
+      method,
+      credentials: "include",
+      headers: body ? { "Content-Type": "application/json" } : undefined,
+      body: body ? JSON.stringify(body) : undefined,
+    });
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok || !result?.ok) throw new Error(result?.message || "Request failed.");
+    return result;
+  }
+
+  function createCclModal(titleText) {
+    const overlay = document.createElement("div");
+    overlay.className = "cp-team-modal-overlay";
+    const modal = document.createElement("div");
+    modal.className = "cp-team-modal";
+    const title = document.createElement("div");
+    title.className = "cp-team-modal-title";
+    title.textContent = titleText;
+    const fields = document.createElement("div");
+    fields.className = "cp-team-modal-fields";
+    const error = document.createElement("div");
+    error.className = "cp-edit-error cp-hidden";
+    const actions = document.createElement("div");
+    actions.className = "cp-team-modal-actions";
+    modal.append(title, fields, error, actions);
+    overlay.appendChild(modal);
+    document.body.appendChild(overlay);
+
+    const controller = new AbortController();
+    const close = () => {
+      controller.abort();
+      overlay.remove();
+    };
+    overlay.addEventListener("click", (event) => {
+      if (event.target === overlay) close();
+    }, { signal: controller.signal });
+    document.addEventListener("keydown", (event) => {
+      if (event.key === "Escape") close();
+    }, { signal: controller.signal });
+
+    const addField = (labelText, control, parent = fields) => {
+      const row = document.createElement("div");
+      row.className = "cp-edit-row";
+      const label = document.createElement("label");
+      label.textContent = labelText;
+      row.append(label, control);
+      parent.appendChild(row);
+      return row;
+    };
+    const addButton = (text, className, onClick) => {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = `cp-btn ${className}`;
+      button.textContent = text;
+      button.addEventListener("click", onClick, { signal: controller.signal });
+      actions.appendChild(button);
+      return button;
+    };
+    const setError = (message) => {
+      error.textContent = String(message || "");
+      error.classList.toggle("cp-hidden", !message);
+    };
+    // Runs a request with the buttons disabled; closes the modal and reloads the page on success.
+    const submit = async (work) => {
+      setError("");
+      const buttons = Array.from(modal.querySelectorAll("button"));
+      buttons.forEach((button) => { button.disabled = true; });
+      try {
+        await work();
+        close();
+        initCaptainPage();
+      } catch (requestError) {
+        setError(requestError?.message || "Request failed.");
+      } finally {
+        buttons.forEach((button) => { button.disabled = false; });
+      }
+    };
+    return { modal, fields, addField, addButton, setError, submit, close, signal: controller.signal };
+  }
+
+  function createCclDatetimeInput(value) {
+    const input = document.createElement("input");
+    input.type = "datetime-local";
+    input.value = toDatetimeLocalFromUtc(value);
+    return input;
+  }
+
+  // Players propose a time, counter the opponent's proposal or accept it.
+  function openCclTimeProposalModal(match) {
+    const hasActiveProposal = isCclActiveProposal(match);
+    const myPlayerId = String((match.my_side === 1 ? match.player_1 : match.player_2)?.id || "");
+    const isIncoming = hasActiveProposal && match.proposed_time_by_player_id !== myPlayerId;
+    const isOwn = hasActiveProposal && match.proposed_time_by_player_id === myPlayerId;
+    const ui = createCclModal(isIncoming
+      ? "Review match time proposal"
+      : isOwn ? "Edit match time proposal" : hasValue(match.time_utc) ? "Propose another match time" : "Propose match time");
+
+    const summary = document.createElement("div");
+    summary.className = "cp-time-modal-current";
+    summary.textContent = `${cclPlayerName(match.player_1)} vs ${cclPlayerName(match.player_2)}`;
+    ui.fields.appendChild(summary);
+    if (hasValue(match.time_utc)) {
+      const current = document.createElement("div");
+      current.className = "cp-time-modal-current";
+      current.textContent = `Current match time: ${formatProposalTimeUtc(match.time_utc)}`;
+      ui.fields.appendChild(current);
+    }
+    if (hasValue(match.deadline_utc)) {
+      const deadline = document.createElement("div");
+      deadline.className = "cp-time-modal-current";
+      deadline.textContent = `Play before: ${formatProposalTimeUtc(match.deadline_utc)}`;
+      ui.fields.appendChild(deadline);
+    }
+    if (isIncoming) {
+      const proposed = document.createElement("div");
+      proposed.className = "cp-time-proposal-panel is-incoming cp-ccl-proposal-in-modal";
+      proposed.innerHTML = `<div class="cp-time-proposal-title">${esc(cclPlayerName(cclOpponent(match)))} proposes</div>
+        <div>${esc(formatProposalTimeUtc(match.proposed_time_utc))}</div>
+        ${cclLocalTimeHtml(match, match.proposed_time_utc)}`;
+      ui.fields.appendChild(proposed);
+    }
+
+    const timeInput = createCclDatetimeInput(isOwn ? match.proposed_time_utc : "");
+    const timeRow = ui.addField(isIncoming ? "Another time, UTC" : "Proposed time, UTC", timeInput);
+    const localPreview = document.createElement("div");
+    localPreview.className = "cp-time-local-preview";
+    timeRow.appendChild(localPreview);
+    const refreshPreview = () => {
+      const timeUtc = toUtcIsoFromDatetimeLocal(timeInput.value);
+      localPreview.innerHTML = timeUtc ? cclLocalTimeHtml(match, timeUtc) : "";
+    };
+    refreshPreview();
+    timeInput.addEventListener("input", refreshPreview, { signal: ui.signal });
+
+    const snapshot = {
+      expected_proposed_time_utc: match.proposed_time_utc || null,
+      expected_proposed_time_by_player_id: match.proposed_time_by_player_id || null,
+      expected_proposed_time_status: match.proposed_time_status || null,
+    };
+    const sendProposal = () => ui.submit(async () => {
+      const proposedTimeUtc = toUtcIsoFromDatetimeLocal(timeInput.value);
+      if (!proposedTimeUtc) throw new Error("Choose a match time.");
+      if (Date.parse(proposedTimeUtc) <= Date.now()) throw new Error("Choose a match time in the future.");
+      await cclRequest(`${CCL_MATCH_URL(match.id)}/time-proposal`, "POST", { proposed_time_utc: proposedTimeUtc, ...snapshot });
+    });
+
+    ui.addButton("Cancel", "cp-btn-secondary", ui.close);
+    ui.addButton(isIncoming ? "Send another time" : isOwn ? "Update proposal" : "Send proposal", isIncoming ? "cp-btn-secondary" : "cp-btn-primary", sendProposal);
+    if (isIncoming) {
+      ui.addButton("Accept time", "cp-btn-primary", () => ui.submit(() => (
+        cclRequest(`${CCL_MATCH_URL(match.id)}/time-proposal/accept`, "PATCH", snapshot)
+      )));
+    }
+  }
+
+  // Admins create a match, or edit one (`match` given).
+  function openCclMatchEditModal(data, match = null) {
+    const ui = createCclModal(match ? "Edit match" : "Create match");
+    const stageSelect = document.createElement("select");
+    (data.stages || []).forEach((stage) => stageSelect.add(new Option(CCL_STAGE_LABELS[stage] || stage, stage)));
+    stageSelect.value = match?.stage || cclStageFilters.get(data.tournament.id) || "Q1";
+    ui.addField("Stage", stageSelect);
+
+    const textInput = (value, placeholder) => {
+      const input = document.createElement("input");
+      input.type = "text";
+      input.value = value || "";
+      input.placeholder = placeholder;
+      return input;
+    };
+    const groupInput = textInput(match?.group_name, "e.g. A");
+    const roundInput = textInput(match?.round_name, "e.g. Round 1");
+    const roundOrderInput = document.createElement("input");
+    roundOrderInput.type = "number";
+    roundOrderInput.min = "1";
+    roundOrderInput.value = match?.round_order ?? "";
+    const advanced = document.createElement("div");
+    advanced.className = "cp-ccl-modal-grid";
+    ui.fields.appendChild(advanced);
+    ui.addField("Group", groupInput, advanced);
+    ui.addField("Round", roundInput, advanced);
+    ui.addField("Round order", roundOrderInput, advanced);
+
+    const player1Select = document.createElement("select");
+    const player2Select = document.createElement("select");
+    const fillPlayers = () => {
+      const group = (data.players || []).find((entry) => entry.stage === stageSelect.value);
+      const players = (group?.players || []).slice().sort((a, b) => cclPlayerName(a).localeCompare(cclPlayerName(b)));
+      [player1Select, player2Select].forEach((select, index) => {
+        const current = select.value || String((index === 0 ? match?.player_1 : match?.player_2)?.id || "");
+        select.innerHTML = "";
+        select.add(new Option("Select player", ""));
+        players.forEach((player) => {
+          const association = player.association_name ? ` (${player.association_name})` : "";
+          select.add(new Option(`${cclPlayerName(player)}${association}`, player.id));
+        });
+        select.value = players.some((player) => player.id === current) ? current : "";
+      });
+    };
+    fillPlayers();
+    stageSelect.addEventListener("change", fillPlayers, { signal: ui.signal });
+    ui.addField("Player 1", player1Select);
+    ui.addField("Player 2", player2Select);
+
+    const formatSelect = document.createElement("select");
+    (data.duel_formats || []).forEach((format) => formatSelect.add(new Option(format, format)));
+    formatSelect.value = match?.duel_format || (data.duel_formats || []).find((format) => /bo3/i.test(format)) || "";
+    ui.addField("Format", formatSelect);
+    const deadlineInput = createCclDatetimeInput(match?.deadline_utc);
+    ui.addField("Play before, UTC", deadlineInput);
+    const timeInput = createCclDatetimeInput(match?.time_utc);
+    ui.addField("Match time, UTC (optional: players can agree on it)", timeInput);
+
+    ui.addButton("Cancel", "cp-btn-secondary", ui.close);
+    ui.addButton(match ? "Save" : "Create", "cp-btn-primary", () => ui.submit(() => {
+      const body = {
+        stage: stageSelect.value,
+        group_name: groupInput.value,
+        round_name: roundInput.value,
+        round_order: roundOrderInput.value,
+        player_1_id: player1Select.value,
+        player_2_id: player2Select.value,
+        duel_format: formatSelect.value,
+        deadline_utc: toUtcIsoFromDatetimeLocal(deadlineInput.value),
+        time_utc: toUtcIsoFromDatetimeLocal(timeInput.value),
+      };
+      if (!body.player_1_id || !body.player_2_id) throw new Error("Choose both players.");
+      return match
+        ? cclRequest(CCL_MATCH_URL(match.id), "PATCH", body)
+        : cclRequest(CCL_MATCHES_URL(data.tournament.id), "POST", body);
+    }));
+  }
+
+  function openCclMatchDeleteModal(match) {
+    const ui = createCclModal("Delete match");
+    const warning = document.createElement("div");
+    warning.className = "cp-lineup-reset-warning";
+    warning.textContent = `Delete ${cclPlayerName(match.player_1)} vs ${cclPlayerName(match.player_2)}?`;
+    ui.fields.appendChild(warning);
+    ui.addButton("Cancel", "cp-btn-secondary", ui.close);
+    ui.addButton("Delete", "cp-btn-danger", () => ui.submit(() => cclRequest(CCL_MATCH_URL(match.id), "DELETE")));
+  }
+
+  function createCclPlayerLine(player, score, isMe) {
+    const line = document.createElement("div");
+    line.className = "cp-team-row";
+    if (player?.association_flag) {
+      const flag = document.createElement("img");
+      flag.className = "cp-dd-flag";
+      flag.src = player.association_flag;
+      flag.alt = "";
+      line.appendChild(flag);
+    }
+    const avatarUrl = buildBgaAvatarUrl(player?.id, player?.avatar);
+    if (avatarUrl) {
+      const avatar = document.createElement("img");
+      avatar.className = "cp-ccl-avatar";
+      avatar.src = avatarUrl;
+      avatar.alt = "";
+      line.appendChild(avatar);
+    }
+    const name = document.createElement("span");
+    name.textContent = cclPlayerName(player);
+    if (isMe) name.classList.add("cp-ccl-me");
+    line.appendChild(name);
+    if (hasValue(score)) {
+      const scoreEl = document.createElement("b");
+      scoreEl.className = "cp-ccl-score";
+      scoreEl.textContent = String(score);
+      line.appendChild(scoreEl);
+    }
+    return line;
+  }
+
+  function createCclProposalPanel(match) {
+    if (!isCclActiveProposal(match)) return null;
+    const proposer = match.player_1?.id === match.proposed_time_by_player_id ? match.player_1 : match.player_2;
+    const awaiting = proposer === match.player_1 ? match.player_2 : match.player_1;
+    const panel = document.createElement("div");
+    panel.className = "cp-time-proposal-panel";
+    panel.classList.toggle("is-incoming", !!match.my_side && awaiting?.id === (match.my_side === 1 ? match.player_1 : match.player_2)?.id);
+    panel.innerHTML = `<div class="cp-time-proposal-title">${esc(
+      match.proposed_time_status === "change_pending" ? "New time proposed by " : "Match time proposed by "
+    )}${esc(cclPlayerName(proposer))}</div>
+      <div>${esc(formatProposalTimeUtc(match.proposed_time_utc))}</div>
+      ${cclLocalTimeHtml(match, match.proposed_time_utc)}
+      <div class="cp-time-proposal-meta">Waiting for ${esc(cclPlayerName(awaiting))}</div>`;
+    return panel;
+  }
+
+  function createCclMatchRow(match, data, options) {
+    const wrap = document.createElement("div");
+    wrap.className = "cp-ccl-match";
+    const row = document.createElement("div");
+    row.className = "cp-match-row";
+
+    const time = document.createElement("div");
+    time.className = "cp-match-time";
+    const timeText = document.createElement("div");
+    timeText.className = "cp-match-time-text";
+    timeText.textContent = hasValue(match.time_utc) ? formatMatchTime(match.time_utc) : "Time TBD";
+    time.appendChild(timeText);
+    const divider = document.createElement("div");
+    divider.className = "cp-divider-vertical";
+
+    const players = document.createElement("div");
+    players.className = "cp-teams";
+    const isDone = String(match.status || "").toLowerCase() === "done";
+    players.appendChild(createCclPlayerLine(match.player_1, isDone ? match.dw1 : null, match.my_side === 1));
+    players.appendChild(createCclPlayerLine(match.player_2, isDone ? match.dw2 : null, match.my_side === 2));
+    const meta = document.createElement("div");
+    meta.className = "cp-ccl-meta";
+    meta.textContent = [
+      CCL_STAGE_LABELS[match.stage] || match.stage,
+      match.group_name ? `Group ${match.group_name}` : "",
+      match.round_name,
+      match.duel_format,
+      hasValue(match.deadline_utc) ? `play before ${formatProposalTimeUtc(match.deadline_utc)}` : "",
+      isDone ? "" : match.status !== "Planned" ? match.status : "",
+    ].filter(Boolean).join(" · ");
+    players.appendChild(meta);
+
+    const actions = document.createElement("div");
+    actions.className = "cp-ccl-actions";
+    const addAction = (text, className, onClick) => {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = `cp-btn ${className}`;
+      button.textContent = text;
+      button.addEventListener("click", onClick);
+      actions.appendChild(button);
+    };
+    const isPlanned = String(match.status || "Planned").toLowerCase() === "planned";
+    if (match.my_side && isPlanned) {
+      const myId = (match.my_side === 1 ? match.player_1 : match.player_2)?.id;
+      const incoming = isCclActiveProposal(match) && match.proposed_time_by_player_id !== myId;
+      addAction(
+        incoming ? "Review time" : isCclActiveProposal(match) ? "Edit proposal" : hasValue(match.time_utc) ? "Change time" : "Propose time",
+        incoming ? "cp-btn-primary" : "cp-btn-secondary",
+        () => openCclTimeProposalModal(match)
+      );
+    }
+    if (options.manage) {
+      addAction("Edit", "cp-btn-secondary", () => openCclMatchEditModal(data, match));
+      addAction("Delete", "cp-btn-danger", () => openCclMatchDeleteModal(match));
+    }
+
+    row.append(time, divider, players, actions);
+    wrap.appendChild(row);
+    const proposal = createCclProposalPanel(match);
+    if (proposal) wrap.appendChild(proposal);
+    return wrap;
+  }
+
+  function renderCclStageFilter(data, matches, onChange) {
+    const stages = (data.stages || []).filter((stage) => matches.some((match) => match.stage === stage));
+    if (stages.length < 2) {
+      clearFilters();
+      return;
+    }
+    filtersEl.innerHTML = "";
+    filtersEl.classList.remove("cp-hidden");
+    const label = document.createElement("div");
+    label.className = "captain-filter-label";
+    label.textContent = "Stage";
+    const select = document.createElement("select");
+    select.className = "cp-ccl-filter";
+    select.add(new Option("All stages", ""));
+    stages.forEach((stage) => select.add(new Option(CCL_STAGE_LABELS[stage] || stage, stage)));
+    select.value = cclStageFilters.get(data.tournament.id) || "";
+    select.addEventListener("change", () => onChange(select.value));
+    filtersEl.append(label, select);
+  }
+
+  // Groups matches under "Stage · Round · Group" headings, in the server order.
+  function renderCclMatchList(data, matches, options) {
+    contentEl.className = "";
+    contentEl.innerHTML = "";
+    if (!matches.length) {
+      contentEl.className = "captain-alert";
+      contentEl.textContent = options.manage
+        ? "No matches yet. Use Create to add the first one."
+        : "You have no matches in this tournament yet.";
+      return;
+    }
+    let currentHeading = null;
+    let list = null;
+    matches.forEach((match) => {
+      const heading = [CCL_STAGE_LABELS[match.stage] || match.stage, match.round_name, match.group_name ? `Group ${match.group_name}` : ""]
+        .filter(Boolean).join(" · ");
+      if (heading !== currentHeading) {
+        currentHeading = heading;
+        contentEl.appendChild(renderSectionTitle(heading));
+        list = document.createElement("div");
+        list.className = "cp-ccl-list";
+        contentEl.appendChild(list);
+      }
+      list.appendChild(createCclMatchRow(match, data, options));
+    });
+  }
+
+  async function renderCclTournamentPage(tournament, authState) {
+    const result = await cclRequest(CCL_MATCHES_URL(tournament.id), "GET").catch((requestError) => ({ error: requestError }));
+    if (result.error) {
+      renderRestrictedSectionMessage(result.error.message === "Forbidden"
+        ? "This tournament is available only to its players and tournament admins."
+        : result.error.message);
+      return;
+    }
+    const data = result;
+    const myMatches = data.matches.filter((match) => match.my_side);
+
+    // Admin mode: an admin who also plays here can switch to the player view.
+    const preferenceKey = JSON.stringify([authState.currentUserAuthId, tournament.id]);
+    const isPlayerToo = myMatches.length > 0;
+    const adminMode = data.can_manage && (!isPlayerToo || adminModePreferences.get(preferenceKey) !== false);
+    adminModeControlEl.classList.toggle("cp-hidden", !data.can_manage);
+    adminModeEl.checked = adminMode;
+    adminModeEl.disabled = !isPlayerToo;
+    adminModeControlEl.title = isPlayerToo ? "" : "Admin mode is required because you have no matches in this tournament.";
+    adminModeEl.onchange = () => {
+      adminModePreferences.set(preferenceKey, adminModeEl.checked);
+      initCaptainPage();
+    };
+
+    addButtonEl.textContent = "Create";
+    addButtonEl.classList.toggle("cp-hidden", !adminMode);
+    addButtonEl.onclick = adminMode ? () => openCclMatchEditModal(data) : null;
+    hintEl.textContent = adminMode
+      ? "Players of each match agree on its time here. Setting the time yourself replaces their proposal."
+      : "Propose a time for each match; it is set once your opponent accepts it. Times are in UTC.";
+
+    const visibleMatches = adminMode ? data.matches : myMatches;
+    const render = () => {
+      const stage = cclStageFilters.get(tournament.id) || "";
+      const filtered = stage ? visibleMatches.filter((match) => match.stage === stage) : visibleMatches;
+      countEl.textContent = `${filtered.length} match${filtered.length === 1 ? "" : "es"}`;
+      renderCclMatchList(data, filtered, { manage: adminMode });
+    };
+    renderCclStageFilter(data, visibleMatches, (stage) => {
+      cclStageFilters.set(tournament.id, stage);
+      render();
+    });
+    render();
+  }
+
   async function initCaptainPage() {
     if (isCaptainPageInitializing) {
       captainPageRefreshQueued = true;
@@ -8708,11 +9284,13 @@
 
         const visibleTournaments = tournaments.filter((tournament) => (
           !isTournamentHiddenInPlayerHub(tournament)
-          && getTournamentAccessState(tournament, {
-            currentUserAuthId,
-            isCaptainUser,
-            isAdminUser,
-          }).canSee
+          && (isCclTournament(tournament)
+            ? canSeeCclTournament(tournament, { isAdminUser })
+            : getTournamentAccessState(tournament, {
+              currentUserAuthId,
+              isCaptainUser,
+              isAdminUser,
+            }).canSee)
         ));
 
         const sectionItems = visibleTournaments.map((tournament) => ({
@@ -8804,6 +9382,11 @@
       const currentTournament = activeView === CAPTAIN_VIEWS.MATCHES
         ? (tournamentsById.get(requestedTournamentId) || null)
         : null;
+      if (currentTournament && isCclTournament(currentTournament) && !isCreateMode && !isEditMode) {
+        setPageHeading(getImmediatePageHeading(currentTournament));
+        await renderCclTournamentPage(currentTournament, { currentUserAuthId });
+        return;
+      }
       const currentTournamentAccess = getTournamentAccessState(currentTournament, {
         currentUserAuthId,
         isCaptainUser,
