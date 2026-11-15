@@ -7,6 +7,9 @@ import * as classification from "./tournament-classification.js";
 import { ensureCategoriesSchema } from "./categories.js";
 import { ensureCclSchema } from "./ccl-schema.js";
 import { CCL_DEADLINE_FIELDS, isCclTournament } from "./ccl-slots.js";
+import { resolveTournamentFormatKeyInput } from "./ccl-formats.js";
+import { hasCclStructure } from "./ccl-structure.js";
+import { ensureTournamentStructureSchema } from "./tournament-structure-schema.js";
 import { canManageTournamentAccessUsers, createRequireTournamentAdmin } from "./tournament-admin-access.js";
 import { normalizeTournamentLineupType, resolveTournamentTextPatch } from "./tournament-update.js";
 import { normalizeTournamentRankColors, resolveTournamentRankColorsPatch } from "./tournament-rank-colors.js";
@@ -42,9 +45,10 @@ async function api(t) {
   ]) await run(sql);
   await ensureCategoriesSchema(db);
   await ensureCclSchema(db);
+  await ensureTournamentStructureSchema(db);
   const handlers = new Map();
   const context = vm.createContext({
-    ...classification, db, CCL_DEADLINE_FIELDS, isCclTournament,
+    ...classification, db, CCL_DEADLINE_FIELDS, isCclTournament, resolveTournamentFormatKeyInput, hasCclStructure,
     app: Object.fromEntries(["get", "post", "patch"].map((method) => [method, (path, ...callbacks) => handlers.set(`${method} ${path}`, callbacks)])),
     canManageTournamentAccessUsers, requireTournamentAdmin: createRequireTournamentAdmin({ db }),
     normalizeTournamentLineupType, resolveTournamentTextPatch,
@@ -324,4 +328,47 @@ test("View retains legacy access-user captain restrictions and tournament-admin 
     assert.deepEqual(opened, listed);
     assert.deepEqual(opened, user === captain ? ["own"] : user === otherCaptain ? [] : ["other", "own"]);
   }
+});
+
+test("CCL tournaments store a season format; other categories cannot", async (t) => {
+  const { request, all } = await api(t);
+  const created = await request("post", { body: {
+    id: "CCL-2027", name: "CCL 2027", type: "Individuals", category: "CCL", format_key: "CCL-2027",
+  } });
+  assert.equal(created.status, 200, JSON.stringify(created));
+  assert.equal(created.data.tournament.format_key, "ccl-2027");
+  assert.deepEqual(await all("SELECT format_key FROM tournaments WHERE id = 'CCL-2027'"), [{ format_key: "ccl-2027" }]);
+
+  // A PATCH without format_key keeps it; an empty value clears it.
+  const renamed = await request("patch", { id: "CCL-2027", body: { name: "CCL 2027 Season" } });
+  assert.equal(renamed.data.tournament.format_key, "ccl-2027");
+  assert.equal((await request("patch", { id: "CCL-2027", body: { format_key: "" } })).data.tournament.format_key, null);
+
+  assert.equal((await request("patch", { id: "CCL-2027", body: { format_key: "ccl-2030" } })).status, 400);
+  const unavailable = await request("patch", { id: "CCL-2027", body: { format_key: "ccl-2025" } });
+  assert.equal(unavailable.status, 400);
+  assert.match(unavailable.data.message, /not available/);
+
+  const other = await request("post", { body: {
+    id: "MSO", name: "MSO", type: "Individuals", category: "MSO", format_key: "ccl-2027",
+  } });
+  assert.equal(other.status, 400);
+  const plain = await request("post", { body: { id: "MSO", name: "MSO", type: "Individuals", category: "MSO" } });
+  assert.equal(plain.status, 200, JSON.stringify(plain));
+  assert.equal(plain.data.tournament.format_key, null);
+});
+
+test("the CCL format is locked once the structure is generated", async (t) => {
+  const { request, run } = await api(t);
+  await request("post", { body: { id: "CCL-2027", name: "CCL 2027", type: "Individuals", category: "CCL", format_key: "ccl-2027" } });
+  await run("INSERT INTO tournament_stages (id, tournament_id, stage_key, name) VALUES ('CCL-2027|qualifiers', 'CCL-2027', 'qualifiers', 'Qualifiers')");
+  const cleared = await request("patch", { id: "CCL-2027", body: { format_key: "" } });
+  assert.equal(cleared.status, 409);
+  assert.match(cleared.data.message, /already generated/);
+  // Leaving CCL would drop the format too.
+  assert.equal((await request("patch", { id: "CCL-2027", body: { type: "Individuals", category: "MSO" } })).status, 409);
+  // Other fields, and the same format, still save.
+  const renamed = await request("patch", { id: "CCL-2027", body: { name: "CCL 2027 Season", format_key: "ccl-2027" } });
+  assert.equal(renamed.status, 200, JSON.stringify(renamed));
+  assert.equal(renamed.data.tournament.format_key, "ccl-2027");
 });

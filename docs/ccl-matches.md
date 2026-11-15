@@ -28,7 +28,7 @@ CCL-матч = **один рядок `duels`** з `source_type = 'ccl'`, `tourna
 | `stage` | Стадія; значення визначає турнір (CCL: `Q1`, `Q2`, `Q3`, `Main`, `Playoffs`), у БД не обмежене |
 | `group_name` | Група (`group` у `matches` — зарезервоване слово, тому інша назва) |
 | `round_name`, `round_order` | Тур і його порядок |
-| `deadline_utc` | «Зіграти до»; пропозиція пізніше за дедлайн відхиляється |
+| `deadline_utc` | «Зіграти до»; лише орієнтир в інтерфейсі, сервер не блокує час після дедлайну |
 | `proposed_time_utc` | Запропонований час |
 | `proposed_time_by_player_id` | Автор пропозиції (аналог `matches.proposed_time_by_team_id`) |
 | `proposed_time_status` | `pending` / `accepted` / `change_pending`, `CHECK` як у `matches` |
@@ -47,7 +47,7 @@ ID дуелі: `<tournament_id>-<8 символів uuid>` — стабільн�
 
 - `auth-server/src/duel-time-proposals.js` — **загальні** правила погодження часу дуелі
   (не залежать від турніру): пропозиція лише від гравця дуелі, лише для `Planned`,
-  у майбутньому, не пізніше `deadline_utc`; прийняти може лише суперник; знімок
+  у майбутньому (`deadline_utc` не обмежує час); прийняти може лише суперник; знімок
   `expected_proposed_*` захищає від одночасних змін (`409`).
 - `auth-server/src/ccl-matches.js` — правила CCL: стадії і хто з ким може грати:
   - `Q1`/`Q2`/`Q3` — слот цієї стадії;

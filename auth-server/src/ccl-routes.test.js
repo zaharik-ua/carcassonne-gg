@@ -4,6 +4,7 @@ import sqlite3 from "sqlite3";
 
 import { registerCclRoutes } from "./ccl-routes.js";
 import { ensureCclSchema } from "./ccl-schema.js";
+import { ensureTournamentStructureSchema } from "./tournament-structure-schema.js";
 
 function exec(db, sql) {
   return new Promise((resolve, reject) => {
@@ -91,6 +92,7 @@ async function createDatabase(t) {
     INSERT INTO tournament_access_users VALUES ('tournament', 'CCL-2027', 2, 'admin');
   `);
   await ensureCclSchema(db);
+  await ensureTournamentStructureSchema(db);
   return db;
 }
 

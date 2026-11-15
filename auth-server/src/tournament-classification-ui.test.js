@@ -120,7 +120,11 @@ function contextForForm(page, tournament, { globalAdmin = true, mode = "edit" } 
     initMyTournamentsPage() {}, tournamentEditorCache: { isGlobalAdmin: globalAdmin },
     renderMyTournamentsList() {},
     CCL_DEADLINES: page === "my" ? pageConst("my", "CCL_DEADLINES") : [],
+    CCL_FORMAT_OPTIONS: page === "my" ? pageConst("my", "CCL_FORMAT_OPTIONS") : [],
     createCclPlayersSection: (value) => { cclSections.push(value.id); return new Element(); },
+    createCclBracketsSection: () => new Element(),
+    createCclRegistrationsSection: () => new Element(),
+    createCclFansChoiceSection: () => new Element(),
   });
   load(context, page, ["getTournamentClassification", "getTournamentCategoryValues"]);
   if (page === "admin") {
@@ -186,7 +190,7 @@ for (const page of ["admin", "my"]) {
       const isMyCcl = page === "my" && entry.name === "CCL";
       assert.equal("access_users" in patch.payload, entry.mode === "official" || isMyCcl);
       if (entry.mode === "official" || isMyCcl) assert.deepEqual(patch.payload.access_users, tournament(entry).access_users);
-      for (const name of ["ccl_main_registration_ends_at", "ccl_q12_registration_ends_at", "ccl_q3_registration_ends_at"]) {
+      for (const name of ["format_key", "ccl_main_registration_ends_at", "ccl_q12_registration_ends_at", "ccl_q3_registration_ends_at"]) {
         assert.equal(name in patch.payload, isMyCcl, `${entry.name}: ${name}`);
       }
       if (page === "my") assert.deepEqual(ui.cclSections, isMyCcl ? [tournament(entry).id] : []);

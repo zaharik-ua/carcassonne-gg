@@ -99,9 +99,14 @@ import {
 } from "./tournament-admin-access.js";
 import { ensureGameReplaysSchema as ensureGameReplaysSchemaForDb } from "./bga-replay-schema.js";
 import { ensureCclSchema } from "./ccl-schema.js";
+import { ensureDuelBracketColumns, ensureTournamentStructureSchema } from "./tournament-structure-schema.js";
+import { hasCclStructure, registerCclStructureRoutes } from "./ccl-structure.js";
+import { registerCclDrawRoutes } from "./ccl-draw.js";
+import { registerCclBracketRoutes, startCclBracketSync } from "./ccl-bracket.js";
 import { registerCclRoutes } from "./ccl-routes.js";
 import { registerCclMatchRoutes } from "./ccl-match-routes.js";
 import { CCL_DEADLINE_FIELDS, isCclTournament } from "./ccl-slots.js";
+import { resolveTournamentFormatKeyInput } from "./ccl-formats.js";
 import {
   ensureTournamentRegistrationsSchema,
   registerTournamentRegistrationRoutes,
@@ -3188,6 +3193,7 @@ function loadTournamentAccessForUserWithCcl(tournamentId, user, cclCaptainAssoci
         t.ccl_main_registration_ends_at,
         t.ccl_q12_registration_ends_at,
         t.ccl_q3_registration_ends_at,
+        t.format_key,
         CASE
           WHEN ? = 1 THEN ?
           WHEN ? > 0 AND EXISTS (
@@ -3338,6 +3344,7 @@ function loadTournamentAccessForUserWithCcl(tournamentId, user, cclCaptainAssoci
         current_tpr_benchmark: bountyTprNumber(row.current_tpr_benchmark),
         tpr_calculated_at: row.tpr_calculated_at || null,
         ...pickCclDeadlines(row),
+        format_key: row.format_key || null,
         access_role: row.access_role ? normalizeTournamentAccessRole(row.access_role) : null,
         has_access: Number(row.has_access) === 1,
         access_via_access_users: Number(row.access_via_access_users) === 1,
@@ -3573,7 +3580,8 @@ function loadTournamentRowById(tournamentId, includeAccessUsers, done) {
         tpr_calculated_at,
         ccl_main_registration_ends_at,
         ccl_q12_registration_ends_at,
-        ccl_q3_registration_ends_at
+        ccl_q3_registration_ends_at,
+        format_key
       FROM tournaments
       WHERE ${buildTournamentLookupWhereClause("id")}
       LIMIT 1
@@ -5838,6 +5846,10 @@ function ensureDuelsSchema() {
             }
           }
         );
+        // Bracket columns of generated tournament structures (group, match number, slot sources).
+        ensureDuelBracketColumns(db).catch((bracketErr) => {
+          console.error("Failed to ensure duels bracket columns", bracketErr);
+        });
       });
     });
   });
@@ -6564,6 +6576,7 @@ function ensureTournamentsSchema() {
       ccl_main_registration_ends_at TEXT,
       ccl_q12_registration_ends_at TEXT,
       ccl_q3_registration_ends_at TEXT,
+      format_key TEXT,
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
       updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
     )
@@ -6608,6 +6621,8 @@ function ensureTournamentsSchema() {
       addColumnIfMissing(columns, "tournaments", "ccl_main_registration_ends_at", "TEXT");
       addColumnIfMissing(columns, "tournaments", "ccl_q12_registration_ends_at", "TEXT");
       addColumnIfMissing(columns, "tournaments", "ccl_q3_registration_ends_at", "TEXT");
+      // CCL season format (ccl-formats.js); NULL for every other category.
+      addColumnIfMissing(columns, "tournaments", "format_key", "TEXT");
       addColumnIfMissing(columns, "tournaments", "created_at", "TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP");
       addColumnIfMissing(columns, "tournaments", "updated_at", "TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP");
       // Classification is managed only by explicit migrations and type/category API writes.
@@ -6830,6 +6845,9 @@ function ensureTournamentPlayersSchema() {
   // The CCL module owns tournament_players: it creates the table or upgrades it for CCL slots.
   ensureCclSchema(db).catch((error) => {
     console.error("Failed to ensure tournament_players / CCL schema", error);
+  });
+  ensureTournamentStructureSchema(db).catch((error) => {
+    console.error("Failed to ensure tournament_stages / tournament_groups schema", error);
   });
   ensureTournamentRegistrationsSchema(db).catch((error) => {
     console.error("Failed to ensure tournament_registrations schema", error);
@@ -8446,6 +8464,27 @@ registerCclRoutes(app, {
 });
 
 registerCclMatchRoutes(app, {
+  db,
+  requireAuthenticated,
+  getAuditActor,
+  logAuditEvent,
+});
+
+registerCclStructureRoutes(app, {
+  db,
+  requireAuthenticated,
+  getAuditActor,
+  logAuditEvent,
+});
+
+registerCclDrawRoutes(app, {
+  db,
+  requireAuthenticated,
+  getAuditActor,
+  logAuditEvent,
+});
+
+registerCclBracketRoutes(app, {
   db,
   requireAuthenticated,
   getAuditActor,
@@ -14139,6 +14178,7 @@ function listTournamentsForRequest(req, res, next, cclCaptainAssociationId) {
         t.ccl_main_registration_ends_at,
         t.ccl_q12_registration_ends_at,
         t.ccl_q3_registration_ends_at,
+        t.format_key,
         CASE
           WHEN ? = 1 THEN ?
           WHEN ? > 0 AND EXISTS (
@@ -14353,6 +14393,7 @@ function listTournamentsForRequest(req, res, next, cclCaptainAssociationId) {
                 current_tpr_benchmark: bountyTprNumber(row.current_tpr_benchmark),
                 tpr_calculated_at: row.tpr_calculated_at || null,
                 ...pickCclDeadlines(row),
+                format_key: row.format_key || null,
                 access_role: row.access_role ? normalizeTournamentAccessRole(row.access_role) : null,
                 access_via_access_users: Number(row.access_via_access_users) === 1,
                 ccl_participant: Number(row.ccl_participant) === 1,
@@ -14470,6 +14511,12 @@ app.post("/tournaments", requireAdmin, async (req, res) => {
   ) {
     return res.status(400).json({ ok: false, message: "category must reference a tournament category" });
   }
+  const formatKey = resolveTournamentFormatKeyInput(req.body, null, {
+    isCcl: isCclTournament({ type: tournamentType, category }),
+  });
+  if (formatKey.error) {
+    return res.status(400).json({ ok: false, message: formatKey.error });
+  }
 
   return db.get(
     `
@@ -14528,10 +14575,11 @@ app.post("/tournaments", requireAdmin, async (req, res) => {
                   ccl_main_registration_ends_at,
                   ccl_q12_registration_ends_at,
                   ccl_q3_registration_ends_at,
+                  format_key,
                   created_at,
                   updated_at
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
               `,
               [
                 id,
@@ -14561,6 +14609,7 @@ app.post("/tournaments", requireAdmin, async (req, res) => {
                 tprSmoothing,
                 tprBenchmarkPercentile,
                 ...CCL_DEADLINE_FIELDS.map((field) => cclDeadlines.values[field]),
+                formatKey.value,
               ],
               (insertErr) => {
                 if (insertErr) {
@@ -14633,6 +14682,14 @@ app.patch("/tournaments/:id", requireTournamentAdmin, async (req, res) => {
   if (hasTeamSizeUpdate && !isValidTournamentTeamSize(req.body?.team_size)) {
     return res.status(400).json({ ok: false, message: "team_size must be a positive integer" });
   }
+  // The CCL format is fixed once its stages, groups and matches have been generated.
+  let hasGeneratedStructure = false;
+  try {
+    hasGeneratedStructure = await hasCclStructure(db, tournamentId);
+  } catch (error) {
+    console.error("Failed to check tournament structure", error);
+    return res.status(500).json({ ok: false, message: "Failed to load tournament" });
+  }
   const [rawTournamentId, normalizedTournamentId] = getTournamentLookupVariants(tournamentId);
 
   return db.get(
@@ -14677,6 +14734,18 @@ app.patch("/tournaments/:id", requireTournamentAdmin, async (req, res) => {
       const cclDeadlines = resolveCclDeadlinesInput(req.body, currentRow);
       if (cclDeadlines.error) {
         return res.status(400).json({ ok: false, message: cclDeadlines.error });
+      }
+      const formatKey = resolveTournamentFormatKeyInput(req.body, currentRow, {
+        isCcl: isCclTournament({ type: tournamentType, category }),
+      });
+      if (formatKey.error) {
+        return res.status(400).json({ ok: false, message: formatKey.error });
+      }
+      if (hasGeneratedStructure && formatKey.value !== (normalizeNullableText(currentRow.format_key) || null)) {
+        return res.status(409).json({
+          ok: false,
+          message: "The tournament structure is already generated; its format and category can no longer change",
+        });
       }
       const registrationEndsAt = hasRegistrationEndsAtUpdate
         ? requestedRegistrationEndsAt
@@ -14766,6 +14835,7 @@ app.patch("/tournaments/:id", requireTournamentAdmin, async (req, res) => {
                   ccl_main_registration_ends_at = ?,
                   ccl_q12_registration_ends_at = ?,
                   ccl_q3_registration_ends_at = ?,
+                  format_key = ?,
                   updated_at = CURRENT_TIMESTAMP
                 WHERE ${buildTournamentLookupWhereClause("id")}
               `,
@@ -14797,6 +14867,7 @@ app.patch("/tournaments/:id", requireTournamentAdmin, async (req, res) => {
                 tprSmoothing,
                 tprBenchmarkPercentile,
                 ...CCL_DEADLINE_FIELDS.map((field) => cclDeadlines.values[field]),
+                formatKey.value,
                 rawTournamentId,
                 normalizedTournamentId || rawTournamentId,
               ],
@@ -26495,6 +26566,10 @@ inPersonSchemaReady
   .then(() => {
     app.listen(PORT, () => {
       console.log(`Auth server running on port ${PORT}`);
+    });
+    // The BGA updater writes CCL results straight into duels; move the brackets on every minute.
+    startCclBracketSync(db, {
+      logAuditEvent: (entry, done) => logAuditEvent({ actor_user_id: null, ...entry }, done),
     });
   })
   .catch((error) => {

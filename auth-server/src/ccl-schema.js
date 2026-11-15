@@ -130,6 +130,31 @@ async function rebuildTournamentPlayers(db, columns) {
   }
 }
 
+// Draw result of one entry: its group and position (odd = Seeded, even = Unseeded) and the order
+// in which the draw placed it, which the stream animation replays. Added with ALTER TABLE for
+// existing databases, so group_id carries no foreign key.
+const CCL_STAGE_ENTRY_DRAW_COLUMNS = Object.freeze([
+  ["group_id", "TEXT"],
+  ["draw_position", "INTEGER CHECK (draw_position IS NULL OR draw_position > 0)"],
+  ["draw_order", "INTEGER CHECK (draw_order IS NULL OR draw_order > 0)"],
+  ["drawn_at", "TEXT"],
+  ["drawn_by", "TEXT"],
+]);
+
+const CCL_STAGE_ENTRY_DRAW_INDEX_SQL = `
+  CREATE UNIQUE INDEX IF NOT EXISTS idx_ccl_stage_entries_group_position
+    ON ccl_stage_entries(group_id COLLATE NOCASE, draw_position)
+    WHERE group_id IS NOT NULL;
+`;
+
+async function ensureCclStageEntryDrawColumns(db) {
+  const existing = new Set((await dbAll(db, "PRAGMA table_info(ccl_stage_entries)")).map((column) => column.name));
+  for (const [name, definition] of CCL_STAGE_ENTRY_DRAW_COLUMNS) {
+    if (!existing.has(name)) await dbExec(db, `ALTER TABLE ccl_stage_entries ADD COLUMN ${name} ${definition}`);
+  }
+  await dbExec(db, CCL_STAGE_ENTRY_DRAW_INDEX_SQL);
+}
+
 // Repeatable: creates or upgrades tournament_players for CCL slots, then ccl_stage_entries.
 export async function ensureCclSchema(db) {
   const columns = await dbAll(db, "PRAGMA table_info(tournament_players)");
@@ -140,4 +165,5 @@ export async function ensureCclSchema(db) {
   }
   await dbExec(db, TOURNAMENT_PLAYERS_INDEXES_SQL);
   await dbExec(db, CCL_STAGE_ENTRIES_TABLE_SQL);
+  await ensureCclStageEntryDrawColumns(db);
 }

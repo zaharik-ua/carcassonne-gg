@@ -254,6 +254,22 @@
     font-style: italic;
   }
 
+  .group-table th.sortable-col {
+    cursor: pointer;
+    user-select: none;
+    white-space: nowrap;
+  }
+
+  .group-table th.sortable-col .sort-indicator {
+    margin-left: 4px;
+    font-size: 11px;
+    opacity: 0.45;
+  }
+
+  .group-table th.sortable-col.sorted .sort-indicator {
+    opacity: 1;
+  }
+
   .elo-comment {
     margin-top: 12px;
     font-size: 14px;
@@ -281,6 +297,15 @@
     stages: new Set(),
     results: new Set()
   };
+  // Click on the Elo header sorts by Elo descending; a second click restores the server order.
+  let sortByElo = false;
+
+  // Players without a fixed Elo (or without a rating) go after rated ones.
+  function eloSortValue(entry) {
+    if (!entry.elo_fixed || !entry.has_rating) return -Infinity;
+    const value = Number(entry.elo);
+    return Number.isFinite(value) ? value : -Infinity;
+  }
 
   function fetchTournamentsAndInit() {
     const dataUrl = `${API_BASE}/public/ccl/${encodeURIComponent(currentTournamentId)}/players`;
@@ -416,7 +441,7 @@
       return;
     }
 
-    const filtered = tp.filter(entry => {
+    let filtered = tp.filter(entry => {
       if (playersFilterState.registeredOnly && !(entry.player || "").trim()) {
         return false;
       }
@@ -428,6 +453,16 @@
       }
       return true;
     });
+
+    if (sortByElo) {
+      // Array.prototype.sort is stable, so ties keep the server order.
+      filtered = filtered.slice().sort((a, b) => {
+        const av = eloSortValue(a);
+        const bv = eloSortValue(b);
+        if (av === bv) return 0;
+        return av < bv ? 1 : -1;
+      });
+    }
 
     const totalCount = tp.length;
     const visibleCount = filtered.length;
@@ -477,7 +512,20 @@
     ["Country", "Player", "Elo *", "Qualified by", "Stage"].forEach(label => {
       const th = document.createElement("th");
       th.textContent = label;
-      if (label === "Player" || label === "Qualified by" || label === "Country") {
+      if (label === "Elo *") {
+        th.classList.add("sortable-col");
+        if (sortByElo) th.classList.add("sorted");
+        th.title = sortByElo ? "Click to reset sorting" : "Click to sort by Elo";
+        const indicator = document.createElement("span");
+        indicator.className = "sort-indicator";
+        indicator.textContent = sortByElo ? "▼" : "↕";
+        th.appendChild(indicator);
+        th.addEventListener("click", () => {
+          sortByElo = !sortByElo;
+          renderPlayersTable();
+        });
+      }
+      if (label === "Player"|| label === "Qualified by" || label === "Country") {
         th.style.textAlign = "left";
       }
       if (label === "Player") {
@@ -520,7 +568,8 @@
       const countryKey = countryKeyOf(entry);
       countryUsage[countryKey] = (countryUsage[countryKey] || 0) + 1;
 
-      if (countryUsage[countryKey] === 1) {
+      // When sorted by Elo each row gets its own country cell (no merging).
+      if (sortByElo || countryUsage[countryKey] === 1) {
         const countryTd = document.createElement("td");
         countryTd.style.padding = "4px 6px";
         countryTd.style.textAlign = "left";
@@ -539,7 +588,7 @@
         countrySpan.textContent = countryName;
         countryWrap.appendChild(countrySpan);
         countryTd.appendChild(countryWrap);
-        countryTd.rowSpan = countryCounts[countryKey] || 1;
+        countryTd.rowSpan = sortByElo ? 1 : (countryCounts[countryKey] || 1);
         tr.appendChild(countryTd);
       }
 

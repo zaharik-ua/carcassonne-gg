@@ -196,8 +196,67 @@ export async function loadProfilesById(db, playerIds) {
   return new Map(rows.map((row) => [text(row.id), row]));
 }
 
+// Once a path is drawn its field is fixed: player, stage and Elo changes that would reset its pots
+// are refused until the draw is reset.
+async function assertPhasesNotDrawn(db, tournamentId, phases) {
+  const stages = [...new Set(phases)].flatMap((phase) => CCL_PHASES[phase] || []);
+  if (!stages.length) return;
+  const drawn = await dbAll(
+    db,
+    `
+      SELECT stage_key
+      FROM tournament_stages
+      WHERE upper(trim(tournament_id)) = upper(trim(?))
+        AND stage_key IN (${stages.map(() => "?").join(", ")})
+        AND status <> 'structure'
+      ORDER BY stage_key
+    `,
+    [tournamentId, ...stages]
+  );
+  if (drawn.length) {
+    throw requestError(409, `The draw of ${drawn.map((row) => row.stage_key).join(", ")} is already made; reset it first`);
+  }
+}
+
+// Qualification result of a Q slot (inside the caller's transaction): league_status, and the
+// League Stage entry with its "qualified by" text for a qualified player. Used by the admin
+// result form and by the bracket sync.
+export async function writeCclQualificationResult(db, { tournamentId, slotId, leagueStatus, qualifiedBy, actorId = null }) {
+  const mainEntry = await dbGet(db, "SELECT * FROM ccl_stage_entries WHERE slot_id = ? AND stage = 'Main'", [slotId]);
+  await dbRun(
+    db,
+    "UPDATE tournament_players SET league_status = ?, updated_by = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+    [leagueStatus, actorId, slotId]
+  );
+  if (qualifiedBy && mainEntry) {
+    await dbRun(
+      db,
+      `
+        UPDATE ccl_stage_entries
+        SET qualified_by_name = ?, qualified_by_link = ?, updated_at = CURRENT_TIMESTAMP
+        WHERE slot_id = ? AND stage = 'Main'
+      `,
+      [qualifiedBy.qualified_by_name, qualifiedBy.qualified_by_link, slotId]
+    );
+  } else if (qualifiedBy) {
+    await dbRun(
+      db,
+      `
+        INSERT INTO ccl_stage_entries (tournament_id, stage, slot_id, qualified_by_name, qualified_by_link)
+        VALUES (?, 'Main', ?, ?, ?)
+      `,
+      [tournamentId, slotId, qualifiedBy.qualified_by_name, qualifiedBy.qualified_by_link]
+    );
+    await resetPhaseSeeds(db, tournamentId, ["league"]);
+  } else if (mainEntry) {
+    await dbRun(db, "DELETE FROM ccl_stage_entries WHERE slot_id = ? AND stage = 'Main'", [slotId]);
+    await resetPhaseSeeds(db, tournamentId, ["league"]);
+  }
+}
+
 // Fresh pots are required after any change in a phase (design 4.3).
 async function resetPhaseSeeds(db, tournamentId, phases) {
+  await assertPhasesNotDrawn(db, tournamentId, phases);
   for (const phase of new Set(phases)) {
     const stages = CCL_PHASES[phase];
     if (!stages) continue;
@@ -658,37 +717,13 @@ export function registerCclRoutes(app, {
 
     const mainEntry = await dbGet(db, "SELECT * FROM ccl_stage_entries WHERE slot_id = ? AND stage = 'Main'", [slot.id]);
     const qualifiedBy = leagueStatus === "qualified" ? normalizeCclQualifiedBy(qualifiedByInput).value : null;
-    await inTransaction(db, async () => {
-      await dbRun(
-        db,
-        "UPDATE tournament_players SET league_status = ?, updated_by = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
-        [leagueStatus, actorLabel(req.user), slot.id]
-      );
-      if (qualifiedBy && mainEntry) {
-        await dbRun(
-          db,
-          `
-            UPDATE ccl_stage_entries
-            SET qualified_by_name = ?, qualified_by_link = ?, updated_at = CURRENT_TIMESTAMP
-            WHERE slot_id = ? AND stage = 'Main'
-          `,
-          [qualifiedBy.qualified_by_name, qualifiedBy.qualified_by_link, slot.id]
-        );
-      } else if (qualifiedBy) {
-        await dbRun(
-          db,
-          `
-            INSERT INTO ccl_stage_entries (tournament_id, stage, slot_id, qualified_by_name, qualified_by_link)
-            VALUES (?, 'Main', ?, ?, ?)
-          `,
-          [tournament.id, slot.id, qualifiedBy.qualified_by_name, qualifiedBy.qualified_by_link]
-        );
-        await resetPhaseSeeds(db, tournament.id, ["league"]);
-      } else if (mainEntry) {
-        await dbRun(db, "DELETE FROM ccl_stage_entries WHERE slot_id = ? AND stage = 'Main'", [slot.id]);
-        await resetPhaseSeeds(db, tournament.id, ["league"]);
-      }
-    });
+    await inTransaction(db, () => writeCclQualificationResult(db, {
+      tournamentId: tournament.id,
+      slotId: slot.id,
+      leagueStatus,
+      qualifiedBy,
+      actorId: actorLabel(req.user),
+    }));
 
     audit(req, {
       event_type: "ccl_slot.result_updated",

@@ -98,6 +98,7 @@ async function createDatabase(t) {
       proposed_time_utc TEXT,
       proposed_time_by_player_id TEXT,
       proposed_time_status TEXT,
+      group_id TEXT,
       created_by TEXT,
       updated_by TEXT,
       deleted_by TEXT,
@@ -266,8 +267,9 @@ test("players agree on a time; the match gets it on acceptance", async (t) => {
   assert.equal((await get(db, "SELECT time_utc FROM duels WHERE id = ?", [match.id])).time_utc, "2026-11-20T18:00:00.000Z");
   assert.equal(api.audit.at(-1).event_type, "duel.time_proposal.accepted");
 
+  // The round deadline does not block scheduling.
   const late = await propose(USERS.taras, "2026-12-05T18:00:00Z");
-  assert.match(late.body.message, /deadline/);
+  assert.equal(late.status, 200, JSON.stringify(late.body));
 });
 
 test("admins edit and delete matches; a direct time clears the proposal", async (t) => {

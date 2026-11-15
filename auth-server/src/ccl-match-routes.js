@@ -38,7 +38,8 @@ const MATCH_SELECT_SQL = `
     deadline_utc,
     proposed_time_utc,
     proposed_time_by_player_id,
-    proposed_time_status
+    proposed_time_status,
+    group_id
   FROM duels
   WHERE deleted_at IS NULL
     AND source_type = '${CCL_MATCH_SOURCE_TYPE}'
@@ -48,6 +49,8 @@ const EDITABLE_FIELDS = [
   "player_1_id", "player_2_id", "duel_format", "time_utc",
 ];
 const PROPOSAL_FIELDS = ["proposed_time_utc", "proposed_time_by_player_id", "proposed_time_status"];
+// A generated bracket match takes its place and players from the bracket (ccl-bracket.js).
+const BRACKET_FIELDS = ["stage", "group_name", "round_name", "round_order", "player_1_id", "player_2_id"];
 
 const text = (value) => String(value ?? "").trim();
 
@@ -187,6 +190,7 @@ function formatMatch(match, context, viewerPlayerId) {
     group_name: match.group_name || null,
     round_name: match.round_name || null,
     round_order: match.round_order ?? null,
+    is_bracket: !!text(match.group_id),
     deadline_utc: match.deadline_utc || null,
     duel_format: match.duel_format || null,
     time_utc: match.time_utc || null,
@@ -341,6 +345,10 @@ export function registerCclMatchRoutes(app, {
     if (input.error) throw requestError(400, input.error);
     const values = input.value;
     if (!Object.keys(values).length) throw requestError(400, "Nothing to update");
+    if (text(match.group_id)) {
+      const locked = BRACKET_FIELDS.filter((field) => field in values && text(values[field]) !== text(match[field]));
+      if (locked.length) throw requestError(409, `A bracket match keeps its ${locked.join(", ")}; the bracket sets them`);
+    }
     if (values.duel_format) values.duel_format = await assertDuelFormat(db, values.duel_format);
 
     const next = { ...match, ...values };
@@ -375,6 +383,7 @@ export function registerCclMatchRoutes(app, {
   app.delete("/ccl/matches/:id", requireAuthenticated, handle("Failed to delete CCL match", async (req, res) => {
     const { match, tournament, actor } = await loadMatchContext(db, req.user, req.params.id);
     if (!actor.isAdmin) throw requestError(403, "Forbidden");
+    if (text(match.group_id)) throw requestError(409, "A bracket match cannot be deleted; regenerate the structure instead");
     await dbRun(
       db,
       "UPDATE duels SET deleted_at = CURRENT_TIMESTAMP, deleted_by = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND deleted_at IS NULL",

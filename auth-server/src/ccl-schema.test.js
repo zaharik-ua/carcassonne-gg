@@ -216,3 +216,37 @@ test("ccl_stage_entries keeps Elo fields consistent and follows its slot", async
     [{ stage: "Main", slot_id: "s-main" }]
   );
 });
+
+test("ccl_stage_entries stores the draw result; an older table gets the draw columns", async (t) => {
+  const db = await openDb(t);
+  // A database created before the draw columns existed.
+  await exec(db, `
+    CREATE TABLE ccl_stage_entries (
+      tournament_id TEXT NOT NULL, stage TEXT NOT NULL, slot_id TEXT NOT NULL,
+      qualified_by_name TEXT NOT NULL, qualified_by_link TEXT, player_id TEXT, elo REAL, seed TEXT,
+      elo_source TEXT, fixed_at TEXT, fixed_by TEXT,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      PRIMARY KEY (tournament_id, stage, slot_id)
+    );
+  `);
+  await ensureCclSchema(db);
+  await ensureCclSchema(db);
+  const columns = (await all(db, "PRAGMA table_info(ccl_stage_entries)")).map((column) => column.name);
+  for (const name of ["group_id", "draw_position", "draw_order", "drawn_at", "drawn_by"]) assert.ok(columns.includes(name), name);
+
+  for (const slot of ["s1", "s2", "s3"]) {
+    await insertSlot(db, { id: slot, entry_stage: "Q3", association_id: "UA" });
+    await insertEntry(db, { stage: "Q3", slot_id: slot });
+  }
+  const draw = (slot, groupId, position, order) => run(
+    db,
+    "UPDATE ccl_stage_entries SET group_id = ?, draw_position = ?, draw_order = ?, drawn_at = 'now' WHERE slot_id = ?",
+    [groupId, position, order, slot],
+  );
+  await draw("s1", "g-x", 1, 1);
+  await draw("s2", "g-y", 1, 2);
+  // Two entries cannot take the same position in a group.
+  await assert.rejects(draw("s3", "G-X", 1, 3), /UNIQUE/);
+  await assert.rejects(draw("s3", "g-x", 0, 3), /CHECK/);
+  await draw("s3", "g-x", 2, 3);
+});

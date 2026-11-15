@@ -50,7 +50,8 @@ function denied(status, error) {
   return { status, error };
 }
 
-// Proposal or counter-proposal by one of the two players; deadline_utc caps the time.
+// Proposal or counter-proposal by one of the two players. deadline_utc is only shown in the UI:
+// players may schedule the match after it.
 export function planDuelTimeProposal({ duel, actorPlayerId, proposedTimeUtc, nowMs }) {
   const side = getDuelSide(duel, actorPlayerId);
   if (!side) return denied(403, "Only the players of this match can propose its time");
@@ -58,10 +59,6 @@ export function planDuelTimeProposal({ duel, actorPlayerId, proposedTimeUtc, now
   const proposed = normalizeUtc(proposedTimeUtc);
   if (!proposed) return denied(400, "A valid proposed_time_utc is required");
   if (Date.parse(proposed) <= nowMs) return denied(400, "Proposed match time must be in the future");
-  const deadline = normalizeUtc(duel?.deadline_utc);
-  if (deadline && Date.parse(proposed) > Date.parse(deadline)) {
-    return denied(400, "Proposed match time must be before the round deadline");
-  }
 
   const active = isActiveDuelTimeProposal(duel);
   const ownProposal = active && text(duel.proposed_time_by_player_id) === text(actorPlayerId);

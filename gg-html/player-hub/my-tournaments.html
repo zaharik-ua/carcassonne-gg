@@ -2885,6 +2885,178 @@
     width: 90px;
   }
 
+  /* CCL Qualifiers: structure, draw and brackets */
+  .cp-ccl-table-wrap--scroll {
+    overflow-x: auto;
+  }
+
+  .cp-ccl-structure-form {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: end;
+    gap: 10px 14px;
+  }
+
+  .cp-ccl-structure-form .cp-ccl-edit-label {
+    display: grid;
+    gap: 3px;
+  }
+
+  .cp-ccl-path-tabs {
+    flex-wrap: wrap;
+    justify-content: flex-start;
+  }
+
+  .cp-ccl-draw-pots {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-items: start;
+    gap: 12px;
+  }
+
+  .cp-ccl-draw-pots .cp-ccl-strong {
+    font-size: 13px;
+  }
+
+  .cp-ccl-draw-actions {
+    justify-content: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .cp-ccl-draw-test-note {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 10px;
+    border: 1px dashed #c8ced8;
+    border-radius: 6px;
+    background: #fffbea;
+    font-size: 13px;
+  }
+
+  .cp-ccl-draw-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+    gap: 12px;
+  }
+
+  .cp-ccl-draw-group {
+    display: grid;
+    gap: 6px;
+    padding: 10px;
+    border: 1px solid #e5e7eb;
+    border-radius: 6px;
+    background: #fff;
+  }
+
+  .cp-ccl-draw-group-title {
+    font-size: 14px;
+    font-weight: 700;
+    color: #800020;
+  }
+
+  .cp-ccl-draw-pair {
+    display: grid;
+    grid-template-columns: 18px minmax(0, 1fr) minmax(0, 1fr);
+    align-items: center;
+    gap: 6px;
+    font-size: 13px;
+  }
+
+  .cp-ccl-draw-pair-no {
+    color: #98a2b3;
+    font-size: 11px;
+    font-weight: 600;
+  }
+
+  .cp-ccl-draw-slot {
+    min-width: 0;
+    padding: 4px 6px;
+    border-radius: 4px;
+    background: #f6f8fa;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    transition: background-color 0.3s ease;
+  }
+
+  .cp-ccl-draw-slot--seeded {
+    border-left: 3px solid #2e9d63;
+  }
+
+  .cp-ccl-draw-slot--unseeded {
+    border-left: 3px solid #d64545;
+  }
+
+  .cp-ccl-draw-slot--current {
+    background: #fff1b8;
+    font-weight: 700;
+  }
+
+  .cp-ccl-score-input.cp-tournament-config-input {
+    width: 40px;
+    min-width: 40px;
+    text-align: center;
+  }
+
+  .cp-ccl-draw-show {
+    position: fixed;
+    inset: 0;
+    z-index: 1000;
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+    padding: 16px;
+    overflow-y: auto;
+    background: rgba(17, 24, 39, 0.72);
+  }
+
+  .cp-ccl-draw-show-panel {
+    display: grid;
+    gap: 12px;
+    width: min(1400px, 100%);
+    padding: 16px;
+    border-radius: 8px;
+    background: #fff;
+  }
+
+  .cp-ccl-draw-show:fullscreen {
+    padding: 24px;
+    background: #fff;
+  }
+
+  .cp-ccl-draw-show-head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+  }
+
+  .cp-ccl-draw-show-title {
+    font-size: 20px;
+    font-weight: 700;
+    color: #800020;
+  }
+
+  .cp-ccl-draw-show-caption {
+    min-height: 28px;
+    font-size: 20px;
+    font-weight: 600;
+    color: #1f2937;
+  }
+
+  .cp-ccl-draw-show .cp-ccl-draw-pair {
+    font-size: 15px;
+  }
+
+  @media (max-width: 640px) {
+    .cp-ccl-draw-pots {
+      grid-template-columns: minmax(0, 1fr);
+    }
+  }
+
   .cp-ccl-chip {
     border-radius: 10px;
     padding: 1px 7px;
@@ -11413,12 +11585,19 @@
     { field: "ccl_q12_registration_ends_at", label: "CCL Q1 + Q2 registration ends at, UTC" },
     { field: "ccl_q3_registration_ends_at", label: "CCL Q3 registration ends at, UTC" },
   ];
+  // Season formats from auth-server/src/ccl-formats.js that can be chosen now.
+  // CCL 2024-2026 are added here once their formats are set up.
+  const CCL_FORMAT_OPTIONS = [
+    { value: "", label: "Not set" },
+    { value: "ccl-2027", label: "CCL 2027" },
+  ];
   const CCL_BLOCKER_LABELS = {
     association_missing: "without association",
     player_missing: "without player",
     league_status_pending: "without qualification result",
     elo_not_set: "without Elo",
     stage_entry_missing: "without stage entry",
+    seed_missing: "without a pot",
   };
 
   function formatCclDate(value) {
@@ -12222,6 +12401,553 @@
 
   // CCL players of a tournament. Admins get slots, draws (Elo and pots) and qualification results;
   // captains get the slots of their association. Every action is saved through /ccl/... right away.
+  // ---- CCL Qualifiers: structure, draw and brackets (ccl-structure.js, ccl-draw.js, ccl-bracket.js) ----
+  const CCL_PATHS = ["Q1", "Q2", "Q3"];
+  const CCL_STAGE_STATUS_LABELS = {
+    structure: "Not drawn",
+    drawn: "Drawn",
+    in_progress: "In progress",
+    done: "Finished",
+  };
+  const CCL_ANIMATION_SPEEDS = [
+    { value: "2500", label: "Slow" },
+    { value: "1500", label: "Normal" },
+    { value: "700", label: "Fast" },
+  ];
+
+  function createCclBracketsSection(tournament) {
+    const tournamentId = String(tournament?.id || "").trim();
+    const encodedTournamentId = encodeURIComponent(tournamentId);
+    const el = createCclElement;
+    const key = (value) => String(value ?? "").trim().toUpperCase();
+
+    const root = el("section", "cp-tournament-section cp-ccl cp-ccl--admin");
+    const head = el("div", "cp-tournament-section-head");
+    const headText = el("div");
+    headText.appendChild(el("div", "cp-tournament-section-title", "Qualifiers: structure & draw"));
+    headText.appendChild(el(
+      "div",
+      "cp-tournament-section-hint",
+      "Generate the groups and matches, run the draw of each path, then follow the brackets."
+    ));
+    head.appendChild(headText);
+    const status = el("div", "cp-edit-error");
+    const body = el("div", "cp-ccl-body");
+    root.appendChild(head);
+    root.appendChild(status);
+    root.appendChild(body);
+
+    let structure = null;
+    let formatKey = String(tournament?.format_key || "").trim();
+    let draw = null;
+    let testDraw = null;
+    let busy = false;
+    let selectedPath = "Q3";
+    let selectedGroup = "";
+    const startDrafts = {};
+    const resultDrafts = new Map();
+
+    const setStatus = (message, success = false) => {
+      status.textContent = String(message || "");
+      status.className = success ? "cp-edit-success" : "cp-edit-error";
+    };
+    const send = (path, method, payload) => requestTournamentJson(`${CCL_URL}${path}`, {
+      method,
+      ...(payload ? { body: JSON.stringify(payload) } : {}),
+    });
+    const getPaths = () => {
+      const qualifiers = (structure || []).find((stage) => stage.stage_key === "qualifiers");
+      return Array.isArray(qualifiers?.children) ? qualifiers.children : [];
+    };
+    const getPath = (pathKey) => getPaths().find((path) => key(path.stage_key) === key(pathKey)) || null;
+    const load = async () => {
+      const result = await send(`/${encodedTournamentId}/structure`, "GET");
+      structure = Array.isArray(result?.stages) ? result.stages : [];
+      formatKey = String(result?.tournament?.format_key || formatKey || "").trim();
+      draw = getPath(selectedPath)
+        ? await send(`/${encodedTournamentId}/stages/${encodeURIComponent(selectedPath)}/draw`, "GET")
+        : null;
+      const groups = getPath(selectedPath)?.groups || [];
+      if (!groups.some((group) => group.group_key === selectedGroup)) selectedGroup = groups[0]?.group_key || "";
+    };
+    const run = async (work, fallback) => {
+      if (busy) return;
+      busy = true;
+      setStatus("");
+      render();
+      try {
+        const message = await work();
+        await load();
+        if (message) setStatus(message, true);
+      } catch (error) {
+        const conflicts = Array.isArray(error?.data?.conflicts) ? error.data.conflicts : [];
+        const blockers = Array.isArray(error?.data?.blockers) ? error.data.blockers : [];
+        const matches = [...conflicts, ...blockers.filter((item) => item.bracket_no)]
+          .map((item) => `${item.group || item.group_name || ""}${item.bracket_no}`.trim());
+        setStatus(matches.length
+          ? `${error?.message || fallback} Matches: ${matches.join(", ")}.`
+          : getCclErrorMessage(error, fallback));
+        await load().catch(() => {});
+      } finally {
+        busy = false;
+        render();
+      }
+    };
+
+    const createButton = (label, onClick, variant = "secondary", disabled = false) => {
+      const button = el("button", `cp-btn cp-btn-${variant}`, label);
+      button.type = "button";
+      button.disabled = busy || disabled;
+      button.addEventListener("click", onClick);
+      return button;
+    };
+    const createBlock = (title, hint = "", action = null) => {
+      const block = el("div", "cp-ccl-block");
+      const blockHead = el("div", "cp-ccl-block-head");
+      blockHead.appendChild(el("div", "cp-ccl-block-title", title));
+      if (action) blockHead.appendChild(action);
+      block.appendChild(blockHead);
+      if (hint) block.appendChild(el("div", "cp-tournament-section-hint", hint));
+      return block;
+    };
+    const createTable = (headers) => {
+      const wrap = el("div", "cp-ccl-table-wrap cp-ccl-table-wrap--scroll");
+      const table = el("table", "cp-ccl-table");
+      const headRow = el("tr");
+      headers.forEach((header) => headRow.appendChild(el("th", "", header)));
+      const thead = el("thead");
+      thead.appendChild(headRow);
+      const tbody = el("tbody");
+      table.appendChild(thead);
+      table.appendChild(tbody);
+      wrap.appendChild(table);
+      return { wrap, tbody };
+    };
+    const addCell = (row, content, className = "") => {
+      const cell = el("td", className);
+      if (content instanceof Node) cell.appendChild(content);
+      else cell.textContent = String(content ?? "");
+      row.appendChild(cell);
+      return cell;
+    };
+    const createPlayerLabel = (player) => {
+      if (!player) return el("span", "cp-ccl-muted", "Bye");
+      const wrap = el("span", "cp-ccl-player");
+      if (player.association_flag) {
+        const flag = el("img", "cp-dd-flag");
+        flag.src = toApiAbsoluteUrl(player.association_flag);
+        flag.alt = "";
+        flag.title = player.association_name || "";
+        wrap.appendChild(flag);
+      }
+      wrap.appendChild(el("span", "", player.bga_nickname || player.player_id || "—"));
+      return wrap;
+    };
+    const createDateInput = (value, onInput) => {
+      const input = el("input", "cp-tournament-config-input");
+      input.type = "date";
+      input.value = String(value || "");
+      input.disabled = busy;
+      input.addEventListener("input", () => onInput(input.value));
+      return input;
+    };
+
+    // ---- Structure ----
+    const generate = (regenerate) => {
+      if (regenerate && !window.confirm("Matches of paths that are not drawn yet will be created again. Continue?")) return;
+      const startDates = Object.fromEntries(Object.entries(startDrafts).filter(([, value]) => value));
+      run(async () => {
+        const result = await send(`/${encodedTournamentId}/structure`, "POST", { start_dates: startDates });
+        CCL_PATHS.forEach((path) => { delete startDrafts[path]; });
+        const skipped = (result?.skipped || []).map((item) => item.stage);
+        return `Generated: ${(result?.generated || []).join(", ")}.${skipped.length ? ` Kept (already drawn): ${skipped.join(", ")}.` : ""}`;
+      }, "Failed to generate the structure.");
+    };
+    const saveStartDate = (pathKey) => run(async () => {
+      const result = await send(`/${encodedTournamentId}/stages/${encodeURIComponent(pathKey)}`, "PATCH", {
+        start_date: startDrafts[pathKey] || null,
+      });
+      delete startDrafts[pathKey];
+      return `${pathKey}: deadlines of ${result?.matches_updated ?? 0} matches updated.`;
+    }, "Failed to save the start date.");
+    const renderStructure = () => {
+      const paths = getPaths();
+      const canRegenerate = paths.some((path) => path.status === "structure");
+      const block = createBlock(
+        "Structure",
+        paths.length
+          ? "Start date: the Monday of the first week. Every match is due on Sunday 23:59 UTC of its week."
+          : "Start dates are Mondays; they can be set or changed later.",
+        paths.length && canRegenerate ? createButton("Regenerate", () => generate(true)) : null
+      );
+      if (!paths.length) {
+        const form = el("div", "cp-ccl-structure-form");
+        CCL_PATHS.forEach((pathKey) => {
+          const field = el("label", "cp-ccl-edit-label");
+          field.appendChild(el("span", "", `${pathKey} start`));
+          field.appendChild(createDateInput(startDrafts[pathKey], (value) => { startDrafts[pathKey] = value; }));
+          form.appendChild(field);
+        });
+        form.appendChild(createButton("Generate structure", () => generate(false), "primary"));
+        block.appendChild(form);
+        return block;
+      }
+      const { wrap, tbody } = createTable(["Path", "Groups", "Matches", "Start", "Status", ""]);
+      paths.forEach((path) => {
+        const row = el("tr");
+        addCell(row, path.stage_key, "cp-ccl-strong");
+        addCell(row, (path.groups || []).map((group) => group.group_key).join(", "));
+        addCell(row, (path.groups || []).reduce((sum, group) => sum + (group.matches || []).length, 0));
+        addCell(row, createDateInput(startDrafts[path.stage_key] ?? path.start_date, (value) => {
+          startDrafts[path.stage_key] = value;
+        }));
+        addCell(row, CCL_STAGE_STATUS_LABELS[path.status] || path.status);
+        const actions = el("div", "cp-ccl-actions");
+        actions.appendChild(createButton("Save date", () => saveStartDate(path.stage_key)));
+        addCell(row, actions);
+        tbody.appendChild(row);
+      });
+      block.appendChild(wrap);
+      return block;
+    };
+
+    // ---- Draw ----
+    const getPairs = (group) => {
+      const byPosition = new Map((group.positions || []).map((position) => [position.draw_position, position]));
+      return [1, 2, 3, 4].map((pair) => [byPosition.get(pair * 2 - 1), byPosition.get(pair * 2)]);
+    };
+    const createGroupsGrid = (groups, { revealed = null, current = null } = {}) => {
+      const grid = el("div", "cp-ccl-draw-grid");
+      groups.forEach((group) => {
+        const card = el("div", "cp-ccl-draw-group");
+        card.appendChild(el("div", "cp-ccl-draw-group-title", group.name || `Group ${group.group_key}`));
+        getPairs(group).forEach(([seeded, unseeded], index) => {
+          const pair = el("div", "cp-ccl-draw-pair");
+          pair.appendChild(el("span", "cp-ccl-draw-pair-no", String(index + 1)));
+          [seeded, unseeded].forEach((position, side) => {
+            const slot = el("span", `cp-ccl-draw-slot cp-ccl-draw-slot--${side ? "unseeded" : "seeded"}`);
+            const shown = position && (!revealed || revealed.has(position.draw_order));
+            if (!shown) slot.appendChild(el("span", "cp-ccl-muted", side ? `Unseeded #${index + 1}` : `Seeded #${index + 1}`));
+            else slot.appendChild(position.bye ? el("span", "cp-ccl-muted", "Bye") : createPlayerLabel(position.player));
+            if (shown && !position.bye) slot.title = position.player?.bga_nickname || "";
+            if (shown && current === position.draw_order) slot.classList.add("cp-ccl-draw-slot--current");
+            pair.appendChild(slot);
+          });
+          card.appendChild(pair);
+        });
+        grid.appendChild(card);
+      });
+      return grid;
+    };
+    const downloadDrawCsv = (result) => {
+      const quote = (value) => `"${String(value ?? "").replace(/"/g, '""')}"`;
+      const rows = [["Group", "Match", "Player 1", "Association 1", "Seeding 1", "Player 2", "Association 2", "Seeding 2"]];
+      result.groups.forEach((group) => {
+        getPairs(group).forEach(([seeded, unseeded], index) => {
+          const cells = (position, seed) => (position?.bye || !position
+            ? ["Bye", "", seed]
+            : [position.player?.bga_nickname || position.player?.player_id || "", position.player?.association_name || "", seed]);
+          rows.push([group.group_key, index + 1, ...cells(seeded, "Seeded"), ...cells(unseeded, "Unseeded")]);
+        });
+      });
+      const blob = new Blob([rows.map((row) => row.map(quote).join(",")).join("\n")], { type: "text/csv;charset=utf-8" });
+      const link = el("a");
+      link.href = URL.createObjectURL(blob);
+      link.download = `${tournamentId}-${selectedPath}-draw.csv`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      setTimeout(() => URL.revokeObjectURL(link.href), 1000);
+    };
+    const runTestDraw = () => run(async () => {
+      testDraw = await send(`/${encodedTournamentId}/stages/${encodeURIComponent(selectedPath)}/draw/preview`, "POST", {});
+      return "";
+    }, "Failed to run the test draw.");
+    const runDraw = () => {
+      if (!window.confirm(`Run the ${selectedPath} draw? It is made once and saved at once; Round 1 matches get their players.`)) return;
+      run(async () => {
+        const result = await send(`/${encodedTournamentId}/stages/${encodeURIComponent(selectedPath)}/draw`, "POST", {});
+        testDraw = null;
+        const conflicts = Array.isArray(result?.conflicts) ? result.conflicts.length : 0;
+        return conflicts
+          ? `${selectedPath} drawn. ${conflicts} player(s) could not be kept apart from their association.`
+          : `${selectedPath} drawn.`;
+      }, "Failed to run the draw.");
+    };
+    const resetDraw = () => {
+      if (!window.confirm(`Reset the ${selectedPath} draw? Round 1 matches lose their players.`)) return;
+      run(async () => {
+        await send(`/${encodedTournamentId}/stages/${encodeURIComponent(selectedPath)}/draw`, "DELETE");
+        return `${selectedPath} draw reset.`;
+      }, "Failed to reset the draw.");
+    };
+
+    // Replays a draw placement by placement (for the stream). Byes come first, then the players.
+    const openAnimation = (result) => {
+      const placements = Array.isArray(result?.placements) ? result.placements : [];
+      if (!placements.length) return;
+      const overlay = el("div", "cp-ccl-draw-show");
+      const panel = el("div", "cp-ccl-draw-show-panel");
+      const top = el("div", "cp-ccl-draw-show-head");
+      const caption = el("div", "cp-ccl-draw-show-caption");
+      const controls = el("div", "cp-ccl-actions");
+      const stage = el("div", "cp-ccl-draw-show-stage");
+      top.appendChild(el("div", "cp-ccl-draw-show-title", `${tournament?.short_title || tournament?.name || tournamentId} · ${selectedPath} draw`));
+      top.appendChild(controls);
+      panel.appendChild(top);
+      panel.appendChild(caption);
+      panel.appendChild(stage);
+      overlay.appendChild(panel);
+      document.body.appendChild(overlay);
+
+      const revealed = new Set();
+      let index = 0;
+      let timer = null;
+      let delay = Number(CCL_ANIMATION_SPEEDS[1].value);
+      const describe = (placement) => {
+        const pot = placement.draw_position % 2 ? "Seeded" : "Unseeded";
+        const who = placement.bye ? "Bye" : (placement.player?.bga_nickname || placement.player?.player_id || "");
+        const from = !placement.bye && placement.player?.association_name ? ` (${placement.player.association_name})` : "";
+        return `${index} / ${placements.length} · Group ${placement.group_key} · ${pot} #${Math.ceil(placement.draw_position / 2)}: ${who}${from}`;
+      };
+      const paint = () => {
+        stage.innerHTML = "";
+        const current = index ? placements[index - 1].draw_order : null;
+        stage.appendChild(createGroupsGrid(result.groups, { revealed, current }));
+        caption.textContent = index ? describe(placements[index - 1]) : `${placements.length} placements. Press Start.`;
+      };
+      const step = () => {
+        if (index >= placements.length) return stop();
+        revealed.add(placements[index].draw_order);
+        index += 1;
+        paint();
+        if (index >= placements.length) stop();
+      };
+      const stop = () => {
+        clearInterval(timer);
+        timer = null;
+        startButton.textContent = index >= placements.length ? "Finished" : "Start";
+        startButton.disabled = index >= placements.length;
+      };
+      const start = () => {
+        if (timer) return stop();
+        startButton.textContent = "Pause";
+        step();
+        timer = setInterval(step, delay);
+      };
+      const close = () => {
+        stop();
+        if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
+        overlay.remove();
+      };
+      const button = (label, onClick, variant = "secondary") => {
+        const node = el("button", `cp-btn cp-btn-${variant}`, label);
+        node.type = "button";
+        node.addEventListener("click", onClick);
+        controls.appendChild(node);
+        return node;
+      };
+      const speed = createTournamentDropdown(String(delay), CCL_ANIMATION_SPEEDS);
+      speed.addEventListener("change", () => {
+        delay = Number(speed.value) || delay;
+        if (timer) { clearInterval(timer); timer = setInterval(step, delay); }
+      });
+      controls.appendChild(speed.root || speed);
+      const startButton = button("Start", start, "primary");
+      button("Next", () => { if (!timer) step(); });
+      button("Show all", () => { stop(); placements.forEach((placement) => revealed.add(placement.draw_order)); index = placements.length; paint(); stop(); });
+      button("Fullscreen", () => (document.fullscreenElement ? document.exitFullscreen() : overlay.requestFullscreen?.())?.catch?.(() => {}));
+      button("Close", close);
+      paint();
+    };
+
+    const renderPotTable = (title, players) => {
+      const block = el("div", "cp-ccl-stack");
+      block.appendChild(el("div", "cp-ccl-strong", `${title} (${players.length})`));
+      const { wrap, tbody } = createTable(["Player", "Elo"]);
+      players
+        .slice()
+        .sort((a, b) => Number(b.elo ?? 0) - Number(a.elo ?? 0))
+        .forEach((player) => {
+          const row = el("tr");
+          addCell(row, createPlayerLabel(player));
+          addCell(row, player.elo === null || player.elo === undefined ? "—" : Math.round(Number(player.elo)), "cp-ccl-elo");
+          tbody.appendChild(row);
+        });
+      block.appendChild(wrap);
+      return block;
+    };
+    const renderDraw = () => {
+      const tabs = el("div", "cp-ccl-actions cp-ccl-path-tabs");
+      getPaths().forEach((path) => {
+        const tab = createButton(
+          `${path.stage_key} · ${CCL_STAGE_STATUS_LABELS[path.status] || path.status}`,
+          () => {
+            if (selectedPath === path.stage_key) return;
+            selectedPath = path.stage_key;
+            testDraw = null;
+            run(async () => "", "Failed to load the draw.");
+          },
+          selectedPath === path.stage_key ? "primary" : "secondary"
+        );
+        tabs.appendChild(tab);
+      });
+      const block = createBlock("Draw", "", tabs);
+      if (!draw) return block;
+      const players = Array.isArray(draw.players) ? draw.players : [];
+      if (draw.blockers?.length) {
+        block.appendChild(el("div", "cp-edit-error", `Not ready: ${summarizeCclBlockers(draw.blockers)}. Set Elo and form the pots above.`));
+      }
+      const pots = el("div", "cp-ccl-draw-pots");
+      pots.appendChild(renderPotTable("Seeded", players.filter((player) => player.seed === "Seeded")));
+      pots.appendChild(renderPotTable("Unseeded", players.filter((player) => player.seed === "Unseeded")));
+      block.appendChild(pots);
+
+      const actions = el("div", "cp-ccl-actions cp-ccl-draw-actions");
+      if (!draw.drawn) {
+        block.appendChild(el(
+          "div",
+          "cp-tournament-section-hint",
+          "Test draw: the same draw, never saved; run it as often as you like. Run draw: one run, saved at once."
+        ));
+        actions.appendChild(createButton("Test draw", runTestDraw, "secondary", !!draw.blockers?.length));
+        actions.appendChild(createButton("Run draw", runDraw, "primary", !!draw.blockers?.length));
+      } else {
+        block.appendChild(el("div", "cp-edit-success", `Drawn ${formatCclDate(draw.drawn_at)}.`));
+        actions.appendChild(createButton("Play animation", () => openAnimation(draw), "primary"));
+        actions.appendChild(createButton("Download CSV", () => downloadDrawCsv(draw)));
+        actions.appendChild(createButton("Reset draw", resetDraw, "danger"));
+      }
+      block.appendChild(actions);
+
+      const shown = draw.drawn ? draw : testDraw;
+      if (shown) {
+        if (!draw.drawn) {
+          const note = el("div", "cp-ccl-draw-test-note");
+          note.appendChild(el("span", "cp-ccl-strong", "Test draw — not saved."));
+          note.appendChild(document.createTextNode(` Seed ${shown.seed}, ${shown.attempts} attempt${shown.attempts === 1 ? "" : "s"}.`));
+          note.appendChild(createButton("Play animation", () => openAnimation(shown)));
+          block.appendChild(note);
+        }
+        if (shown.conflicts?.length) {
+          block.appendChild(el(
+            "div",
+            "cp-edit-error",
+            `${shown.conflicts.length} player(s) share a group with their association: ${shown.conflicts.map((item) => `${item.association_id} in ${item.group_key}`).join(", ")}.`
+          ));
+        }
+        block.appendChild(createGroupsGrid(shown.groups || []));
+      }
+      return block;
+    };
+
+    // ---- Brackets: match results ----
+    const saveResult = (match, clear = false) => {
+      const draft = resultDrafts.get(match.id) || {};
+      run(async () => {
+        await send(`/matches/${encodeURIComponent(match.id)}/result`, "POST", clear
+          ? { clear: true }
+          : { dw1: Number(draft.dw1), dw2: Number(draft.dw2) });
+        resultDrafts.delete(match.id);
+        return clear ? `Match ${match.bracket_no}: result cleared.` : `Match ${match.bracket_no}: result saved.`;
+      }, "Failed to save the result.");
+    };
+    const syncBrackets = () => run(async () => {
+      const result = await send(`/${encodedTournamentId}/brackets/sync`, "POST", {});
+      const conflicts = Array.isArray(result?.conflicts) ? result.conflicts.length : 0;
+      return `${result?.updates?.length || 0} match(es) updated.${conflicts ? ` ${conflicts} match(es) need attention.` : ""}`;
+    }, "Failed to sync the brackets.");
+    const createSide = (player) => (player?.id
+      ? el("span", "", player.bga_nickname || player.id)
+      : el("span", "cp-ccl-muted", player?.placeholder || "—"));
+    const describeMatchStatus = (match) => {
+      if (match.status === "Cancelled" && match.is_conditional) return "Not needed";
+      if (match.status === "Cancelled") return "Bye";
+      return match.status;
+    };
+    const renderBrackets = () => {
+      const path = getPath(selectedPath);
+      if (!path || path.status === "structure") return null;
+      const groupTabs = el("div", "cp-ccl-actions");
+      (path.groups || []).forEach((group) => groupTabs.appendChild(createButton(
+        group.group_key,
+        () => { selectedGroup = group.group_key; render(); },
+        selectedGroup === group.group_key ? "primary" : "secondary"
+      )));
+      groupTabs.appendChild(createButton("Sync brackets", syncBrackets));
+      const block = createBlock(
+        `${selectedPath} matches`,
+        "Results come from BGA automatically; enter one here for a no-show or a result played elsewhere.",
+        groupTabs
+      );
+      const group = (path.groups || []).find((item) => item.group_key === selectedGroup);
+      if (!group) return block;
+      const { wrap, tbody } = createTable(["#", "Round", "Player 1", "Player 2", "Score", "Status", "Result"]);
+      (group.matches || []).forEach((match) => {
+        const row = el("tr");
+        if (match.status === "Cancelled") row.classList.add("cp-ccl-muted-row");
+        addCell(row, match.bracket_no, "cp-ccl-strong");
+        const round = el("div", "cp-ccl-stack");
+        round.appendChild(el("span", "", match.round_name || ""));
+        if (match.deadline_utc) round.appendChild(el("span", "cp-ccl-muted", `by ${formatCclDate(match.deadline_utc)}`));
+        addCell(row, round);
+        addCell(row, createSide(match.player_1));
+        addCell(row, createSide(match.player_2));
+        addCell(row, match.dw1 === null || match.dw2 === null ? "" : `${match.dw1}:${match.dw2}`, "cp-ccl-strong");
+        addCell(row, describeMatchStatus(match));
+        const actions = el("div", "cp-ccl-actions");
+        if (match.player_1?.id && match.player_2?.id) {
+          const draft = resultDrafts.get(match.id) || { dw1: match.dw1 ?? "", dw2: match.dw2 ?? "" };
+          resultDrafts.set(match.id, draft);
+          ["dw1", "dw2"].forEach((field, index) => {
+            const input = el("input", "cp-tournament-config-input cp-ccl-score-input");
+            input.type = "text";
+            input.inputMode = "numeric";
+            input.value = String(draft[field] ?? "");
+            input.disabled = busy;
+            input.setAttribute("aria-label", `Games won by player ${index + 1}`);
+            input.addEventListener("input", () => { draft[field] = input.value; });
+            actions.appendChild(input);
+            if (!index) actions.appendChild(el("span", "", ":"));
+          });
+          actions.appendChild(createButton("Save", () => saveResult(match)));
+          if (match.dw1 !== null && match.dw2 !== null) actions.appendChild(createButton("Clear", () => saveResult(match, true)));
+        }
+        addCell(row, actions);
+        tbody.appendChild(row);
+      });
+      block.appendChild(wrap);
+      return block;
+    };
+
+    const render = () => {
+      body.innerHTML = "";
+      if (!structure) {
+        body.textContent = "Loading structure...";
+        return;
+      }
+      if (!formatKey) {
+        body.appendChild(el("div", "cp-tournament-section-hint", "Choose the CCL format in the tournament settings above, save, then generate the structure."));
+        return;
+      }
+      body.appendChild(renderStructure());
+      if (!getPaths().length) return;
+      body.appendChild(renderDraw());
+      const brackets = renderBrackets();
+      if (brackets) body.appendChild(brackets);
+      labelCclTableCells(body);
+    };
+
+    render();
+    load()
+      .then(render)
+      .catch((error) => {
+        body.textContent = "";
+        setStatus(error?.message || "Failed to load the structure.");
+      });
+    return root;
+  }
+
   function createCclPlayersSection(tournament, references, options = {}) {
     const tournamentId = String(tournament?.id || "").trim();
     const encodedTournamentId = encodeURIComponent(tournamentId);
@@ -13448,6 +14174,11 @@
       toDatetimeLocalFromUtc(tournament?.registration_ends_at),
       { type: "datetime-local", name: "registration_ends_at" }
     );
+    const cclFormatField = createTournamentFormRow(
+      "CCL format",
+      tournament?.format_key || "",
+      { selectOptions: CCL_FORMAT_OPTIONS, name: "format_key" }
+    );
     const cclDeadlineFields = CCL_DEADLINES.map(({ field, label }) => ({
       field,
       ...createTournamentFormRow(label, toDatetimeLocalFromUtc(tournament?.[field]), {
@@ -13500,6 +14231,7 @@
     [
       tournamentTypeField,
       categoryField,
+      cclFormatField,
       teamSizeField,
       visibilityField,
       lineupTypeField,
@@ -13591,7 +14323,7 @@
       stage1FormatField.row.classList.toggle("cp-hidden", isFreePlay);
       stage2FormatField.row.classList.toggle("cp-hidden", !hasStage2);
       accessUsersEditor.root.classList.toggle("cp-hidden", !canManageAccessUsers || !supportsAccessUsers);
-      cclDeadlineFields.forEach(({ row, input }) => {
+      [cclFormatField, ...cclDeadlineFields].forEach(({ row, input }) => {
         row.classList.toggle("cp-hidden", !classification.isCcl);
         input.disabled = isBusy || !classification.isCcl;
       });
@@ -13733,6 +14465,7 @@
         payload.access_users = accessUsersEditor.getValues();
       }
       if (classification.isCcl) {
+        payload.format_key = cclFormatField.input.value || null;
         cclDeadlineFields.forEach(({ field, input }) => {
           payload[field] = toUtcIsoFromDatetimeLocal(input.value);
         });
@@ -13859,6 +14592,7 @@
     if (canManageAccessUsers) contentEl.appendChild(accessUsersEditor.root);
     if (initialClassification.isCcl && tournamentId) {
       contentEl.appendChild(createCclPlayersSection(tournament, references));
+      contentEl.appendChild(createCclBracketsSection(tournament));
       contentEl.appendChild(createCclRegistrationsSection(tournament));
       contentEl.appendChild(createCclFansChoiceSection(tournament));
     }

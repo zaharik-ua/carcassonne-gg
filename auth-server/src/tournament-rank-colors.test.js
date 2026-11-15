@@ -7,6 +7,7 @@ import { normalizeTournamentLineupType, resolveTournamentTextPatch } from "./tou
 import { normalizeTournamentRankColors, resolveTournamentRankColorsPatch } from "./tournament-rank-colors.js";
 import { resolveTournamentClassificationInput } from "./tournament-classification.js";
 import { CCL_DEADLINE_FIELDS, isCclTournament } from "./ccl-slots.js";
+import { resolveTournamentFormatKeyInput } from "./ccl-formats.js";
 
 const expected = { stages: { "Stage 1": {
   rankColors: { 1: "blue", 2: "blue", 3: "green", 4: "green" },
@@ -95,6 +96,8 @@ async function createApi(t) {
     TOURNAMENT_ACCESS_TYPES: { FRIENDLY: "Friendly", OFFICIAL: "Official" },
     TOURNAMENT_LINEUP_SIZE_TYPES: { FIXED: 1 },
     CCL_DEADLINE_FIELDS,
+    resolveTournamentFormatKeyInput, isCclTournament,
+    hasCclStructure: async () => false,
     supportsTournamentAccessUsers: (subtype, type, category) => subtype === "Official" || isCclTournament({ type, category }),
   });
   const cclDeadlinesStart = server.indexOf("function resolveCclDeadlinesInput(");
