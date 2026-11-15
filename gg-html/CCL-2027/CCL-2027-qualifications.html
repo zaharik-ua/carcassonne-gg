@@ -532,9 +532,9 @@
 <!-- СКРИПТ -->
 <script>
   
-  // --- TOURNAMENT ID ---
-  // Determine currentTournamentId either from test default or from the page URL
-  const currentTournamentId = "CCL-2027Q";
+  // --- DATA SOURCE: auth-server public API (generated CCL Qualifiers brackets) ---
+  const API_BASE = window.AUTH_BASE_URL || "https://api.carcassonne.gg";
+  const currentTournamentId = "CCL-2027";
   const normalizedTournamentId = currentTournamentId.trim().toLowerCase();
   const normalizeTournamentId = (value) => {
     if (value === null || value === undefined) return "";
@@ -558,7 +558,6 @@
   let countries = [];
   let duelPlayersForSearch = [];
   let tournamentPlayers = [];
-  let tournaments_list = [];
   const playerCountryInfoById = new Map();
   const playerCountryInfoByName = new Map();
 
@@ -668,29 +667,10 @@
     return null;
   }
 
-  function loadTournamentsList() {
-    return fetch("https://zaharik-ua.github.io/carcassonne-gg/json-data/tournaments-list.json")
-      .then(r => r.json())
-      .then(json => {
-        tournaments_list = Array.isArray(json.tournaments) ? json.tournaments : [];
-      })
-      .catch(err => {
-        console.error("❌ Failed to load tournaments list", err);
-      });
-  }
-
+  // The API answers in the shape of tournaments-open.json (tournaments, duels, players,
+  // countries, tournament_players), so the bracket renderer below is unchanged.
   function fetchTournamentsAndInit() {
-    const tournamentMeta = tournaments_list.find(
-      t => t.tournament_id === currentTournamentId
-    );
-
-    let dataUrl;
-
-    if (tournamentMeta && tournamentMeta.status === "Done") {
-      dataUrl = `https://zaharik-ua.github.io/carcassonne-gg/json-data/tournaments-done/${currentTournamentId}.json`;
-    } else {
-      dataUrl = "https://zaharik-ua.github.io/carcassonne-gg/json-data/tournaments-open.json";
-    }
+    const dataUrl = `${API_BASE}/public/ccl/${encodeURIComponent(currentTournamentId)}/brackets`;
 
     fetch(dataUrl)
       .then(r => {
@@ -2075,12 +2055,7 @@
     }
   }
 
-  runWhenReady(() => {
-    loadTournamentsList()
-      .then(() => {
-        fetchTournamentsAndInit();
-      });
-  });
+  runWhenReady(fetchTournamentsAndInit);
 
   // Opens a fullscreen overlay that shows only the bracket block
   function openBracketFullscreen(sourceWrapper) {

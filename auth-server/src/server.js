@@ -103,6 +103,7 @@ import { ensureDuelBracketColumns, ensureTournamentStructureSchema } from "./tou
 import { hasCclStructure, registerCclStructureRoutes } from "./ccl-structure.js";
 import { registerCclDrawRoutes } from "./ccl-draw.js";
 import { registerCclBracketRoutes, startCclBracketSync } from "./ccl-bracket.js";
+import { registerCclPublicBracketRoutes } from "./ccl-public-brackets.js";
 import { registerCclRoutes } from "./ccl-routes.js";
 import { registerCclMatchRoutes } from "./ccl-match-routes.js";
 import { CCL_DEADLINE_FIELDS, isCclTournament } from "./ccl-slots.js";
@@ -8490,6 +8491,8 @@ registerCclBracketRoutes(app, {
   getAuditActor,
   logAuditEvent,
 });
+
+registerCclPublicBracketRoutes(app, { db });
 
 registerTournamentRegistrationRoutes(app, {
   db,
