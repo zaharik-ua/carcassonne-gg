@@ -209,14 +209,14 @@ test("captains see and fill only their association's slots before the stage dead
   assert.equal(view.body.can_manage, false);
   assert.equal(view.body.captain_association_id, "AR");
   assert.deepEqual(view.body.slots.map((slot) => slot.id).sort(), [arQ1.id, arQ3.id].sort());
-  assert.equal(view.body.phases.qualification.pots_blockers, undefined);
+  assert.equal(view.body.phases.q1.pots_blockers, undefined);
   assert.deepEqual(
     view.body.tournament.stages.map((stage) => [stage.stage, stage.registration_open]),
     [["Main", true], ["Q1", true], ["Q2", true], ["Q3", false]]
   );
   assert.equal((await getSlots(api, USERS.playerAr)).status, 403);
   assert.equal((await getSlots(api, USERS.captainDe)).status, 403);
-  assert.ok((await getSlots(api, USERS.admin)).body.phases.qualification.pots_blockers.length > 0);
+  assert.ok((await getSlots(api, USERS.admin)).body.phases.q1.pots_blockers.length > 0);
 
   // Profile association may be stored as a name ("Argentina").
   const filled = await patchSlot(api, USERS.captainAr, arQ1.id, {
@@ -325,21 +325,23 @@ test("qualification Elo, results, league Elo and pots work end to end", async (t
   const [empty] = await createSlot(api, { association_id: "DE", entry_stage: "Q2", qualified_by_name: "X" });
   const slots = await seedFullTournament(api);
 
-  // Elo can be issued early, while slots are still open; empty slots only block pots.
-  const early = await setElo(api, "qualification");
+  // Elo can be issued early, while slots are still open; empty slots only block pots of their path.
+  const early = await setElo(api, "q2");
   assert.equal(early.status, 200, JSON.stringify(early.body));
   assert.deepEqual(early.body.skipped, [{ slot_id: empty.id, reason: "player_missing" }]);
   assert.equal(early.body.phase.elo_set, false);
-  const blockedPots = await formPots(api, "qualification");
+  const blockedPots = await formPots(api, "q2");
   assert.equal(blockedPots.status, 409);
   assert.deepEqual(blockedPots.body.blockers, [{ slot_id: empty.id, reason: "player_missing" }]);
-  assert.equal((await setElo(api, "qualification", USERS.captainAr)).status, 403);
+  assert.equal((await setElo(api, "q1", USERS.captainAr)).status, 403);
+  assert.equal((await setElo(api, "q12")).status, 400);
   assert.equal((await setElo(api, "groups")).status, 400);
   await api.call("DELETE /ccl/slots/:id", { user: USERS.admin, params: { id: empty.id } });
 
-  const qualification = await setElo(api, "qualification");
+  const qualification = await setElo(api, "q1");
   assert.equal(qualification.status, 200, JSON.stringify(qualification.body));
   assert.equal(qualification.body.phase.elo_set, true);
+  assert.equal((await setElo(api, "q2")).body.phase.elo_set, true);
   const entries = await all(db, "SELECT slot_id, stage, player_id, elo, elo_source, fixed_at, fixed_by FROM ccl_stage_entries WHERE stage <> 'Main' ORDER BY stage, player_id");
   assert.deepEqual(entries.map((row) => [row.stage, row.player_id, row.elo, row.elo_source]), [
     ["Q1", "olena", 1755, "gg_elo"],
@@ -359,7 +361,7 @@ test("qualification Elo, results, league Elo and pots work end to end", async (t
   assert.equal((await patchSlot(api, USERS.captainAr, slots.arQ1.id, { qualified_by_name: "Online 2026" })).status, 200);
 
   // Qualification pot sizes are fixed per path: Q1 needs 20 rated players for Seeded.
-  const smallPath = await formPots(api, "qualification");
+  const smallPath = await formPots(api, "q1");
   assert.equal(smallPath.status, 400);
   assert.match(smallPath.body.message, /Q1 needs 20 rated players for Seeded, but has 1/);
 
@@ -447,7 +449,7 @@ test("qualification Elo, results, league Elo and pots work end to end", async (t
     ]
   );
   assert.deepEqual(publicLists.body.phases.league, { elo_set: true, elo_set_at: NOW, pots_formed: false });
-  assert.equal(publicLists.body.phases.qualification.pots_formed, false);
+  assert.equal(publicLists.body.phases.q1.pots_formed, false);
 
   // Replacing a league player re-issues that slot's Elo.
   const replaced = await patchSlot(api, USERS.admin, slots.arMain.id, { player_id: "leo" });
@@ -502,8 +504,8 @@ test("a full Q3 path forms 12 Seeded and 12 Unseeded", async (t) => {
   const api = createApi(db);
   // 14 rated players; the rest have the initial 1500 or no GG Elo.
   const players = await fillStage(api, db, "Q3", 24, (index) => (index <= 14 ? 2010 - index * 10 : index % 2 ? 1500 : null));
-  assert.equal((await setElo(api, "qualification")).status, 200);
-  const pots = await formPots(api, "qualification");
+  assert.equal((await setElo(api, "q3")).status, 200);
+  const pots = await formPots(api, "q3");
   assert.equal(pots.status, 200, JSON.stringify(pots.body));
   const seeds = await seedsByPlayer(db);
   assert.deepEqual(players.filter((id) => seeds.get(id) === "Seeded"), players.slice(0, 12));

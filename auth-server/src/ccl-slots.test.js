@@ -39,7 +39,9 @@ test("CCL tournaments and stages are recognised", () => {
   assert.equal(normalizeCclStage(" q2 "), "Q2");
   assert.equal(normalizeCclStage("Q4"), null);
   assert.equal(getCclStagePhase("Main"), "league");
-  assert.equal(getCclStagePhase("Q3"), "qualification");
+  assert.equal(getCclStagePhase("Q1"), "q1");
+  assert.equal(getCclStagePhase("Q2"), "q2");
+  assert.equal(getCclStagePhase("Q3"), "q3");
   assert.equal(getCclStagePhase(""), null);
 });
 
@@ -145,10 +147,11 @@ test("admins change any slot at any time, within the slot rules", () => {
 
 test("a player change resets pots of the entry phase and, for qualified slots, of the league", () => {
   assert.deepEqual(getCclPhasesAffectedByPlayerChange({ entry_stage: "Main" }), ["league"]);
-  assert.deepEqual(getCclPhasesAffectedByPlayerChange({ entry_stage: "Q2" }), ["qualification"]);
+  assert.deepEqual(getCclPhasesAffectedByPlayerChange({ entry_stage: "Q2" }), ["q2"]);
+  assert.deepEqual(getCclPhasesAffectedByPlayerChange({ entry_stage: "Q3" }), ["q3"]);
   assert.deepEqual(
     getCclPhasesAffectedByPlayerChange({ entry_stage: "Q2", league_status: "qualified" }),
-    ["qualification", "league"]
+    ["q2", "league"]
   );
 });
 
@@ -202,31 +205,40 @@ test("Elo is issued early to filled slots; empty, unassigned or undecided slots 
     { id: "tbd", association_id: null, entry_stage: "Q3", player_id: null, league_status: null },
     { id: "ua-q2", association_id: "UA", entry_stage: "Q2", player_id: null, league_status: null },
   ];
-  assert.deepEqual(getCclPotsBlockers(withGaps, "qualification"), [
-    { slot_id: "tbd", reason: "association_missing" },
+  // Every path has its own blockers: a gap in Q2 or Q3 does not hold back Q1 pots.
+  assert.deepEqual(getCclPotsBlockers(withGaps, "q1"), []);
+  assert.deepEqual(getCclPotsBlockers(withGaps, "q2"), [
     { slot_id: "ua-q2", reason: "player_missing" },
+  ]);
+  assert.deepEqual(getCclPotsBlockers(withGaps, "q3"), [
+    { slot_id: "tbd", reason: "association_missing" },
   ]);
   assert.deepEqual(getCclPotsBlockers(withGaps, "league"), [
     { slot_id: "tbd", reason: "league_status_pending" },
     { slot_id: "ua-q2", reason: "league_status_pending" },
   ]);
-  const early = buildCclEloAssignments({ slots: withGaps, phase: "qualification", profilesById });
-  assert.deepEqual(early.assignments.map((row) => row.slot_id), ["ar-q1", "ar-q3", "ua-q1", "ua-q1b"]);
-  assert.deepEqual(early.skipped, [
-    { slot_id: "tbd", reason: "player_missing" },
-    { slot_id: "ua-q2", reason: "player_missing" },
-  ]);
+  const early = buildCclEloAssignments({ slots: withGaps, phase: "q1", profilesById });
+  assert.deepEqual(early.assignments.map((row) => row.slot_id), ["ar-q1", "ua-q1", "ua-q1b"]);
+  assert.deepEqual(early.skipped, []);
+  const earlyQ2 = buildCclEloAssignments({ slots: withGaps, phase: "q2", profilesById });
+  assert.deepEqual(earlyQ2.assignments, []);
+  assert.deepEqual(earlyQ2.skipped, [{ slot_id: "ua-q2", reason: "player_missing" }]);
+  const earlyQ3 = buildCclEloAssignments({ slots: withGaps, phase: "q3", profilesById });
+  assert.deepEqual(earlyQ3.assignments.map((row) => row.slot_id), ["ar-q3"]);
+  assert.deepEqual(earlyQ3.skipped, [{ slot_id: "tbd", reason: "player_missing" }]);
   assert.equal(buildCclEloAssignments({ slots: withGaps, phase: "league", profilesById }).assignments.length, 4);
 });
 
 test("setting Elo writes GG Elo per phase entry; players without rating get null", () => {
-  const qualification = buildCclEloAssignments({ slots, phase: "qualification", profilesById });
-  assert.deepEqual(qualification.skipped, []);
+  const q1 = buildCclEloAssignments({ slots, phase: "q1", profilesById });
+  assert.deepEqual(q1.skipped, []);
   assert.deepEqual(
-    qualification.assignments.map(({ slot_id: slotId, stage, elo }) => [slotId, stage, elo]),
-    [["ar-q1", "Q1", null], ["ar-q3", "Q3", 1700.5], ["ua-q1", "Q1", 1700.5], ["ua-q1b", "Q1", null]]
+    q1.assignments.map(({ slot_id: slotId, stage, elo }) => [slotId, stage, elo]),
+    [["ar-q1", "Q1", null], ["ua-q1", "Q1", 1700.5], ["ua-q1b", "Q1", null]]
   );
-  assert.ok(qualification.assignments.every((row) => row.elo_source === "gg_elo" && row.seed === null));
+  assert.ok(q1.assignments.every((row) => row.elo_source === "gg_elo" && row.seed === null));
+  const q3 = buildCclEloAssignments({ slots, phase: "q3", profilesById });
+  assert.deepEqual(q3.assignments.map(({ slot_id: slotId, stage, elo }) => [slotId, stage, elo]), [["ar-q3", "Q3", 1700.5]]);
 
   const league = buildCclEloAssignments({ slots, phase: "league", profilesById });
   assert.deepEqual(
@@ -268,13 +280,16 @@ test("qualification paths have their own pots: Q1 20, Q2 16, Q3 12 Seeded; unrat
   const q3 = stagePlayers("Q3", 24, (index) => (index > 14 ? null : index === 13 ? 1880 : 2000 - index * 10));
   // Q2: 20 players (up to 32 allowed), exactly 16 rated.
   const q2 = stagePlayers("Q2", 20, (index) => (index > 16 ? null : 1900 - index));
-  const result = formCclPots({
-    slots: [...q2.slots, ...q3.slots],
-    entries: [...q2.entries, ...q3.entries],
-    phase: "qualification",
-    ratingPositionByPlayerId: new Map([["p-Q3-13", 1], ["p-Q3-12", 50]]),
-  });
-  assert.equal(result.error, undefined);
+  const allSlots = [...q2.slots, ...q3.slots];
+  const allEntries = [...q2.entries, ...q3.entries];
+  const ratingPositionByPlayerId = new Map([["p-Q3-13", 1], ["p-Q3-12", 50]]);
+  const q2Result = formCclPots({ slots: allSlots, entries: allEntries, phase: "q2", ratingPositionByPlayerId });
+  const q3Result = formCclPots({ slots: allSlots, entries: allEntries, phase: "q3", ratingPositionByPlayerId });
+  assert.equal(q2Result.error, undefined);
+  assert.equal(q3Result.error, undefined);
+  assert.ok(q2Result.seeds.every((row) => row.stage === "Q2"));
+  assert.ok(q3Result.seeds.every((row) => row.stage === "Q3"));
+  const result = { seeds: [...q2Result.seeds, ...q3Result.seeds] };
   const seeded = (stage) => result.seeds.filter((row) => row.stage === stage && row.seed === "Seeded").map((row) => row.slot_id);
   assert.deepEqual(seeded("Q2"), q2.slots.slice(0, 16).map((slot) => slot.id));
   assert.equal(seeded("Q3").length, 12);
@@ -284,9 +299,9 @@ test("qualification paths have their own pots: Q1 20, Q2 16, Q3 12 Seeded; unrat
   assert.ok(q3.slots.slice(14).every((slot) => result.seeds.find((row) => row.slot_id === slot.id).seed === "Unseeded"));
 
   const tooMany = stagePlayers("Q3", 25, () => 1700);
-  assert.match(formCclPots({ ...tooMany, phase: "qualification" }).error, /Q3 has 25 players; at most 24/);
+  assert.match(formCclPots({ ...tooMany, phase: "q3" }).error, /Q3 has 25 players; at most 24/);
   const fewRated = stagePlayers("Q2", 20, (index) => (index > 15 ? null : 1700));
-  assert.match(formCclPots({ ...fewRated, phase: "qualification" }).error, /Q2 needs 16 rated players for Seeded, but has 15/);
+  assert.match(formCclPots({ ...fewRated, phase: "q2" }).error, /Q2 needs 16 rated players for Seeded, but has 15/);
 });
 
 test("League Stage has five pots of 12: Pot 1-4 by Elo, Pot 5 the rest and every unrated player", () => {

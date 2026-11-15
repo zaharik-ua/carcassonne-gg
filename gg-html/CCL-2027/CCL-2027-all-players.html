@@ -631,7 +631,13 @@
     section.appendChild(table);
     playersContainer.appendChild(section);
 
-    const eloDate = formatEloDate(phases?.qualification?.elo_set_at);
+    // Every path fixes Elo separately; show each date that is set, one date when they all match.
+    const eloDates = [["Q1", phases?.q1], ["Q2", phases?.q2], ["Q3", phases?.q3]]
+      .map(([label, phase]) => [label, formatEloDate(phase?.elo_set_at)])
+      .filter(([, date]) => date);
+    const eloDate = eloDates.length === 3 && eloDates.every(([, date]) => date === eloDates[0][1])
+      ? eloDates[0][1]
+      : eloDates.map(([label, date]) => `${date} (${label})`).join(", ");
     const commentBlock = document.createElement("div");
     commentBlock.className = "elo-comment";
     commentBlock.textContent = eloDate

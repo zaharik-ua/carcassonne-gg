@@ -2,10 +2,15 @@ import { readTournamentClassification } from "./tournament-classification.js";
 
 export const CCL_STAGES = Object.freeze(["Main", "Q1", "Q2", "Q3"]);
 export const CCL_QUALIFICATION_STAGES = Object.freeze(["Q1", "Q2", "Q3"]);
+// Draw phases: every qualification path has its own Elo and pots, so a full path can be drawn
+// while the others are still filling up.
 export const CCL_PHASES = Object.freeze({
-  qualification: CCL_QUALIFICATION_STAGES,
+  q1: Object.freeze(["Q1"]),
+  q2: Object.freeze(["Q2"]),
+  q3: Object.freeze(["Q3"]),
   league: Object.freeze(["Main"]),
 });
+export const CCL_QUALIFICATION_PHASES = Object.freeze(["q1", "q2", "q3"]);
 export const CCL_LEAGUE_STATUSES = Object.freeze(["qualified", "eliminated"]);
 export const CCL_QUALIFICATION_SEEDS = Object.freeze(["Seeded", "Unseeded"]);
 export const CCL_LEAGUE_POTS = Object.freeze(["Pot 1", "Pot 2", "Pot 3", "Pot 4", "Pot 5"]);
@@ -52,7 +57,7 @@ export function normalizeCclStage(value) {
 export function getCclStagePhase(stage) {
   const normalized = normalizeCclStage(stage);
   if (!normalized) return null;
-  return normalized === "Main" ? "league" : "qualification";
+  return Object.keys(CCL_PHASES).find((phase) => CCL_PHASES[phase].includes(normalized)) || null;
 }
 
 export function getCclStageDeadline(tournament, stage) {
@@ -193,10 +198,10 @@ export function getCclLeagueResultError({ slot, league_status: leagueStatus, ...
   return normalizeCclQualifiedBy(qualifiedByInput).error || null;
 }
 
-// Slots taking part in a phase: Q slots for qualification; Main slots + qualified Q slots for the league.
+// Slots taking part in a phase: the path's slots for q1 / q2 / q3; Main slots + qualified Q slots for the league.
 export function getCclPhaseSlots(slots, phase) {
-  if (phase === "qualification") {
-    return (slots || []).filter((slot) => CCL_QUALIFICATION_STAGES.includes(slot.entry_stage));
+  if (CCL_QUALIFICATION_PHASES.includes(phase)) {
+    return (slots || []).filter((slot) => CCL_PHASES[phase].includes(slot.entry_stage));
   }
   if (phase === "league") {
     return (slots || []).filter((slot) => slot.entry_stage === "Main" || slot.league_status === "qualified");
@@ -360,7 +365,7 @@ function formLeaguePots(entries, ratingPositionByPlayerId) {
 export function formCclPots({ slots, entries, phase, ratingPositionByPlayerId }) {
   const phaseSlots = getCclPhaseSlots(slots, phase);
   const stages = CCL_PHASES[phase];
-  if (!stages) return { error: "phase must be qualification or league" };
+  if (!stages) return { error: "phase must be q1, q2, q3 or league" };
   const entriesBySlot = new Map(
     (entries || [])
       .filter((entry) => stages.includes(entry.stage))

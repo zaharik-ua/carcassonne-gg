@@ -296,7 +296,7 @@ async function requireCclAdmin(db, user, tournamentId) {
 
 function phaseParam(value) {
   const phase = text(value).toLowerCase();
-  if (!CCL_PHASES[phase]) throw requestError(400, "phase must be qualification or league");
+  if (!CCL_PHASES[phase]) throw requestError(400, "phase must be q1, q2, q3 or league");
   return phase;
 }
 

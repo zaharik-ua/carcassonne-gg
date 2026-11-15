@@ -12500,17 +12500,15 @@
         return row;
       };
 
-      // Qualification: one row per path; Elo and pots are set for the whole phase, so the buttons span the rows.
-      const qualification = data.phases?.qualification || {};
-      const qualificationBlockers = Array.isArray(qualification.pots_blockers) ? qualification.pots_blockers : [];
+      // Qualification: every path has its own Elo and pots (phase q1, q2, q3), so a full path
+      // can be drawn while the others are still filling up.
       CCL_QUALIFICATION_STAGES.forEach((stage, index) => {
+        const phase = stage.toLowerCase();
+        const phaseInfo = data.phases?.[phase] || {};
+        const blockers = Array.isArray(phaseInfo.pots_blockers) ? phaseInfo.pots_blockers : [];
         const row = addStageRow(stage, stage, getStageDrawInfo(stage));
-        if (index === 0) {
-          row.className = "cp-ccl-group-start";
-          const actionsCell = addCell(row, createPhaseActions("qualification", qualification, qualificationBlockers));
-          actionsCell.rowSpan = CCL_QUALIFICATION_STAGES.length;
-          actionsCell.className = "cp-ccl-phase-actions";
-        }
+        if (index === 0) row.className = "cp-ccl-group-start";
+        addCell(row, createPhaseActions(phase, phaseInfo, blockers), "cp-ccl-phase-actions");
       });
 
       const league = data.phases?.league || {};
