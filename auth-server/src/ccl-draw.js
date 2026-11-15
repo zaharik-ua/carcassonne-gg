@@ -256,6 +256,7 @@ async function describeDraw(db, tournament, input, result = null) {
       slot_id: entry.slot_id,
       player_id: entry.player_id || null,
       bga_nickname: profile?.bga_nickname || null,
+      name: profile?.name || null,
       avatar: profile?.avatar || null,
       association_id: entry.association_id || null,
       association_name: association?.name || null,

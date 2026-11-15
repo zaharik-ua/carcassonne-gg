@@ -2937,12 +2937,13 @@
 
   .cp-ccl-draw-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr));
     gap: 12px;
   }
 
   .cp-ccl-draw-group {
     display: grid;
+    min-width: 0;
     gap: 6px;
     padding: 10px;
     border: 1px solid #e5e7eb;
@@ -2989,6 +2990,44 @@
     border-left: 3px solid #d64545;
   }
 
+  .cp-ccl-draw-pair.cp-ccl-draw-pair--reveal {
+    grid-template-columns: 18px minmax(0, 1fr) minmax(0, 1fr) 32px;
+  }
+
+  .cp-ccl-draw-pair--current .cp-ccl-draw-slot {
+    background: #fff1b8;
+    font-weight: 700;
+  }
+
+  .cp-ccl-draw-run {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .cp-ccl-draw-run .cp-tournament-section-hint,
+  .cp-ccl-draw-run .cp-edit-error,
+  .cp-ccl-draw-run .cp-edit-success {
+    flex-basis: 100%;
+  }
+
+  .cp-ccl-draw-run .cp-btn-primary {
+    padding: 8px 22px;
+    font-size: 14px;
+  }
+
+  .cp-ccl-draw-show-body {
+    display: grid;
+    gap: 16px;
+  }
+
+  .cp-ccl-tab-divider {
+    width: 1px;
+    align-self: stretch;
+    background: #d7dde5;
+  }
+
   .cp-ccl-draw-slot--current {
     background: #fff1b8;
     font-weight: 700;
@@ -3002,7 +3041,8 @@
 
   .cp-ccl-draw-show {
     position: fixed;
-    inset: 0;
+    inset: 45px 0 0;
+    box-sizing: border-box;
     z-index: 1000;
     display: flex;
     align-items: flex-start;
@@ -3014,14 +3054,16 @@
 
   .cp-ccl-draw-show-panel {
     display: grid;
+    box-sizing: border-box;
     gap: 12px;
-    width: min(1400px, 100%);
+    width: 100%;
     padding: 16px;
     border-radius: 8px;
     background: #fff;
   }
 
   .cp-ccl-draw-show:fullscreen {
+    inset: 0;
     padding: 24px;
     background: #fff;
   }
@@ -3049,6 +3091,23 @@
 
   .cp-ccl-draw-show .cp-ccl-draw-pair {
     font-size: 15px;
+  }
+
+  .cp-ccl-draw-show .cp-ccl-draw-slot {
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+
+  .cp-ccl-draw-show .cp-ccl-player {
+    align-items: flex-start;
+  }
+
+  .cp-ccl-draw-player-name {
+    display: block;
+    margin-top: 3px;
+    color: var(--muted);
+    font-size: 12px;
+    font-weight: 400;
   }
 
   @media (max-width: 640px) {
@@ -12409,11 +12468,6 @@
     in_progress: "In progress",
     done: "Finished",
   };
-  const CCL_ANIMATION_SPEEDS = [
-    { value: "2500", label: "Slow" },
-    { value: "1500", label: "Normal" },
-    { value: "700", label: "Fast" },
-  ];
 
   function createCclBracketsSection(tournament) {
     const tournamentId = String(tournament?.id || "").trim();
@@ -12439,8 +12493,8 @@
 
     let structure = null;
     let formatKey = String(tournament?.format_key || "").trim();
-    let draw = null;
-    let testDraw = null;
+    // Draw state of every path (GET .../draw), keyed by Q1, Q2, Q3.
+    let draws = {};
     let busy = false;
     let selectedPath = "Q3";
     let selectedGroup = "";
@@ -12464,9 +12518,13 @@
       const result = await send(`/${encodedTournamentId}/structure`, "GET");
       structure = Array.isArray(result?.stages) ? result.stages : [];
       formatKey = String(result?.tournament?.format_key || formatKey || "").trim();
-      draw = getPath(selectedPath)
-        ? await send(`/${encodedTournamentId}/stages/${encodeURIComponent(selectedPath)}/draw`, "GET")
-        : null;
+      const loaded = await Promise.all(getPaths().map((path) => (
+        send(`/${encodedTournamentId}/stages/${encodeURIComponent(path.stage_key)}/draw`, "GET")
+      )));
+      draws = Object.fromEntries(getPaths().map((path, index) => [path.stage_key, loaded[index]]));
+      // The matches block shows a drawn path.
+      const drawnPaths = getPaths().filter((path) => path.status !== "structure");
+      if (!drawnPaths.some((path) => path.stage_key === selectedPath)) selectedPath = drawnPaths[0]?.stage_key || "Q3";
       const groups = getPath(selectedPath)?.groups || [];
       if (!groups.some((group) => group.group_key === selectedGroup)) selectedGroup = groups[0]?.group_key || "";
     };
@@ -12611,35 +12669,12 @@
       return block;
     };
 
-    // ---- Draw ----
+    // ---- Draw: Test draw / Run draw open a popup with the pots, a draw button and closed results ----
     const getPairs = (group) => {
       const byPosition = new Map((group.positions || []).map((position) => [position.draw_position, position]));
       return [1, 2, 3, 4].map((pair) => [byPosition.get(pair * 2 - 1), byPosition.get(pair * 2)]);
     };
-    const createGroupsGrid = (groups, { revealed = null, current = null } = {}) => {
-      const grid = el("div", "cp-ccl-draw-grid");
-      groups.forEach((group) => {
-        const card = el("div", "cp-ccl-draw-group");
-        card.appendChild(el("div", "cp-ccl-draw-group-title", group.name || `Group ${group.group_key}`));
-        getPairs(group).forEach(([seeded, unseeded], index) => {
-          const pair = el("div", "cp-ccl-draw-pair");
-          pair.appendChild(el("span", "cp-ccl-draw-pair-no", String(index + 1)));
-          [seeded, unseeded].forEach((position, side) => {
-            const slot = el("span", `cp-ccl-draw-slot cp-ccl-draw-slot--${side ? "unseeded" : "seeded"}`);
-            const shown = position && (!revealed || revealed.has(position.draw_order));
-            if (!shown) slot.appendChild(el("span", "cp-ccl-muted", side ? `Unseeded #${index + 1}` : `Seeded #${index + 1}`));
-            else slot.appendChild(position.bye ? el("span", "cp-ccl-muted", "Bye") : createPlayerLabel(position.player));
-            if (shown && !position.bye) slot.title = position.player?.bga_nickname || "";
-            if (shown && current === position.draw_order) slot.classList.add("cp-ccl-draw-slot--current");
-            pair.appendChild(slot);
-          });
-          card.appendChild(pair);
-        });
-        grid.appendChild(card);
-      });
-      return grid;
-    };
-    const downloadDrawCsv = (result) => {
+    const downloadDrawCsv = (result, pathKey) => {
       const quote = (value) => `"${String(value ?? "").replace(/"/g, '""')}"`;
       const rows = [["Group", "Match", "Player 1", "Association 1", "Seeding 1", "Player 2", "Association 2", "Seeding 2"]];
       result.groups.forEach((group) => {
@@ -12653,114 +12688,19 @@
       const blob = new Blob([rows.map((row) => row.map(quote).join(",")).join("\n")], { type: "text/csv;charset=utf-8" });
       const link = el("a");
       link.href = URL.createObjectURL(blob);
-      link.download = `${tournamentId}-${selectedPath}-draw.csv`;
+      link.download = `${tournamentId}-${pathKey}-draw.csv`;
       document.body.appendChild(link);
       link.click();
       link.remove();
       setTimeout(() => URL.revokeObjectURL(link.href), 1000);
     };
-    const runTestDraw = () => run(async () => {
-      testDraw = await send(`/${encodedTournamentId}/stages/${encodeURIComponent(selectedPath)}/draw/preview`, "POST", {});
-      return "";
-    }, "Failed to run the test draw.");
-    const runDraw = () => {
-      if (!window.confirm(`Run the ${selectedPath} draw? It is made once and saved at once; Round 1 matches get their players.`)) return;
+    const resetDraw = (pathKey) => {
+      if (!window.confirm(`Reset the ${pathKey} draw? Round 1 matches lose their players.`)) return;
       run(async () => {
-        const result = await send(`/${encodedTournamentId}/stages/${encodeURIComponent(selectedPath)}/draw`, "POST", {});
-        testDraw = null;
-        const conflicts = Array.isArray(result?.conflicts) ? result.conflicts.length : 0;
-        return conflicts
-          ? `${selectedPath} drawn. ${conflicts} player(s) could not be kept apart from their association.`
-          : `${selectedPath} drawn.`;
-      }, "Failed to run the draw.");
-    };
-    const resetDraw = () => {
-      if (!window.confirm(`Reset the ${selectedPath} draw? Round 1 matches lose their players.`)) return;
-      run(async () => {
-        await send(`/${encodedTournamentId}/stages/${encodeURIComponent(selectedPath)}/draw`, "DELETE");
-        return `${selectedPath} draw reset.`;
+        await send(`/${encodedTournamentId}/stages/${encodeURIComponent(pathKey)}/draw`, "DELETE");
+        return `${pathKey} draw reset.`;
       }, "Failed to reset the draw.");
     };
-
-    // Replays a draw placement by placement (for the stream). Byes come first, then the players.
-    const openAnimation = (result) => {
-      const placements = Array.isArray(result?.placements) ? result.placements : [];
-      if (!placements.length) return;
-      const overlay = el("div", "cp-ccl-draw-show");
-      const panel = el("div", "cp-ccl-draw-show-panel");
-      const top = el("div", "cp-ccl-draw-show-head");
-      const caption = el("div", "cp-ccl-draw-show-caption");
-      const controls = el("div", "cp-ccl-actions");
-      const stage = el("div", "cp-ccl-draw-show-stage");
-      top.appendChild(el("div", "cp-ccl-draw-show-title", `${tournament?.short_title || tournament?.name || tournamentId} · ${selectedPath} draw`));
-      top.appendChild(controls);
-      panel.appendChild(top);
-      panel.appendChild(caption);
-      panel.appendChild(stage);
-      overlay.appendChild(panel);
-      document.body.appendChild(overlay);
-
-      const revealed = new Set();
-      let index = 0;
-      let timer = null;
-      let delay = Number(CCL_ANIMATION_SPEEDS[1].value);
-      const describe = (placement) => {
-        const pot = placement.draw_position % 2 ? "Seeded" : "Unseeded";
-        const who = placement.bye ? "Bye" : (placement.player?.bga_nickname || placement.player?.player_id || "");
-        const from = !placement.bye && placement.player?.association_name ? ` (${placement.player.association_name})` : "";
-        return `${index} / ${placements.length} · Group ${placement.group_key} · ${pot} #${Math.ceil(placement.draw_position / 2)}: ${who}${from}`;
-      };
-      const paint = () => {
-        stage.innerHTML = "";
-        const current = index ? placements[index - 1].draw_order : null;
-        stage.appendChild(createGroupsGrid(result.groups, { revealed, current }));
-        caption.textContent = index ? describe(placements[index - 1]) : `${placements.length} placements. Press Start.`;
-      };
-      const step = () => {
-        if (index >= placements.length) return stop();
-        revealed.add(placements[index].draw_order);
-        index += 1;
-        paint();
-        if (index >= placements.length) stop();
-      };
-      const stop = () => {
-        clearInterval(timer);
-        timer = null;
-        startButton.textContent = index >= placements.length ? "Finished" : "Start";
-        startButton.disabled = index >= placements.length;
-      };
-      const start = () => {
-        if (timer) return stop();
-        startButton.textContent = "Pause";
-        step();
-        timer = setInterval(step, delay);
-      };
-      const close = () => {
-        stop();
-        if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
-        overlay.remove();
-      };
-      const button = (label, onClick, variant = "secondary") => {
-        const node = el("button", `cp-btn cp-btn-${variant}`, label);
-        node.type = "button";
-        node.addEventListener("click", onClick);
-        controls.appendChild(node);
-        return node;
-      };
-      const speed = createTournamentDropdown(String(delay), CCL_ANIMATION_SPEEDS);
-      speed.addEventListener("change", () => {
-        delay = Number(speed.value) || delay;
-        if (timer) { clearInterval(timer); timer = setInterval(step, delay); }
-      });
-      controls.appendChild(speed.root || speed);
-      const startButton = button("Start", start, "primary");
-      button("Next", () => { if (!timer) step(); });
-      button("Show all", () => { stop(); placements.forEach((placement) => revealed.add(placement.draw_order)); index = placements.length; paint(); stop(); });
-      button("Fullscreen", () => (document.fullscreenElement ? document.exitFullscreen() : overlay.requestFullscreen?.())?.catch?.(() => {}));
-      button("Close", close);
-      paint();
-    };
-
     const renderPotTable = (title, players) => {
       const block = el("div", "cp-ccl-stack");
       block.appendChild(el("div", "cp-ccl-strong", `${title} (${players.length})`));
@@ -12777,67 +12717,209 @@
       block.appendChild(wrap);
       return block;
     };
-    const renderDraw = () => {
-      const tabs = el("div", "cp-ccl-actions cp-ccl-path-tabs");
-      getPaths().forEach((path) => {
-        const tab = createButton(
-          `${path.stage_key} · ${CCL_STAGE_STATUS_LABELS[path.status] || path.status}`,
-          () => {
-            if (selectedPath === path.stage_key) return;
-            selectedPath = path.stage_key;
-            testDraw = null;
-            run(async () => "", "Failed to load the draw.");
-          },
-          selectedPath === path.stage_key ? "primary" : "secondary"
-        );
-        tabs.appendChild(tab);
-      });
-      const block = createBlock("Draw", "", tabs);
-      if (!draw) return block;
-      const players = Array.isArray(draw.players) ? draw.players : [];
-      if (draw.blockers?.length) {
-        block.appendChild(el("div", "cp-edit-error", `Not ready: ${summarizeCclBlockers(draw.blockers)}. Set Elo and form the pots above.`));
-      }
-      const pots = el("div", "cp-ccl-draw-pots");
-      pots.appendChild(renderPotTable("Seeded", players.filter((player) => player.seed === "Seeded")));
-      pots.appendChild(renderPotTable("Unseeded", players.filter((player) => player.seed === "Unseeded")));
-      block.appendChild(pots);
 
-      const actions = el("div", "cp-ccl-actions cp-ccl-draw-actions");
-      if (!draw.drawn) {
-        block.appendChild(el(
-          "div",
-          "cp-tournament-section-hint",
-          "Test draw: the same draw, never saved; run it as often as you like. Run draw: one run, saved at once."
-        ));
-        actions.appendChild(createButton("Test draw", runTestDraw, "secondary", !!draw.blockers?.length));
-        actions.appendChild(createButton("Run draw", runDraw, "primary", !!draw.blockers?.length));
-      } else {
-        block.appendChild(el("div", "cp-edit-success", `Drawn ${formatCclDate(draw.drawn_at)}.`));
-        actions.appendChild(createButton("Play animation", () => openAnimation(draw), "primary"));
-        actions.appendChild(createButton("Download CSV", () => downloadDrawCsv(draw)));
-        actions.appendChild(createButton("Reset draw", resetDraw, "danger"));
-      }
-      block.appendChild(actions);
+    // mode: "test" (Test draw, never saved), "run" (Run draw, saved once) or "view" (a saved draw).
+    const openDrawPopup = (pathKey, mode) => {
+      const info = draws[pathKey];
+      if (!info) return;
+      let result = mode === "view" ? info : null;
+      let drawing = false;
+      let popupError = "";
+      let lastRevealed = "";
+      const revealed = new Set();
 
-      const shown = draw.drawn ? draw : testDraw;
-      if (shown) {
-        if (!draw.drawn) {
-          const note = el("div", "cp-ccl-draw-test-note");
-          note.appendChild(el("span", "cp-ccl-strong", "Test draw — not saved."));
-          note.appendChild(document.createTextNode(` Seed ${shown.seed}, ${shown.attempts} attempt${shown.attempts === 1 ? "" : "s"}.`));
-          note.appendChild(createButton("Play animation", () => openAnimation(shown)));
-          block.appendChild(note);
-        }
-        if (shown.conflicts?.length) {
-          block.appendChild(el(
+      const overlay = el("div", "cp-ccl-draw-show");
+      overlay.setAttribute("role", "dialog");
+      overlay.setAttribute("aria-modal", "true");
+      const panel = el("div", "cp-ccl-draw-show-panel");
+      const head = el("div", "cp-ccl-draw-show-head");
+      const title = `${tournament?.short_title || tournament?.name || tournamentId} · ${pathKey} draw${mode === "test" ? " (test)" : ""}`;
+      head.appendChild(el("div", "cp-ccl-draw-show-title", title));
+      const headActions = el("div", "cp-ccl-actions");
+      head.appendChild(headActions);
+      const content = el("div", "cp-ccl-draw-show-body");
+      panel.appendChild(head);
+      panel.appendChild(content);
+      overlay.appendChild(panel);
+
+      const popupButton = (label, onClick, variant = "secondary", disabled = false) => {
+        const button = el("button", `cp-btn cp-btn-${variant}`, label);
+        button.type = "button";
+        button.disabled = disabled;
+        button.addEventListener("click", onClick);
+        return button;
+      };
+      const onKeydown = (event) => {
+        if (event.key === "Escape" && !drawing) close();
+      };
+      const close = () => {
+        document.removeEventListener("keydown", onKeydown);
+        if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
+        overlay.remove();
+        // A saved draw changes the section: statuses, Round 1 matches.
+        if (mode === "run" && result) run(async () => "", "Failed to load the draw.");
+      };
+      headActions.appendChild(popupButton("Fullscreen", () => {
+        const request = document.fullscreenElement ? document.exitFullscreen() : overlay.requestFullscreen?.();
+        request?.catch?.(() => {});
+      }));
+      headActions.appendChild(popupButton("Close", () => { if (!drawing) close(); }));
+      document.addEventListener("keydown", onKeydown);
+
+      const pairKey = (group, index) => `${group.group_key}|${index}`;
+      const allPairKeys = () => (result?.groups || []).flatMap((group) => [0, 1, 2, 3].map((index) => pairKey(group, index)));
+      const reveal = (keyValue) => {
+        revealed.add(keyValue);
+        lastRevealed = keyValue;
+        paint();
+      };
+
+      const renderResults = () => {
+        const wrap = el("div", "cp-ccl-stack");
+        const resultsHead = el("div", "cp-ccl-block-head");
+        resultsHead.appendChild(el("div", "cp-ccl-block-title", "Results"));
+        const resultActions = el("div", "cp-ccl-actions");
+        const hidden = allPairKeys().filter((keyValue) => !revealed.has(keyValue));
+        resultActions.appendChild(popupButton("Show next", () => reveal(hidden[0]), "primary", !hidden.length));
+        resultActions.appendChild(popupButton("Show all", () => {
+          allPairKeys().forEach((keyValue) => revealed.add(keyValue));
+          lastRevealed = "";
+          paint();
+        }, "secondary", !hidden.length));
+        resultActions.appendChild(popupButton("Download CSV", () => downloadDrawCsv(result, pathKey)));
+        resultsHead.appendChild(resultActions);
+        wrap.appendChild(resultsHead);
+        if (result.conflicts?.length) {
+          wrap.appendChild(el(
             "div",
             "cp-edit-error",
-            `${shown.conflicts.length} player(s) share a group with their association: ${shown.conflicts.map((item) => `${item.association_id} in ${item.group_key}`).join(", ")}.`
+            `${result.conflicts.length} player(s) share a group with their association: ${result.conflicts.map((item) => `${item.association_id} in ${item.group_key}`).join(", ")}.`
           ));
         }
-        block.appendChild(createGroupsGrid(shown.groups || []));
-      }
+        const grid = el("div", "cp-ccl-draw-grid");
+        (result.groups || []).forEach((group) => {
+          const card = el("div", "cp-ccl-draw-group");
+          card.appendChild(el("div", "cp-ccl-draw-group-title", group.name || `Group ${group.group_key}`));
+          getPairs(group).forEach(([seeded, unseeded], index) => {
+            const keyValue = pairKey(group, index);
+            const shown = revealed.has(keyValue);
+            const pair = el("div", `cp-ccl-draw-pair cp-ccl-draw-pair--reveal${shown && lastRevealed === keyValue ? " cp-ccl-draw-pair--current" : ""}`);
+            pair.appendChild(el("span", "cp-ccl-draw-pair-no", String(index + 1)));
+            [seeded, unseeded].forEach((position, side) => {
+              const slot = el("span", `cp-ccl-draw-slot cp-ccl-draw-slot--${side ? "unseeded" : "seeded"}`);
+              if (!shown) slot.appendChild(el("span", "cp-ccl-muted", "?"));
+              else if (!position || position.bye) slot.appendChild(el("span", "cp-ccl-muted", "Bye"));
+              else {
+                slot.appendChild(createPlayerLabel(position.player));
+                const name = String(position.player?.name || "").trim();
+                if (name) slot.appendChild(el("span", "cp-ccl-draw-player-name", name));
+                slot.title = position.player?.bga_nickname || "";
+              }
+              pair.appendChild(slot);
+            });
+            if (shown) {
+              pair.appendChild(el("span"));
+            } else {
+              const showButton = popupButton("", () => reveal(keyValue), "secondary");
+              showButton.title = "Show";
+              showButton.setAttribute("aria-label", "Show");
+              const eye = el("i", "fa-solid fa-eye");
+              eye.setAttribute("aria-hidden", "true");
+              showButton.appendChild(eye);
+              pair.appendChild(showButton);
+            }
+            card.appendChild(pair);
+          });
+          grid.appendChild(card);
+        });
+        wrap.appendChild(grid);
+        return wrap;
+      };
+
+      const runPopupDraw = async () => {
+        if (drawing) return;
+        drawing = true;
+        popupError = "";
+        paint();
+        try {
+          const path = `/${encodedTournamentId}/stages/${encodeURIComponent(pathKey)}/draw${mode === "test" ? "/preview" : ""}`;
+          result = await send(path, "POST", {});
+          revealed.clear();
+          lastRevealed = "";
+        } catch (error) {
+          popupError = getCclErrorMessage(error, "Failed to run the draw.");
+        } finally {
+          drawing = false;
+          paint();
+        }
+      };
+
+      const paint = () => {
+        content.innerHTML = "";
+        const players = Array.isArray(info.players) ? info.players : [];
+        const pots = el("div", "cp-ccl-draw-pots");
+        pots.appendChild(renderPotTable("Seeded", players.filter((player) => player.seed === "Seeded")));
+        pots.appendChild(renderPotTable("Unseeded", players.filter((player) => player.seed === "Unseeded")));
+        content.appendChild(pots);
+
+        const action = el("div", "cp-ccl-draw-run");
+        if (mode === "test") {
+          action.appendChild(el("div", "cp-tournament-section-hint", "Test draw: the same draw as the real one, but nothing is saved. Run it as often as you like."));
+          action.appendChild(popupButton(drawing ? "Drawing..." : (result ? "Draw again" : "Draw"), runPopupDraw, "primary", drawing));
+          if (result) action.appendChild(el("span", "cp-tournament-section-hint", `Seed ${result.seed}, ${result.attempts} attempt${result.attempts === 1 ? "" : "s"}.`));
+        } else if (mode === "run" && !result) {
+          action.appendChild(popupButton(drawing ? "Drawing..." : "Draw", runPopupDraw, "primary", drawing));
+        } else {
+          action.appendChild(el("div", "cp-edit-success", mode === "run" ? `${pathKey} drawn and saved.` : `${pathKey} drawn ${formatCclDate(info.drawn_at)}.`));
+        }
+        if (popupError) action.appendChild(el("div", "cp-edit-error", popupError));
+        content.appendChild(action);
+        if (result) content.appendChild(renderResults());
+        labelCclTableCells(content);
+      };
+
+      document.body.appendChild(overlay);
+      paint();
+    };
+
+    const renderDraw = () => {
+      const block = createBlock(
+        "Draw",
+        "Each path is drawn on its own. Test draw shows how the draw works and saves nothing; Run draw is made once."
+      );
+      const { wrap, tbody } = createTable(["Path", "Status", "Players", ""]);
+      getPaths().forEach((path) => {
+        const info = draws[path.stage_key];
+        const row = el("tr");
+        addCell(row, path.stage_key, "cp-ccl-strong");
+        addCell(row, CCL_STAGE_STATUS_LABELS[path.status] || path.status);
+        const players = Array.isArray(info?.players) ? info.players : [];
+        const seeded = players.filter((player) => player.seed === "Seeded").length;
+        const counts = el("div", "cp-ccl-stack");
+        counts.appendChild(el("span", "", `${seeded} Seeded, ${players.length - seeded} Unseeded`));
+        if (!info?.drawn && info?.blockers?.length) {
+          counts.appendChild(el("span", "cp-ccl-field-error", `Not ready: ${summarizeCclBlockers(info.blockers)}.`));
+        } else if (!info?.drawn && !players.length) {
+          counts.appendChild(el("span", "cp-ccl-field-error", "No players yet."));
+        }
+        addCell(row, counts);
+        const actions = el("div", "cp-ccl-actions");
+        if (!info) {
+          actions.appendChild(el("span", "cp-ccl-muted", "—"));
+        } else if (!info.drawn) {
+          const notReady = !!info.blockers?.length || !players.length;
+          actions.appendChild(createButton("Test draw", () => openDrawPopup(path.stage_key, "test"), "secondary", notReady));
+          actions.appendChild(createButton("Run draw", () => {
+            openDrawPopup(path.stage_key, "run");
+          }, "primary", notReady));
+        } else {
+          actions.appendChild(createButton("Show draw", () => openDrawPopup(path.stage_key, "view"), "primary"));
+          actions.appendChild(createButton("Reset draw", () => resetDraw(path.stage_key), "danger"));
+        }
+        addCell(row, actions);
+        tbody.appendChild(row);
+      });
+      block.appendChild(wrap);
       return block;
     };
 
@@ -12868,7 +12950,17 @@
     const renderBrackets = () => {
       const path = getPath(selectedPath);
       if (!path || path.status === "structure") return null;
-      const groupTabs = el("div", "cp-ccl-actions");
+      const groupTabs = el("div", "cp-ccl-actions cp-ccl-path-tabs");
+      getPaths().filter((item) => item.status !== "structure").forEach((item) => groupTabs.appendChild(createButton(
+        item.stage_key,
+        () => {
+          selectedPath = item.stage_key;
+          selectedGroup = item.groups?.[0]?.group_key || "";
+          render();
+        },
+        selectedPath === item.stage_key ? "primary" : "secondary"
+      )));
+      groupTabs.appendChild(el("span", "cp-ccl-tab-divider"));
       (path.groups || []).forEach((group) => groupTabs.appendChild(createButton(
         group.group_key,
         () => { selectedGroup = group.group_key; render(); },
