@@ -1922,7 +1922,7 @@
   }
 
   .cp-dd-flag {
-    width: 14px;
+    width: 18px;
     height: auto;
     border-radius: 2px;
     object-fit: cover;
@@ -2806,7 +2806,7 @@
   .cp-ccl-table {
     width: 100%;
     border-collapse: collapse;
-    font-size: 13px;
+    font-size: 14px;
     color: #2f3947;
   }
 
@@ -2821,7 +2821,7 @@
 
   .cp-ccl-table th,
   .cp-ccl-table td {
-    padding: 6px 8px;
+    padding: 4px 8px;
     border-top: 1px solid #edf1f6;
     vertical-align: top;
   }
@@ -2909,7 +2909,7 @@
 
   .cp-ccl-draw-pots {
     display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: repeat(2, minmax(0, 450px));
     align-items: start;
     gap: 12px;
   }
@@ -2990,13 +2990,17 @@
     border-left: 3px solid #d64545;
   }
 
-  .cp-ccl-draw-pair.cp-ccl-draw-pair--reveal {
-    grid-template-columns: 18px minmax(0, 1fr) minmax(0, 1fr) 32px;
+  .cp-ccl-draw-pair--reveal[role="button"] {
+    cursor: pointer;
+  }
+
+  .cp-ccl-draw-pair--reveal[role="button"]:focus-visible {
+    outline: 2px solid #800020;
+    outline-offset: 2px;
   }
 
   .cp-ccl-draw-pair--current .cp-ccl-draw-slot {
     background: #fff1b8;
-    font-weight: 700;
   }
 
   .cp-ccl-draw-run {
@@ -3030,7 +3034,6 @@
 
   .cp-ccl-draw-slot--current {
     background: #fff1b8;
-    font-weight: 700;
   }
 
   .cp-ccl-score-input.cp-tournament-config-input {
@@ -3099,7 +3102,7 @@
   }
 
   .cp-ccl-draw-show .cp-ccl-player {
-    align-items: flex-start;
+    align-items: center;
   }
 
   .cp-ccl-draw-player-name {
@@ -3112,7 +3115,7 @@
 
   @media (max-width: 640px) {
     .cp-ccl-draw-pots {
-      grid-template-columns: minmax(0, 1fr);
+      grid-template-columns: minmax(0, 450px);
     }
   }
 
@@ -12754,17 +12757,29 @@
       };
       const close = () => {
         document.removeEventListener("keydown", onKeydown);
+        document.removeEventListener("fullscreenchange", updateFullscreenButton);
         if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
         overlay.remove();
         // A saved draw changes the section: statuses, Round 1 matches.
         if (mode === "run" && result) run(async () => "", "Failed to load the draw.");
       };
-      headActions.appendChild(popupButton("Fullscreen", () => {
+      const fullscreenButton = popupButton("Fullscreen", () => {
         const request = document.fullscreenElement ? document.exitFullscreen() : overlay.requestFullscreen?.();
         request?.catch?.(() => {});
-      }));
-      headActions.appendChild(popupButton("Close", () => { if (!drawing) close(); }));
+      });
+      const updateFullscreenButton = () => {
+        fullscreenButton.textContent = document.fullscreenElement === overlay ? "Exit Fullscreen" : "Fullscreen";
+      };
+      headActions.appendChild(fullscreenButton);
+      const closeButton = popupButton("", () => { if (!drawing) close(); });
+      closeButton.title = "Close";
+      closeButton.setAttribute("aria-label", "Close");
+      const closeIcon = el("i", "fa-solid fa-xmark");
+      closeIcon.setAttribute("aria-hidden", "true");
+      closeButton.appendChild(closeIcon);
+      headActions.appendChild(closeButton);
       document.addEventListener("keydown", onKeydown);
+      document.addEventListener("fullscreenchange", updateFullscreenButton);
 
       const pairKey = (group, index) => `${group.group_key}|${index}`;
       const allPairKeys = () => (result?.groups || []).flatMap((group) => [0, 1, 2, 3].map((index) => pairKey(group, index)));
@@ -12817,16 +12832,17 @@
               }
               pair.appendChild(slot);
             });
-            if (shown) {
-              pair.appendChild(el("span"));
-            } else {
-              const showButton = popupButton("", () => reveal(keyValue), "secondary");
-              showButton.title = "Show";
-              showButton.setAttribute("aria-label", "Show");
-              const eye = el("i", "fa-solid fa-eye");
-              eye.setAttribute("aria-hidden", "true");
-              showButton.appendChild(eye);
-              pair.appendChild(showButton);
+            if (!shown) {
+              pair.setAttribute("role", "button");
+              pair.tabIndex = 0;
+              pair.setAttribute("aria-label", `Show ${group.name || `Group ${group.group_key}`} match ${index + 1}`);
+              pair.addEventListener("click", () => reveal(keyValue));
+              pair.addEventListener("keydown", (event) => {
+                if (event.key === "Enter" || event.key === " ") {
+                  event.preventDefault();
+                  reveal(keyValue);
+                }
+              });
             }
             card.appendChild(pair);
           });

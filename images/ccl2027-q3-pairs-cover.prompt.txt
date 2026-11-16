@@ -1,0 +1,25 @@
+Use case: ads-marketing / tournament match infographic.
+Create a polished landscape 16:9 1920x1080 tournament match poster, using image 1 as the visual style reference only. Warm cream background, dark navy typography, thin rich gold outlines, subtle blue illustrated medieval Carcassonne landscape along the bottom edge only. Clean, minimal, extremely readable, no photographic people.
+Image 2 is the exact RCP association flag reference: white/light gray rectangular flag containing a thin black circle with a blue meeple and tiny red heart. Use this for RCP players, never a national flag.
+Image 3 is the tournament emblem reference. Make this emblem SMALL next to a small "CCL 2027" label at upper left, approximately 50px tall. Small "Q3" at upper right. No other header text.
+Main content occupies almost all the canvas: three equally wide large columns GROUP X, GROUP Y, GROUP Z, navy header with cream lettering, cream panel, fine gold border, subtle rounded corners. Each column has FOUR spacious horizontal match cards. Within each match card stack player 1 and player 2 on separate lines, with a real correctly drawn small rectangular association flag to the left of EACH name. Use a very small gold "vs" between the two lines if useful. This stacked arrangement is required so long nicknames fit and stay readable. Uniform font size across players, bold clean sans-serif, exact capitalization, underscores and spaces. All 24 names must be present exactly ONCE. Exact pair order below. Country labels in brackets are instructions for drawing flags, do NOT print country names or brackets.
+
+GROUP X:
+1. Claudio Jorquera [Chile] vs hullqin-dongya [China]
+2. Alexey_LV [Latvia] vs chawin053 [Thailand]
+3. BDDL1 [Uruguay] vs ernie012 [Hong Kong]
+4. DoNotWasteMyTime [RCP reference flag] vs BuHa44 [Croatia]
+
+GROUP Y:
+1. KR_ Knight_ Realm [Brazil] vs JnNzr [Argentina]
+2. HotlyHotly [Taiwan] vs HappyTim7 [Germany]
+3. 203club [China] vs Megot Noskill [Australia]
+4. f kenta [Japan] vs pricci [Poland]
+
+GROUP Z:
+1. Krzysztof285 [Poland] vs Lolinho19 [Uruguay]
+2. Someone_you_know [RCP reference flag] vs bignacho610 [Argentina]
+3. Kithara [Japan] vs detraid [Belarus, red-green with white/red ornamental strip at left]
+4. dremkad [Colombia] vs ET_08 [Hong Kong]
+
+Remove ALL extraneous material from the original style reference: no LIVE badge, no big meeple, no giant title, no "DRAW", no "WHO PLAYS WHOM", no seeded/unseeded circles, no S/U placeholders, no marketing captions, no extra footer text, no dates, no scores, no watermarks. Restrained castle scenery should remain in a slim bottom strip, not behind the names. Prioritize the three groups and flags.

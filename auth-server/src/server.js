@@ -21168,13 +21168,23 @@ function publicMainPageMatchesHandler(req, res, next) {
         d.gg_rating,
         COALESCE(d.is_test, 0) AS is_test,
         d.status,
+        d.source_type,
+        d.stage,
+        d.group_name,
+        d.round_name,
         cp.name AS challenge_period_name,
         cp.logo AS challenge_period_logo,
         cp.status AS challenge_period_status,
-        cp.planning_starts_at AS challenge_period_planning_starts_at
+        cp.planning_starts_at AS challenge_period_planning_starts_at,
+        tr.name AS tournament_name,
+        tr.short_title AS tournament_short_title,
+        tr.logo AS tournament_logo,
+        tr.link AS tournament_link
       FROM duels d
-      JOIN challenge_periods cp
+      LEFT JOIN challenge_periods cp
         ON trim(COALESCE(cp.id, '')) = trim(COALESCE(d.challenge_period_id, ''))
+      LEFT JOIN tournaments tr
+        ON upper(trim(COALESCE(tr.id, ''))) = upper(trim(COALESCE(d.tournament_id, '')))
       LEFT JOIN profiles p1
         ON trim(COALESCE(p1.id, '')) = trim(COALESCE(d.player_1_id, ''))
       LEFT JOIN profiles p2
@@ -21193,7 +21203,16 @@ function publicMainPageMatchesHandler(req, res, next) {
         OR lower(trim(COALESCE(t2.name, ''))) = lower(trim(COALESCE(p2.association, '')))
       WHERE d.deleted_at IS NULL
         AND COALESCE(d.is_test, 0) = 0
-        AND d.source_type = 'challenge'
+        AND (
+          (d.source_type = 'challenge' AND cp.id IS NOT NULL)
+          OR (
+            d.source_type = 'ccl'
+            AND tr.id IS NOT NULL
+            AND COALESCE(tr.is_test, 0) = 0
+            AND trim(COALESCE(d.player_1_id, '')) <> ''
+            AND trim(COALESCE(d.player_2_id, '')) <> ''
+          )
+        )
         AND trim(COALESCE(d.match_id, '')) = ''
         AND d.status IN ('Planned', 'In progress', 'Done', 'Error')
         AND trim(COALESCE(d.time_utc, '')) <> ''
@@ -21211,8 +21230,12 @@ function publicMainPageMatchesHandler(req, res, next) {
       ORDER BY datetime(d.time_utc) DESC, d.id ASC
     `,
     [tournamentFilter, tournamentFilter, tournamentFilter],
-    (challengeDuelsErr, challengeDuelRows) => {
+    (challengeDuelsErr, standaloneDuelRows) => {
       if (challengeDuelsErr) return next(challengeDuelsErr);
+      // Standalone duels: challenge duels and CCL duels; CCL ones reach the list once their time is agreed.
+      const isCclDuelRow = (row) => normalizeText(row?.source_type).toLowerCase() === "ccl";
+      const challengeDuelRows = (standaloneDuelRows || []).filter((row) => !isCclDuelRow(row));
+      const cclDuelRows = (standaloneDuelRows || []).filter(isCclDuelRow);
 
       return db.all(
     `
@@ -21442,6 +21465,46 @@ function publicMainPageMatchesHandler(req, res, next) {
             .filter(Boolean)
         ).values());
 
+        const mapStandaloneDuelRow = (row) => ({
+          id: row.id,
+          tournament_id: row.tournament_id,
+          challenge_period_id: row.challenge_period_id,
+          challenge_period_name: row.challenge_period_name,
+          challenge_period_logo: row.challenge_period_logo,
+          challenge_period_status: row.challenge_period_status,
+          challenge_period_planning_starts_at: row.challenge_period_planning_starts_at,
+          created_at: row.created_at,
+          time_utc: row.time_utc,
+          duel_format: row.duel_format,
+          player_1_id: row.player_1_id,
+          player_1_name: row.player_1_name,
+          player_1_real_name: row.player_1_real_name,
+          player_1_avatar: row.player_1_avatar,
+          player_1_bga_elo: row.player_1_bga_elo,
+          player_1_gg_elo: row.player_1_gg_elo,
+          player_1_gg_rank: row.player_1_gg_rank,
+          player_1_association_name: row.player_1_association_name,
+          player_1_association_flag: row.player_1_association_flag,
+          player_2_id: row.player_2_id,
+          player_2_name: row.player_2_name,
+          player_2_real_name: row.player_2_real_name,
+          player_2_avatar: row.player_2_avatar,
+          player_2_bga_elo: row.player_2_bga_elo,
+          player_2_gg_elo: row.player_2_gg_elo,
+          player_2_gg_rank: row.player_2_gg_rank,
+          player_2_association_name: row.player_2_association_name,
+          player_2_association_flag: row.player_2_association_flag,
+          dw1: row.dw1,
+          dw2: row.dw2,
+          gg_rating: row.gg_rating,
+          is_test: normalizeBooleanInt(row.is_test) === 1,
+          status: row.status,
+          games: gamesByDuelId.get(String(row.id || "").trim()) || [],
+          streams: (streamsByDuelId.get(String(row.id || "").trim()) || []).map((stream) => stream.link),
+          streamers: (streamsByDuelId.get(String(row.id || "").trim()) || []).map((stream) => stream.streamer_avatar),
+          streamer_names: (streamsByDuelId.get(String(row.id || "").trim()) || []).map((stream) => stream.streamer_short_name),
+        });
+
         return db.get(
           `
             SELECT last_success_at
@@ -21526,44 +21589,17 @@ function publicMainPageMatchesHandler(req, res, next) {
                 tournament_type: row.tournament_type,
                 };
               }),
-              challenge_duels: (challengeDuelRows || []).map((row) => ({
-                id: row.id,
-                tournament_id: row.tournament_id,
-                challenge_period_id: row.challenge_period_id,
-                challenge_period_name: row.challenge_period_name,
-                challenge_period_logo: row.challenge_period_logo,
-                challenge_period_status: row.challenge_period_status,
-                challenge_period_planning_starts_at: row.challenge_period_planning_starts_at,
-                created_at: row.created_at,
-                time_utc: row.time_utc,
-                duel_format: row.duel_format,
-                player_1_id: row.player_1_id,
-                player_1_name: row.player_1_name,
-                player_1_real_name: row.player_1_real_name,
-                player_1_avatar: row.player_1_avatar,
-                player_1_bga_elo: row.player_1_bga_elo,
-                player_1_gg_elo: row.player_1_gg_elo,
-                player_1_gg_rank: row.player_1_gg_rank,
-                player_1_association_name: row.player_1_association_name,
-                player_1_association_flag: row.player_1_association_flag,
-                player_2_id: row.player_2_id,
-                player_2_name: row.player_2_name,
-                player_2_real_name: row.player_2_real_name,
-                player_2_avatar: row.player_2_avatar,
-                player_2_bga_elo: row.player_2_bga_elo,
-                player_2_gg_elo: row.player_2_gg_elo,
-                player_2_gg_rank: row.player_2_gg_rank,
-                player_2_association_name: row.player_2_association_name,
-                player_2_association_flag: row.player_2_association_flag,
-                dw1: row.dw1,
-                dw2: row.dw2,
-                gg_rating: row.gg_rating,
-                is_test: normalizeBooleanInt(row.is_test) === 1,
-                status: row.status,
-                games: gamesByDuelId.get(String(row.id || "").trim()) || [],
-                streams: (streamsByDuelId.get(String(row.id || "").trim()) || []).map((stream) => stream.link),
-                streamers: (streamsByDuelId.get(String(row.id || "").trim()) || []).map((stream) => stream.streamer_avatar),
-                streamer_names: (streamsByDuelId.get(String(row.id || "").trim()) || []).map((stream) => stream.streamer_short_name),
+              challenge_duels: challengeDuelRows.map(mapStandaloneDuelRow),
+              ccl_duels: cclDuelRows.map((row) => ({
+                ...mapStandaloneDuelRow(row),
+                source_type: "ccl",
+                stage: row.stage,
+                group_name: row.group_name,
+                round_name: row.round_name,
+                tournament_name: row.tournament_name,
+                tournament_short_title: row.tournament_short_title,
+                tournament_logo: row.tournament_logo,
+                tournament_link: row.tournament_link,
               })),
               duels: (duelRows || []).map((row) => ({
                 id: row.id,
@@ -21601,7 +21637,7 @@ function publicMainPageMatchesHandler(req, res, next) {
       };
 
       const normalizedChallengeDuelIds = Array.from(new Set(
-        (challengeDuelRows || [])
+        (standaloneDuelRows || [])
           .map((row) => String(row?.id || "").trim())
           .filter(Boolean)
       ));

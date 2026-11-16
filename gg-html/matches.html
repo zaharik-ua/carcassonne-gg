@@ -2536,8 +2536,13 @@ function openChallengeMatchModal(match, returnFocus) {
   closeButton.focus({ preventScroll: true });
 }
 
+// Challenge and CCL duels come from GG profiles: link players to GG and open the duel details modal.
+function isGgPlayerDuel(match) {
+  return match?.source_type === "challenge" || match?.source_type === "ccl";
+}
+
 function bindChallengeMatchDetails(container, match) {
-  if (match?.source_type !== "challenge") return;
+  if (!isGgPlayerDuel(match)) return;
   container.classList.add("challenge-match-row");
   container.tabIndex = 0;
   container.setAttribute("role", "button");
@@ -2656,7 +2661,7 @@ function createMainEventCompetitor(match, side, isDuel) {
   nameElement.className = "main-event-competitor__name";
   nameElement.textContent = name;
   if (nameElement instanceof HTMLAnchorElement) {
-    nameElement.href = match?.source_type === "challenge"
+    nameElement.href = isGgPlayerDuel(match)
       ? `https://carcassonne.gg/player/?id=${encodeURIComponent(playerId)}`
       : `https://boardgamearena.com/player?id=${encodeURIComponent(playerId)}`;
     nameElement.target = "_blank";
@@ -3091,7 +3096,7 @@ function createDuelElement(match, options = {}) {
 
     const link = document.createElement("a");
     const playerId = String(ids[i] || "").trim();
-    if (match.source_type === "challenge") {
+    if (isGgPlayerDuel(match)) {
       link.href = `https://carcassonne.gg/player/?id=${encodeURIComponent(playerId)}`;
     } else {
       link.href = `https://boardgamearena.com/player?id=${encodeURIComponent(playerId)}`;
@@ -3189,7 +3194,7 @@ function createDuelElementCompact(match) {
 
     const link = document.createElement("a");
     const playerId = String(ids[i] || "").trim();
-    if (match.source_type === "challenge") {
+    if (isGgPlayerDuel(match)) {
       link.href = `https://carcassonne.gg/player/?id=${encodeURIComponent(playerId)}`;
     } else {
       link.href = `https://boardgamearena.com/player?id=${encodeURIComponent(playerId)}`;
@@ -4726,7 +4731,14 @@ function adaptDbMainPageMatchesData(data, playerDetailsById = new Map()) {
     });
   });
 
-  (Array.isArray(data?.challenge_duels) ? data.challenge_duels : []).forEach((duel) => {
+  // Standalone player duels: challenge duels and CCL duels with an agreed time.
+  const standaloneDuels = [
+    ...(Array.isArray(data?.challenge_duels) ? data.challenge_duels : [])
+      .map((duel) => ({ duel, sourceType: "challenge" })),
+    ...(Array.isArray(data?.ccl_duels) ? data.ccl_duels : [])
+      .map((duel) => ({ duel, sourceType: "ccl" })),
+  ];
+  standaloneDuels.forEach(({ duel, sourceType }) => {
     if (isTestEntity(duel)) return;
     const timeUtc = String(duel?.time_utc || "").trim();
     if (!timeUtc || !Number.isFinite(Date.parse(timeUtc))) return;
@@ -4734,26 +4746,32 @@ function adaptDbMainPageMatchesData(data, playerDetailsById = new Map()) {
     const sectionKey = isMatchInProgress(duel) ? "today" : getFriendlySectionKeyByLocalTime(timeUtc);
     if (sectionKey === "finished" && !isFriendlyFinishedWithinLastDays(timeUtc, 7)) return;
 
-    const periodId = String(duel?.challenge_period_id || "").trim();
-    const periodName = String(duel?.challenge_period_name || periodId || "Challenges").trim();
-    const periodLogo = String(duel?.challenge_period_logo || "").trim();
-    const tournamentKey = `${periodName}||https://carcassonne.gg/player-hub/challenges/`;
+    const isCcl = sourceType === "ccl";
+    const tournamentId = String((isCcl ? duel?.tournament_id : duel?.challenge_period_id) || "").trim();
+    const tournamentName = isCcl
+      ? String(duel?.tournament_name || duel?.tournament_short_title || tournamentId || "CCL").trim()
+      : String(duel?.challenge_period_name || tournamentId || "Challenges").trim();
+    const tournamentLogo = String((isCcl ? duel?.tournament_logo : duel?.challenge_period_logo) || "").trim();
+    const tournamentLink = isCcl
+      ? String(duel?.tournament_link || "").trim()
+      : "https://carcassonne.gg/player-hub/challenges/";
+    const tournamentKey = `${tournamentName}||${tournamentLink}`;
     if (!tournamentsByKey[sectionKey].has(tournamentKey)) {
       tournamentsByKey[sectionKey].set(tournamentKey, {
-        id: periodId,
-        name: periodName,
-        short_title: periodName,
-        logo: periodLogo,
-        link: "https://carcassonne.gg/player-hub/challenges/",
+        id: tournamentId,
+        name: tournamentName,
+        short_title: tournamentName,
+        logo: tournamentLogo,
+        link: tournamentLink,
         type: "Individual",
       });
     }
 
     const normalizedDuel = {
       id: String(duel?.id || "").trim(),
-      tournament: periodName,
-      tournament_logo: periodLogo,
-      tournament_link: "https://carcassonne.gg/player-hub/challenges/",
+      tournament: tournamentName,
+      tournament_logo: tournamentLogo,
+      tournament_link: tournamentLink,
       tournament_type: "Individual",
       time: formatUtcIsoAsLegacyTime(timeUtc),
       team1: String(duel?.player_1_name || duel?.player_1_id || "").trim(),
@@ -4781,7 +4799,7 @@ function adaptDbMainPageMatchesData(data, playerDetailsById = new Map()) {
       ...normalizeStreamFields(duel),
       player1Details: getChallengePlayerDetails(duel, 1, playerDetailsById),
       player2Details: getChallengePlayerDetails(duel, 2, playerDetailsById),
-      source_type: "challenge",
+      source_type: sourceType,
       is_test: false,
     };
 
