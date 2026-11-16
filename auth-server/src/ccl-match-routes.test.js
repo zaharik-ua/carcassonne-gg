@@ -86,6 +86,8 @@ async function createDatabase(t) {
       player_2_id TEXT,
       dw1 INTEGER,
       dw2 INTEGER,
+      gg_rating_full REAL,
+      gg_rating INTEGER,
       ranking INTEGER NOT NULL DEFAULT 1,
       status TEXT,
       source_type TEXT,
@@ -256,6 +258,10 @@ test("players agree on a time; the match gets it on acceptance", async (t) => {
   });
   assert.equal(stale.status, 409);
 
+  // taras has no GG Elo yet: the match has no GG rating until both players are rated.
+  assert.equal((await get(db, "SELECT gg_rating FROM duels WHERE id = ?", [match.id])).gg_rating, null);
+  await exec(db, "UPDATE profiles SET gg_elo = 1700 WHERE id = 'taras'");
+
   const accepted = await accept(USERS.taras, {
     expected_proposed_time_utc: "2026-11-20T18:00:00.000Z",
     expected_proposed_time_by_player_id: "olena",
@@ -265,6 +271,10 @@ test("players agree on a time; the match gets it on acceptance", async (t) => {
   assert.equal(accepted.body.match.time_utc, "2026-11-20T18:00:00.000Z");
   assert.equal(accepted.body.match.proposed_time_status, "accepted");
   assert.equal((await get(db, "SELECT time_utc FROM duels WHERE id = ?", [match.id])).time_utc, "2026-11-20T18:00:00.000Z");
+  // Acceptance sets the GG rating the same way a challenge duel gets it.
+  const rated = await get(db, "SELECT gg_rating_full, gg_rating FROM duels WHERE id = ?", [match.id]);
+  assert.ok(Number.isFinite(rated.gg_rating_full));
+  assert.equal(rated.gg_rating, Math.round(rated.gg_rating_full));
   assert.equal(api.audit.at(-1).event_type, "duel.time_proposal.accepted");
 
   // The round deadline does not block scheduling.

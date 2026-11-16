@@ -151,7 +151,8 @@ async function createDatabase(t) {
     INSERT INTO duel_formats VALUES ('Bo3', 2), ('Bo5', 3);
     CREATE TABLE duels (
       id TEXT PRIMARY KEY, tournament_id TEXT, match_id TEXT, duel_number INTEGER, duel_format TEXT, time_utc TEXT,
-      player_1_id TEXT, player_2_id TEXT, dw1 INTEGER, dw2 INTEGER, ranking INTEGER NOT NULL DEFAULT 1, status TEXT,
+      player_1_id TEXT, player_2_id TEXT, dw1 INTEGER, dw2 INTEGER, gg_rating_full REAL, gg_rating INTEGER,
+      ranking INTEGER NOT NULL DEFAULT 1, status TEXT,
       source_type TEXT, is_test INTEGER NOT NULL DEFAULT 0, stage TEXT, group_name TEXT, round_name TEXT,
       round_order INTEGER, deadline_utc TEXT, proposed_time_utc TEXT, proposed_time_by_player_id TEXT,
       proposed_time_status TEXT, cancellation_reason TEXT, created_by TEXT, updated_by TEXT, deleted_by TEXT, deleted_at TEXT,

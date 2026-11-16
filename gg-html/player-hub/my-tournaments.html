@@ -2902,11 +2902,6 @@
     gap: 3px;
   }
 
-  .cp-ccl-path-tabs {
-    flex-wrap: wrap;
-    justify-content: flex-start;
-  }
-
   .cp-ccl-draw-pots {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 450px));
@@ -3026,20 +3021,8 @@
     gap: 16px;
   }
 
-  .cp-ccl-tab-divider {
-    width: 1px;
-    align-self: stretch;
-    background: #d7dde5;
-  }
-
   .cp-ccl-draw-slot--current {
     background: #fff1b8;
-  }
-
-  .cp-ccl-score-input.cp-tournament-config-input {
-    width: 40px;
-    min-width: 40px;
-    text-align: center;
   }
 
   .cp-ccl-draw-show {
@@ -12499,10 +12482,7 @@
     // Draw state of every path (GET .../draw), keyed by Q1, Q2, Q3.
     let draws = {};
     let busy = false;
-    let selectedPath = "Q3";
-    let selectedGroup = "";
     const startDrafts = {};
-    const resultDrafts = new Map();
 
     const setStatus = (message, success = false) => {
       status.textContent = String(message || "");
@@ -12525,11 +12505,6 @@
         send(`/${encodedTournamentId}/stages/${encodeURIComponent(path.stage_key)}/draw`, "GET")
       )));
       draws = Object.fromEntries(getPaths().map((path, index) => [path.stage_key, loaded[index]]));
-      // The matches block shows a drawn path.
-      const drawnPaths = getPaths().filter((path) => path.status !== "structure");
-      if (!drawnPaths.some((path) => path.stage_key === selectedPath)) selectedPath = drawnPaths[0]?.stage_key || "Q3";
-      const groups = getPath(selectedPath)?.groups || [];
-      if (!groups.some((group) => group.group_key === selectedGroup)) selectedGroup = groups[0]?.group_key || "";
     };
     const run = async (work, fallback) => {
       if (busy) return;
@@ -12939,95 +12914,6 @@
       return block;
     };
 
-    // ---- Brackets: match results ----
-    const saveResult = (match, clear = false) => {
-      const draft = resultDrafts.get(match.id) || {};
-      run(async () => {
-        await send(`/matches/${encodeURIComponent(match.id)}/result`, "POST", clear
-          ? { clear: true }
-          : { dw1: Number(draft.dw1), dw2: Number(draft.dw2) });
-        resultDrafts.delete(match.id);
-        return clear ? `Match ${match.bracket_no}: result cleared.` : `Match ${match.bracket_no}: result saved.`;
-      }, "Failed to save the result.");
-    };
-    const syncBrackets = () => run(async () => {
-      const result = await send(`/${encodedTournamentId}/brackets/sync`, "POST", {});
-      const conflicts = Array.isArray(result?.conflicts) ? result.conflicts.length : 0;
-      return `${result?.updates?.length || 0} match(es) updated.${conflicts ? ` ${conflicts} match(es) need attention.` : ""}`;
-    }, "Failed to sync the brackets.");
-    const createSide = (player) => (player?.id
-      ? el("span", "", player.bga_nickname || player.id)
-      : el("span", "cp-ccl-muted", player?.placeholder || "—"));
-    const describeMatchStatus = (match) => {
-      if (match.status === "Cancelled" && match.is_conditional) return "Not needed";
-      if (match.status === "Cancelled") return "Bye";
-      return match.status;
-    };
-    const renderBrackets = () => {
-      const path = getPath(selectedPath);
-      if (!path || path.status === "structure") return null;
-      const groupTabs = el("div", "cp-ccl-actions cp-ccl-path-tabs");
-      getPaths().filter((item) => item.status !== "structure").forEach((item) => groupTabs.appendChild(createButton(
-        item.stage_key,
-        () => {
-          selectedPath = item.stage_key;
-          selectedGroup = item.groups?.[0]?.group_key || "";
-          render();
-        },
-        selectedPath === item.stage_key ? "primary" : "secondary"
-      )));
-      groupTabs.appendChild(el("span", "cp-ccl-tab-divider"));
-      (path.groups || []).forEach((group) => groupTabs.appendChild(createButton(
-        group.group_key,
-        () => { selectedGroup = group.group_key; render(); },
-        selectedGroup === group.group_key ? "primary" : "secondary"
-      )));
-      groupTabs.appendChild(createButton("Sync brackets", syncBrackets));
-      const block = createBlock(
-        `${selectedPath} matches`,
-        "Results come from BGA automatically; enter one here for a no-show or a result played elsewhere.",
-        groupTabs
-      );
-      const group = (path.groups || []).find((item) => item.group_key === selectedGroup);
-      if (!group) return block;
-      const { wrap, tbody } = createTable(["#", "Round", "Player 1", "Player 2", "Score", "Status", "Result"]);
-      (group.matches || []).forEach((match) => {
-        const row = el("tr");
-        if (match.status === "Cancelled") row.classList.add("cp-ccl-muted-row");
-        addCell(row, match.bracket_no, "cp-ccl-strong");
-        const round = el("div", "cp-ccl-stack");
-        round.appendChild(el("span", "", match.round_name || ""));
-        if (match.deadline_utc) round.appendChild(el("span", "cp-ccl-muted", `by ${formatCclDate(match.deadline_utc)}`));
-        addCell(row, round);
-        addCell(row, createSide(match.player_1));
-        addCell(row, createSide(match.player_2));
-        addCell(row, match.dw1 === null || match.dw2 === null ? "" : `${match.dw1}:${match.dw2}`, "cp-ccl-strong");
-        addCell(row, describeMatchStatus(match));
-        const actions = el("div", "cp-ccl-actions");
-        if (match.player_1?.id && match.player_2?.id) {
-          const draft = resultDrafts.get(match.id) || { dw1: match.dw1 ?? "", dw2: match.dw2 ?? "" };
-          resultDrafts.set(match.id, draft);
-          ["dw1", "dw2"].forEach((field, index) => {
-            const input = el("input", "cp-tournament-config-input cp-ccl-score-input");
-            input.type = "text";
-            input.inputMode = "numeric";
-            input.value = String(draft[field] ?? "");
-            input.disabled = busy;
-            input.setAttribute("aria-label", `Games won by player ${index + 1}`);
-            input.addEventListener("input", () => { draft[field] = input.value; });
-            actions.appendChild(input);
-            if (!index) actions.appendChild(el("span", "", ":"));
-          });
-          actions.appendChild(createButton("Save", () => saveResult(match)));
-          if (match.dw1 !== null && match.dw2 !== null) actions.appendChild(createButton("Clear", () => saveResult(match, true)));
-        }
-        addCell(row, actions);
-        tbody.appendChild(row);
-      });
-      block.appendChild(wrap);
-      return block;
-    };
-
     const render = () => {
       body.innerHTML = "";
       if (!structure) {
@@ -13041,8 +12927,6 @@
       body.appendChild(renderStructure());
       if (!getPaths().length) return;
       body.appendChild(renderDraw());
-      const brackets = renderBrackets();
-      if (brackets) body.appendChild(brackets);
       labelCclTableCells(body);
     };
 

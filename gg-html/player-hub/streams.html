@@ -1346,6 +1346,7 @@
     const source = formContext?.stream && typeof formContext.stream === "object" ? formContext.stream : {};
     const ongoingMatches = Array.isArray(formContext?.ongoingMatches) ? formContext.ongoingMatches : [];
     const ongoingChallengeDuels = Array.isArray(formContext?.ongoingChallengeDuels) ? formContext.ongoingChallengeDuels : [];
+    const ongoingCclDuels = Array.isArray(formContext?.ongoingCclDuels) ? formContext.ongoingCclDuels : [];
     const availableStreamers = Array.isArray(formContext?.availableStreamers) ? formContext.availableStreamers : [];
     const allowStreamerSelect = isCreateMode && formContext?.allowStreamerSelect === true;
     let selectedStreamer = streamer || null;
@@ -1497,6 +1498,12 @@
         "duels",
         "No upcoming Challenge duels available."
       );
+      appendEntryPickerSection(
+        "CCL duels",
+        ongoingCclDuels,
+        "duels",
+        "No upcoming CCL duels with an agreed time."
+      );
 
       addRow("Stream target", matchesWrap);
 
@@ -1520,7 +1527,7 @@
           return;
         }
         if (!selectedEntries.length) {
-          setError("Select at least one match or Challenge duel.");
+          setError("Select at least one match, Challenge duel or CCL duel.");
           return;
         }
 
@@ -1805,6 +1812,20 @@
           team2: String(duel?.player_2_name || duel?.player_2_id || "").trim(),
         }))
         .filter((duel) => duel.entity_id);
+      // CCL duels reach the feed once their time is agreed; streams attach to them as duels.
+      const cclDuels = (Array.isArray(matchesData?.ccl_duels) ? matchesData.ccl_duels : [])
+        .map((duel) => ({
+          ...duel,
+          entity_type: "duel",
+          entity_id: String(duel?.id || "").trim(),
+          duel_id: String(duel?.id || "").trim(),
+          source_type: "ccl",
+          tournament_logo: String(duel?.tournament_logo || "").trim(),
+          tournament_id: String(duel?.tournament_id || "").trim(),
+          team1: String(duel?.player_1_name || duel?.player_1_id || "").trim(),
+          team2: String(duel?.player_2_name || duel?.player_2_id || "").trim(),
+        }))
+        .filter((duel) => duel.entity_id);
       let tournaments = [];
       if (tournamentsRes?.ok) {
         const tournamentsData = await tournamentsRes.json().catch(() => ({}));
@@ -1865,6 +1886,10 @@
         .filter((duel) => String(duel?.time_utc || duel?.time || "").trim())
         .filter((duel) => !isPastMatch(duel))
         .sort((a, b) => parseMatchTimeUtc(a) - parseMatchTimeUtc(b));
+      const ongoingCclDuels = cclDuels
+        .filter((duel) => String(duel?.time_utc || duel?.time || "").trim())
+        .filter((duel) => !isPastMatch(duel))
+        .sort((a, b) => parseMatchTimeUtc(a) - parseMatchTimeUtc(b));
 
       if (isCreateMode) {
         if (!isAdminUser && !currentStreamer) {
@@ -1886,6 +1911,7 @@
           {
             ongoingMatches,
             ongoingChallengeDuels,
+            ongoingCclDuels,
             availableStreamers: streamers,
             allowStreamerSelect: isAdminUser,
           },

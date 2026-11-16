@@ -17,6 +17,7 @@ import {
   planDuelTimeAcceptance,
   planDuelTimeProposal,
 } from "./duel-time-proposals.js";
+import { calculateGgDuelRating, loadGgRatingContext } from "./gg-ratings.js";
 import { hasTournamentAdminAccess } from "./tournament-admin-access.js";
 
 // A CCL match is one duels row; stage, round and proposal live in the generic duels columns.
@@ -115,6 +116,16 @@ async function updateMatch(db, duelId, values, actorId) {
      WHERE id = ? AND deleted_at IS NULL`,
     [...fields.map((field) => values[field]), actorId, duelId]
   );
+}
+
+// Same GG rating as a challenge duel: from both players' GG Elo; empty while a player is missing.
+async function refreshMatchGgRating(db, duelId) {
+  const row = await dbGet(db, "SELECT player_1_id, player_2_id, ranking FROM duels WHERE id = ?", [duelId]);
+  if (!row) return;
+  const { ggRatingFull, ggRating } = calculateGgDuelRating(
+    await loadGgRatingContext(db), row.player_1_id, row.player_2_id, row.ranking ?? 1
+  );
+  await dbRun(db, "UPDATE duels SET gg_rating_full = ?, gg_rating = ? WHERE id = ?", [ggRatingFull, ggRating, duelId]);
 }
 
 // Tournament admin, or a player who holds a filled slot of the tournament.
@@ -323,6 +334,7 @@ export function registerCclMatchRoutes(app, {
           actorId, actorId,
         ]
       );
+      await refreshMatchGgRating(db, duelId);
       return { match: await loadMatch(db, duelId), slots };
     });
 
@@ -368,6 +380,9 @@ export function registerCclMatchRoutes(app, {
     }
 
     await updateMatch(db, match.id, values, actorPlayerId(req.user) || null);
+    if (["time_utc", "player_1_id", "player_2_id"].some((field) => field in values)) {
+      await refreshMatchGgRating(db, match.id);
+    }
     const updated = await loadMatch(db, match.id);
     audit(req, {
       event_type: "ccl.match.updated",
@@ -436,6 +451,8 @@ export function registerCclMatchRoutes(app, {
       const plan = planDuelTimeAcceptance({ duel: match, actorPlayerId: actor.playerId, nowMs: now().getTime() });
       if (plan.error) throw requestError(plan.status, plan.error);
       await updateMatch(db, match.id, plan.value, actor.playerId);
+      // Like a challenge duel, the rating is set when the two players agree on the time.
+      await refreshMatchGgRating(db, match.id);
       return { before: match, after: await loadMatch(db, match.id), slots, actor };
     });
 
