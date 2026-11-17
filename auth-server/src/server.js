@@ -106,6 +106,8 @@ import { registerCclBracketRoutes, startCclBracketSync } from "./ccl-bracket.js"
 import { registerCclPublicBracketRoutes } from "./ccl-public-brackets.js";
 import { registerCclRoutes } from "./ccl-routes.js";
 import { registerCclMatchRoutes } from "./ccl-match-routes.js";
+import { CCL_MATCH_SOURCE_TYPE } from "./ccl-matches.js";
+import { checkCclResultEditAccess } from "./ccl-result-edit.js";
 import { CCL_DEADLINE_FIELDS, isCclTournament } from "./ccl-slots.js";
 import { resolveTournamentFormatKeyInput } from "./ccl-formats.js";
 import {
@@ -8528,6 +8530,7 @@ registerCclFansChoiceRoutes(app, {
 
 registerDuelGameBgaResultRoutes(app, {
   dbGetAsync,
+  checkCclResultEditAccess: (user, duel) => checkCclResultEditAccess(db, user, duel),
   loadTournamentAccessForUser,
   canUserEditMatchResults,
   isCompletedMatchStatus,
@@ -19187,6 +19190,7 @@ app.post("/duels/:id/games/save", (req, res) => {
       }
 
       const isChallengeDuel = String(duelRow.source_type || "").trim().toLowerCase() === "challenge";
+      const isCclDuel = String(duelRow.source_type || "").trim().toLowerCase() === CCL_MATCH_SOURCE_TYPE;
 
       const saveDuelGames = async () => {
         const existingGames = await dbAllAsync(
@@ -19224,7 +19228,7 @@ app.post("/duels/:id/games/save", (req, res) => {
           const bgaTableId = normalizeNullableText(item.bga_table_id);
           const existingGame = existingGamesById.get(id)
             || (!suppliedId ? existingGamesByNumber.get(gameNumber) : null) || null;
-          const shouldLockExistingScores = !isAdmin && !isChallengeDuel && !!existingGame;
+          const shouldLockExistingScores = !isAdmin && !isChallengeDuel && !isCclDuel && !!existingGame;
           const player1Score = shouldLockExistingScores
             ? normalizeIntegerOrNull(existingGame.player_1_score)
             : normalizeIntegerOrNull(item.player_1_score);
@@ -19451,6 +19455,17 @@ app.post("/duels/:id/games/save", (req, res) => {
           return res.status(403).json({ ok: false, message: "Forbidden" });
         }
         return runSaveDuelGames();
+      }
+
+      if (isCclDuel) {
+        return checkCclResultEditAccess(db, req.user, duelRow)
+          .then((access) => (access.allowed
+            ? runSaveDuelGames()
+            : res.status(403).json({ ok: false, message: access.message || "Forbidden" })))
+          .catch((error) => {
+            console.error(`Failed to validate CCL result access for ${duelId}`, error);
+            return res.status(500).json({ ok: false, message: "Failed to validate tournament access" });
+          });
       }
 
       if (!duelRow.match_id || !duelRow.tournament_id) {

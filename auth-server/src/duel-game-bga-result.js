@@ -1,6 +1,6 @@
 export function registerDuelGameBgaResultRoutes(app, {
   dbGetAsync, loadTournamentAccessForUser, canUserEditMatchResults,
-  isCompletedMatchStatus, fetchBgaGameResult,
+  isCompletedMatchStatus, fetchBgaGameResult, checkCclResultEditAccess = null,
 }) {
   app.post("/duels/:id/games/bga-result", async (req, res) => {
     if (!req.user) return res.status(401).json({ ok: false, message: "Unauthorized" });
@@ -30,6 +30,12 @@ export function registerDuelGameBgaResultRoutes(app, {
         if (Number(req.user.admin) !== 1 && !isParticipant) {
           return res.status(403).json({ ok: false, message: "Forbidden" });
         }
+      } else if (String(duel.source_type || "").trim().toLowerCase() === "ccl") {
+        // Mirrors /duels/:id/games/save access for CCL matches.
+        const access = typeof checkCclResultEditAccess === "function"
+          ? await checkCclResultEditAccess(req.user, duel)
+          : { allowed: false, message: "Forbidden" };
+        if (!access.allowed) return res.status(403).json({ ok: false, message: access.message || "Forbidden" });
       } else {
         if (!duel.joined_match_id) return res.status(404).json({ ok: false, message: "Duel not found" });
         if (!isCompletedMatchStatus(duel.match_status)) {

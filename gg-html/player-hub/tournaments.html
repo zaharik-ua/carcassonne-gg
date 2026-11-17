@@ -1929,12 +1929,46 @@
     min-width: 58px;
   }
 
-  .cp-ccl-avatar {
+  .cp-ccl-flag {
     width: 20px;
     height: 20px;
-    border-radius: 50%;
-    object-fit: cover;
+    object-fit: contain;
     flex: 0 0 auto;
+  }
+
+  .cp-ccl-modal-title {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+    font-size: 17px;
+    font-weight: 600;
+    color: #1d2939;
+  }
+
+  .cp-ccl-modal-title .cp-ccl-vs {
+    font-weight: 400;
+    color: #667286;
+  }
+
+  .cp-ccl-local-times {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px 14px;
+    margin-top: 4px;
+    font-size: 11px;
+    color: #666;
+  }
+
+  .cp-ccl-local-times:empty {
+    display: none;
+  }
+
+  .cp-ccl-flag-sm {
+    width: 14px;
+    height: 14px;
+    object-fit: contain;
   }
 
   .cp-ccl-me {
@@ -1958,6 +1992,53 @@
     justify-content: flex-end;
     gap: 6px;
     margin-left: 8px;
+  }
+
+  .cp-team-modal.cp-ccl-results-modal {
+    width: min(100%, 640px);
+  }
+
+  .cp-ccl-result-note {
+    margin-top: 2px;
+    font-size: 11px;
+    color: #8a5a00;
+  }
+
+  .cp-duel-edit-grid.cp-ccl-games-grid {
+    grid-template-columns: minmax(55px, 1fr) repeat(2, minmax(55px, 1fr));
+  }
+
+  .cp-ccl-game-player-name {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+    font-size: 12px;
+    font-weight: 600;
+    color: #344054;
+  }
+
+  .cp-ccl-game-player-name span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .cp-duel-edit-field select {
+    width: 100%;
+    height: 30px;
+    border: 1px solid #c8ced8;
+    border-radius: 4px;
+    padding: 4px 6px;
+    box-sizing: border-box;
+    font: inherit;
+    font-size: 13px;
+    background: #fff;
+  }
+
+  .cp-ccl-game-mode {
+    flex: 1 1 auto;
+    min-width: 0;
   }
 
   .cp-ccl-proposal-in-modal {
@@ -8760,17 +8841,64 @@
       && hasValue(match?.proposed_time_by_player_id);
   }
 
-  // Each player's local time, from the timezone of their association's team; own player first.
-  function cclLocalTimeLines(match, timeUtc) {
-    const players = match.my_side === 2 ? [match.player_2, match.player_1] : [match.player_1, match.player_2];
-    return players.filter(Boolean).map((player) => {
-      const timezone = String(player.timezone || "").trim() || "UTC";
-      return `${cclPlayerName(player)}: ${formatTeamLocalDateTime(timezone, timeUtc)} (${timezone})`;
-    });
+  // "Sun, 22 Nov, 8:00" in the given timezone (no year, no leading zero on the hour).
+  function formatCclLocalDayTime(timezone, timeUtc) {
+    const ts = Date.parse(String(timeUtc || "").trim());
+    if (!Number.isFinite(ts)) return "-";
+    try {
+      const parts = Object.fromEntries(new Intl.DateTimeFormat("en-GB", {
+        timeZone: String(timezone || "").trim() || "UTC",
+        weekday: "short",
+        day: "numeric",
+        month: "short",
+        hour: "2-digit",
+        minute: "2-digit",
+        hourCycle: "h23",
+      }).formatToParts(new Date(ts)).map((part) => [part.type, part.value]));
+      return `${parts.weekday}, ${parts.day} ${parts.month}, ${Number(parts.hour)}:${parts.minute}`;
+    } catch (_error) {
+      return "-";
+    }
   }
 
+  // One line per player (player 1 first): association flag + text from `formatTime(timezone)`.
+  function cclPlayerTimeLinesHtml(match, formatTime) {
+    return [match.player_1, match.player_2].filter(Boolean).map((player) => {
+      const flag = player.association_flag ? `<img class="cp-ccl-flag-sm" src="${esc(player.association_flag)}" alt="">` : "";
+      const timezone = String(player.timezone || "").trim() || "UTC";
+      return `<div class="cp-time-local-line">${flag}<span>${esc(formatTime(timezone))}</span></div>`;
+    }).join("");
+  }
+
+  // Each player's local day and time, from the timezone of their association's team.
   function cclLocalTimeHtml(match, timeUtc) {
-    return cclLocalTimeLines(match, timeUtc).map((line) => `<div class="cp-time-local-line">${esc(line)}</div>`).join("");
+    return cclPlayerTimeLinesHtml(match, (timezone) => formatCclLocalDayTime(timezone, timeUtc));
+  }
+
+  // Short "Local time: HH:MM" per player.
+  function cclShortLocalTimeHtml(match, timeUtc) {
+    return cclPlayerTimeLinesHtml(match, (timezone) => `Local time: ${formatTeamLocalTime(timezone, timeUtc)}`);
+  }
+
+  // The viewer's own timezone in this match (UTC when not a participant).
+  function cclViewerTimezone(match) {
+    const me = match.my_side === 1 ? match.player_1 : match.my_side === 2 ? match.player_2 : null;
+    return String(me?.timezone || "").trim() || "UTC";
+  }
+
+  // Deadline in the viewer's timezone; a 23:59 UTC deadline is shown as the following 0:00.
+  function formatCclDeadline(match) {
+    let ts = Date.parse(String(match.deadline_utc || "").trim());
+    if (!Number.isFinite(ts)) return "-";
+    if (new Date(ts).getUTCMinutes() === 59) ts = Math.ceil((ts + 1) / 60000) * 60000;
+    return formatCclViewerTime(match, new Date(ts).toISOString());
+  }
+
+  // A time in the viewer's timezone, e.g. "Mon, 23 Nov 2026, 08:00 (Asia/Hong_Kong)".
+  function formatCclViewerTime(match, timeUtc) {
+    const timezone = cclViewerTimezone(match);
+    const text = formatTeamLocalDateTime(timezone, timeUtc);
+    return timezone === "UTC" ? `${text} UTC` : `${text} (${timezone})`;
   }
 
   async function cclRequest(url, method, body) {
@@ -8862,6 +8990,32 @@
     return input;
   }
 
+  // "[flag1] Player 1 vs Player 2 [flag2]" heading of the CCL modals.
+  function createCclMatchTitle(match) {
+    const summary = document.createElement("div");
+    summary.className = "cp-ccl-modal-title";
+    const appendFlag = (player) => {
+      if (!player?.association_flag) return;
+      const flag = document.createElement("img");
+      flag.className = "cp-ccl-flag";
+      flag.src = player.association_flag;
+      flag.alt = "";
+      summary.appendChild(flag);
+    };
+    const appendText = (text, className = "") => {
+      const span = document.createElement("span");
+      span.textContent = text;
+      if (className) span.className = className;
+      summary.appendChild(span);
+    };
+    appendFlag(match.player_1);
+    appendText(cclPlayerName(match.player_1));
+    appendText("vs", "cp-ccl-vs");
+    appendText(cclPlayerName(match.player_2));
+    appendFlag(match.player_2);
+    return summary;
+  }
+
   // Players propose a time, counter the opponent's proposal or accept it.
   function openCclTimeProposalModal(match) {
     const hasActiveProposal = isCclActiveProposal(match);
@@ -8872,10 +9026,7 @@
       ? "Review match time proposal"
       : isOwn ? "Edit match time proposal" : hasValue(match.time_utc) ? "Propose another match time" : "Propose match time");
 
-    const summary = document.createElement("div");
-    summary.className = "cp-time-modal-current";
-    summary.textContent = `${cclPlayerName(match.player_1)} vs ${cclPlayerName(match.player_2)}`;
-    ui.fields.appendChild(summary);
+    ui.fields.appendChild(createCclMatchTitle(match));
     if (hasValue(match.time_utc)) {
       const current = document.createElement("div");
       current.className = "cp-time-modal-current";
@@ -8885,7 +9036,7 @@
     if (hasValue(match.deadline_utc)) {
       const deadline = document.createElement("div");
       deadline.className = "cp-time-modal-current";
-      deadline.textContent = `Play before: ${formatProposalTimeUtc(match.deadline_utc)}`;
+      deadline.textContent = `Play before: ${formatCclDeadline(match)}`;
       ui.fields.appendChild(deadline);
     }
     if (isIncoming) {
@@ -8900,14 +9051,15 @@
     const timeInput = createCclDatetimeInput(isOwn ? match.proposed_time_utc : "");
     const timeRow = ui.addField(isIncoming ? "Another time, UTC" : "Proposed time, UTC", timeInput);
     const localPreview = document.createElement("div");
-    localPreview.className = "cp-time-local-preview";
+    localPreview.className = "cp-ccl-local-times";
     timeRow.appendChild(localPreview);
     const refreshPreview = () => {
       const timeUtc = toUtcIsoFromDatetimeLocal(timeInput.value);
-      localPreview.innerHTML = timeUtc ? cclLocalTimeHtml(match, timeUtc) : "";
+      localPreview.innerHTML = timeUtc ? cclShortLocalTimeHtml(match, timeUtc) : "";
     };
     refreshPreview();
     timeInput.addEventListener("input", refreshPreview, { signal: ui.signal });
+    timeInput.addEventListener("change", refreshPreview, { signal: ui.signal });
 
     const snapshot = {
       expected_proposed_time_utc: match.proposed_time_utc || null,
@@ -9018,23 +9170,388 @@
     ui.addButton("Delete", "cp-btn-danger", () => ui.submit(() => cclRequest(CCL_MATCH_URL(match.id), "DELETE")));
   }
 
+  const isCclResultEditableStatus = (status) => ["done", "error"].includes(String(status || "").trim().toLowerCase());
+  const isCclNoShowGame = (game) => String(game?.status || "").trim().toLowerCase() === "no show";
+  const isCclPendingGame = (game) => !!game?.isNewLocal && !game.bgaResultLoaded && !isCclNoShowGame(game);
+
+  function createCclPendingGame(duelId, gameNumber) {
+    return {
+      id: `${duelId}-game-${gameNumber}-${Date.now()}`,
+      bga_table_id: "",
+      game_number: gameNumber,
+      player_1_score: null,
+      player_2_score: null,
+      player_1_rank: null,
+      player_2_rank: null,
+      player_1_clock: 0,
+      player_2_clock: 0,
+      status: "",
+      isNewLocal: true,
+      addMode: "",
+      bgaResultLoaded: false,
+    };
+  }
+
+  // Game-by-game result editor of a CCL match; mirrors the Challenge result editor.
+  function createCclGamesEditor(match) {
+    const duelId = String(match.id || "");
+    const root = document.createElement("div");
+    root.className = "cp-duel-edit-panel";
+    const savedGames = (Array.isArray(match.games) ? match.games : []).map((game, index) => ({
+      id: String(game?.id || `${duelId}-${index + 1}`),
+      bga_table_id: String(game?.bga_table_id || "").trim(),
+      game_number: index + 1,
+      player_1_score: parseNullableInt(game?.player_1_score),
+      player_2_score: parseNullableInt(game?.player_2_score),
+      player_1_rank: parseNullableInt(game?.player_1_rank),
+      player_2_rank: parseNullableInt(game?.player_2_rank),
+      player_1_clock: parseNullableInt(game?.player_1_clock) === 1 ? 1 : 0,
+      player_2_clock: parseNullableInt(game?.player_2_clock) === 1 ? 1 : 0,
+      status: String(game?.status || "").trim(),
+      isNewLocal: false,
+    }));
+    const state = { games: savedGames.length ? savedGames : [createCclPendingGame(duelId, 1)], saving: false, error: "" };
+    const players = { player1: match.player_1, player2: match.player_2 };
+    const isBusy = () => state.saving || state.games.some((game) => game.fetchingBgaResult);
+    const renumber = () => state.games.forEach((game, index) => { game.game_number = index + 1; });
+    const setWinner = (game, side) => {
+      game.player_1_rank = side === "player1" ? 1 : 0;
+      game.player_2_rank = side === "player2" ? 1 : 0;
+    };
+    const applyNoShow = (game, side) => {
+      const isPlayer1 = side === "player1";
+      Object.assign(game, {
+        status: "No show",
+        bga_table_id: "",
+        player_1_score: isPlayer1 ? 0 : 1,
+        player_2_score: isPlayer1 ? 1 : 0,
+        player_1_clock: 0,
+        player_2_clock: 0,
+        bgaResultError: "",
+      });
+      setWinner(game, isPlayer1 ? "player2" : "player1");
+    };
+    const createSelect = (value, options, onChange) => {
+      const select = document.createElement("select");
+      options.forEach(([optionValue, label]) => select.add(new Option(label, optionValue)));
+      select.value = value;
+      select.disabled = isBusy();
+      select.addEventListener("change", () => onChange(select.value));
+      return select;
+    };
+    const createButton = (text, className, onClick, disabled = false) => {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = `cp-btn ${className}`;
+      button.textContent = text;
+      button.disabled = isBusy() || disabled;
+      button.addEventListener("click", onClick);
+      return button;
+    };
+    const createInlineField = (labelText, control) => {
+      const field = document.createElement("div");
+      field.className = "cp-duel-edit-field cp-duel-edit-field--inline";
+      const label = document.createElement("label");
+      label.textContent = labelText;
+      field.append(label, control);
+      return field;
+    };
+    const createValue = (text) => {
+      const value = document.createElement("div");
+      value.className = "cp-duel-edit-game-number";
+      value.textContent = text;
+      return value;
+    };
+    const createDeleteButton = (index) => createButton("Delete", "cp-btn-danger cp-duel-edit-delete-btn", () => {
+      state.games.splice(index, 1);
+      renumber();
+      state.error = "";
+      render();
+    });
+
+    const createPendingGame = (game, index) => {
+      const wrap = document.createElement("div");
+      wrap.className = "cp-duel-edit-game";
+      const meta = document.createElement("div");
+      meta.className = "cp-duel-edit-meta";
+      const mode = createSelect(game.addMode || "", [
+        ["", "Select how to add the game"],
+        ["table", "BGA Table ID"],
+        ["player1", `${cclPlayerName(players.player1)} - No show`],
+        ["player2", `${cclPlayerName(players.player2)} - No show`],
+      ], (nextValue) => {
+        game.addMode = nextValue;
+        game.bgaResultError = "";
+        if (nextValue === "player1" || nextValue === "player2") applyNoShow(game, nextValue);
+        state.error = "";
+        render();
+      });
+      mode.classList.add("cp-ccl-game-mode");
+      mode.setAttribute("aria-label", `Game ${game.game_number}: how to add`);
+      const modeField = document.createElement("div");
+      modeField.className = "cp-duel-edit-field";
+      modeField.appendChild(mode);
+      const actions = document.createElement("div");
+      actions.className = "cp-duel-edit-meta-actions";
+      actions.appendChild(createDeleteButton(index));
+      meta.append(createInlineField("Game #", createValue(String(game.game_number))), modeField, actions);
+      wrap.appendChild(meta);
+      if (game.addMode !== "table") return wrap;
+
+      const importRow = document.createElement("div");
+      importRow.className = "cp-duel-game-import";
+      const input = document.createElement("input");
+      input.id = `ccl-bga-table-${game.id}`;
+      input.type = "text";
+      input.inputMode = "numeric";
+      input.maxLength = 10;
+      input.value = game.bga_table_id || "";
+      input.disabled = isBusy();
+      const tableField = createInlineField("Table ID", input);
+      tableField.classList.add("cp-duel-edit-table-field");
+      tableField.querySelector("label").htmlFor = input.id;
+      const message = document.createElement("div");
+      message.className = "cp-duel-game-import-message";
+      message.setAttribute("role", "status");
+      const fetchButton = createButton(game.fetchingBgaResult ? "Getting..." : "Get BGA result", "cp-btn-secondary", async () => {
+        const tableId = game.bga_table_id;
+        if (state.games.some((other) => other !== game && other.bga_table_id === tableId)) {
+          game.bgaResultError = "This Table ID is already included in the match.";
+          updateValidation();
+          return;
+        }
+        game.fetchingBgaResult = true;
+        game.bgaResultError = "";
+        render();
+        try {
+          const result = await cclRequest(DUEL_GAME_BGA_RESULT_URL(duelId), "POST", { bga_table_id: tableId });
+          if (!result.game) throw new Error("Could not load the BGA result. Please try again.");
+          Object.assign(game, result.game, { status: "" });
+          game.bgaResultLoaded = true;
+        } catch (error) {
+          game.bgaResultError = error?.message || "Could not load the BGA result. Please try again.";
+        } finally {
+          game.fetchingBgaResult = false;
+          render();
+        }
+      });
+      const updateValidation = () => {
+        const value = input.value.trim();
+        const valid = /^\d{9,10}$/.test(value);
+        input.setAttribute("aria-invalid", String(!!value && !valid));
+        message.textContent = value && !valid ? "Table ID must contain 9 or 10 digits." : game.bgaResultError || "";
+        fetchButton.disabled = !valid || isBusy();
+      };
+      input.addEventListener("input", () => {
+        game.bga_table_id = input.value.trim();
+        game.bgaResultError = "";
+        updateValidation();
+      });
+      input.addEventListener("keydown", (event) => {
+        if (event.key !== "Enter") return;
+        event.preventDefault();
+        fetchButton.click();
+      });
+      importRow.append(tableField, fetchButton);
+      wrap.append(importRow, message);
+      updateValidation();
+      return wrap;
+    };
+
+    const createGame = (game, index) => {
+      const isNoShow = isCclNoShowGame(game);
+      const wrap = document.createElement("div");
+      wrap.className = "cp-duel-edit-game";
+      const meta = document.createElement("div");
+      meta.className = "cp-duel-edit-meta";
+      let tableField;
+      if (isNoShow) {
+        const side = parseNullableInt(game.player_1_rank) === 0 ? "player1" : "player2";
+        tableField = createInlineField("No show", createValue(cclPlayerName(players[side])));
+      } else {
+        tableField = createInlineField("Table ID", createValue(game.bga_table_id || "-"));
+      }
+      tableField.classList.add("cp-duel-edit-table-field");
+      const move = (offset) => {
+        const [moved] = state.games.splice(index, 1);
+        state.games.splice(index + offset, 0, moved);
+        renumber();
+        state.error = "";
+        render();
+      };
+      const actions = document.createElement("div");
+      actions.className = "cp-duel-edit-meta-actions";
+      const up = createButton("↑", "cp-btn-secondary cp-duel-edit-move-btn", () => move(-1), index === 0);
+      up.title = "Move up";
+      up.setAttribute("aria-label", "Move up");
+      const down = createButton("↓", "cp-btn-secondary cp-duel-edit-move-btn", () => move(1), index === state.games.length - 1);
+      down.title = "Move down";
+      down.setAttribute("aria-label", "Move down");
+      actions.append(up, down, createDeleteButton(index));
+      meta.append(createInlineField("Game #", createValue(String(game.game_number))), tableField, actions);
+      wrap.appendChild(meta);
+
+      const playersRow = document.createElement("div");
+      playersRow.className = "cp-duel-edit-players";
+      [["player1", "player_1"], ["player2", "player_2"]].forEach(([side, prefix]) => {
+        const card = document.createElement("div");
+        card.className = "cp-duel-edit-player";
+        const name = document.createElement("div");
+        name.className = "cp-ccl-game-player-name";
+        if (players[side]?.association_flag) {
+          const flag = document.createElement("img");
+          flag.className = "cp-ccl-flag-sm";
+          flag.src = players[side].association_flag;
+          flag.alt = "";
+          name.appendChild(flag);
+        }
+        const nameText = document.createElement("span");
+        nameText.textContent = cclPlayerName(players[side]);
+        name.appendChild(nameText);
+
+        const grid = document.createElement("div");
+        grid.className = "cp-duel-edit-grid cp-ccl-games-grid";
+        const addCell = (labelText, control, extraClass) => {
+          const field = document.createElement("div");
+          field.className = `cp-duel-edit-field ${extraClass}`;
+          const label = document.createElement("label");
+          label.textContent = labelText;
+          field.append(label, control);
+          grid.appendChild(field);
+        };
+        const score = document.createElement("input");
+        score.type = "number";
+        score.step = "1";
+        score.value = hasValue(game[`${prefix}_score`]) ? String(game[`${prefix}_score`]) : "";
+        score.readOnly = isNoShow;
+        score.disabled = isBusy();
+        score.addEventListener("input", () => { game[`${prefix}_score`] = parseNullableInt(score.value); });
+        addCell("Score", score, "cp-duel-edit-field--score");
+
+        const won = createSelect(hasValue(game[`${prefix}_rank`]) ? String(game[`${prefix}_rank`]) : "",
+          [["", ""], ["1", "Yes"], ["0", "No"]], (nextValue) => {
+            if (nextValue === "1") setWinner(game, side);
+            else if (nextValue === "0") setWinner(game, side === "player1" ? "player2" : "player1");
+            else game[`${prefix}_rank`] = null;
+            render();
+          });
+        won.disabled = won.disabled || isNoShow;
+        addCell("Won", won, "cp-duel-edit-field--compact");
+
+        const clock = createSelect(game[`${prefix}_clock`] === 1 ? "1" : "", [["", ""], ["1", "Yes"]], (nextValue) => {
+          game[`${prefix}_clock`] = nextValue === "1" ? 1 : 0;
+        });
+        clock.disabled = clock.disabled || isNoShow;
+        addCell("Time loss", clock, "cp-duel-edit-field--compact");
+
+        card.append(name, grid);
+        playersRow.appendChild(card);
+      });
+      wrap.appendChild(playersRow);
+      return wrap;
+    };
+
+    const render = () => {
+      root.innerHTML = "";
+      const gamesWrap = document.createElement("div");
+      gamesWrap.className = "cp-duel-edit-games";
+      state.games.forEach((game, index) => {
+        gamesWrap.appendChild(isCclPendingGame(game) ? createPendingGame(game, index) : createGame(game, index));
+      });
+      const actions = document.createElement("div");
+      actions.className = "cp-duel-edit-actions";
+      actions.appendChild(createButton("Add Game", "cp-btn-secondary", () => {
+        const format = String(match.duel_format || "Bo3");
+        const completion = getEditableDuelCompletion(state.games, format);
+        if (completion.complete) {
+          showDuelGameInfoDialog("Match already complete",
+            `This ${format} match already has a deciding result (${completion.wins1}–${completion.wins2}). You cannot add another game after a player has reached ${completion.winsToFinish} ${completion.winsToFinish === 1 ? "win" : "wins"}. To correct the result, edit or delete an existing game first.`);
+          return;
+        }
+        if (state.games.some(isCclPendingGame)) {
+          showDuelGameInfoDialog("Finish adding the current game",
+            "Get the BGA result by Table ID or choose a No show for the current game before adding another one.");
+          return;
+        }
+        state.games.push(createCclPendingGame(duelId, state.games.length + 1));
+        state.error = "";
+        render();
+      }));
+      const error = document.createElement("div");
+      error.className = `cp-edit-error${state.error ? "" : " cp-hidden"}`;
+      error.textContent = state.error;
+      root.append(gamesWrap, actions, error);
+    };
+    render();
+
+    const validate = () => {
+      for (const game of state.games) {
+        if (isCclPendingGame(game)) return "Get the BGA result or choose a No show for each new game before saving.";
+        if (!isCclNoShowGame(game) && !/^\d{9,10}$/.test(String(game.bga_table_id || ""))) {
+          return "Table ID must contain 9 or 10 digits.";
+        }
+        if ((parseNullableInt(game.player_1_rank) === 1) === (parseNullableInt(game.player_2_rank) === 1)) {
+          return "Select the player who won each game.";
+        }
+      }
+      return "";
+    };
+
+    return {
+      root,
+      isBusy,
+      validate() {
+        state.error = validate();
+        render();
+        return state.error;
+      },
+      payload() {
+        renumber();
+        return state.games.map((game) => ({
+          id: game.id,
+          duel_id: duelId,
+          bga_table_id: String(game.bga_table_id || "").trim(),
+          game_number: game.game_number,
+          player_1_score: parseNullableInt(game.player_1_score),
+          player_2_score: parseNullableInt(game.player_2_score),
+          player_1_rank: parseNullableInt(game.player_1_rank),
+          player_2_rank: parseNullableInt(game.player_2_rank),
+          player_1_clock: game.player_1_clock === 1 ? 1 : 0,
+          player_2_clock: game.player_2_clock === 1 ? 1 : 0,
+          status: isCclNoShowGame(game) ? "No show" : "",
+        }));
+      },
+    };
+  }
+
+  function openCclResultsModal(match) {
+    const ui = createCclModal("Edit match results");
+    ui.modal.classList.add("cp-ccl-results-modal");
+    ui.fields.appendChild(createCclMatchTitle(match));
+    if (match.result_edit_until && match.my_side) {
+      const note = document.createElement("div");
+      note.className = "cp-time-modal-current";
+      note.textContent = `Result editing is available until ${formatCclViewerTime(match, match.result_edit_until)}.`;
+      ui.fields.appendChild(note);
+    }
+    const editor = createCclGamesEditor(match);
+    ui.fields.appendChild(editor.root);
+    ui.addButton("Cancel", "cp-btn-secondary", ui.close);
+    ui.addButton("Save", "cp-btn-primary", () => {
+      if (editor.isBusy() || editor.validate()) return;
+      ui.submit(() => cclRequest(DUEL_GAMES_SAVE_URL(match.id), "POST", { games: editor.payload() }));
+    });
+  }
+
   function createCclPlayerLine(player, score, isMe) {
     const line = document.createElement("div");
     line.className = "cp-team-row";
     if (player?.association_flag) {
       const flag = document.createElement("img");
-      flag.className = "cp-dd-flag";
+      flag.className = "cp-ccl-flag";
       flag.src = player.association_flag;
       flag.alt = "";
       line.appendChild(flag);
-    }
-    const avatarUrl = buildBgaAvatarUrl(player?.id, player?.avatar);
-    if (avatarUrl) {
-      const avatar = document.createElement("img");
-      avatar.className = "cp-ccl-avatar";
-      avatar.src = avatarUrl;
-      avatar.alt = "";
-      line.appendChild(avatar);
     }
     const name = document.createElement("span");
     name.textContent = cclPlayerName(player);
@@ -9087,15 +9604,23 @@
     players.appendChild(createCclPlayerLine(match.player_2, isDone ? match.dw2 : null, match.my_side === 2));
     const meta = document.createElement("div");
     meta.className = "cp-ccl-meta";
-    meta.textContent = [
-      CCL_STAGE_LABELS[match.stage] || match.stage,
-      match.group_name ? `Group ${match.group_name}` : "",
-      match.round_name,
-      match.duel_format,
-      hasValue(match.deadline_utc) ? `play before ${formatProposalTimeUtc(match.deadline_utc)}` : "",
-      isDone ? "" : match.status !== "Planned" ? match.status : "",
-    ].filter(Boolean).join(" · ");
-    players.appendChild(meta);
+    const isPlayed = isCclResultEditableStatus(match.status);
+    meta.textContent = isPlayed
+      ? (isDone ? "" : match.status)
+      : [
+        match.duel_format,
+        hasValue(match.deadline_utc) ? `play before ${formatCclDeadline(match)}` : "",
+        match.status !== "Planned" ? match.status : "",
+      ].filter(Boolean).join(" · ");
+    if (meta.textContent) players.appendChild(meta);
+    const canEditResult = isPlayed && match.can_edit_result === true && (!!match.my_side || options.manage);
+    const editUntilTs = Date.parse(String(match.result_edit_until || ""));
+    if (canEditResult && match.my_side && Number.isFinite(editUntilTs) && editUntilTs > Date.now()) {
+      const note = document.createElement("div");
+      note.className = "cp-ccl-result-note";
+      note.textContent = `Result editing is available until ${formatCclViewerTime(match, match.result_edit_until)}`;
+      players.appendChild(note);
+    }
 
     const actions = document.createElement("div");
     actions.className = "cp-ccl-actions";
@@ -9116,6 +9641,9 @@
         incoming ? "cp-btn-primary" : "cp-btn-secondary",
         () => openCclTimeProposalModal(match)
       );
+    }
+    if (canEditResult) {
+      addAction("Edit results", "cp-btn-secondary", () => openCclResultsModal(match));
     }
     if (options.manage) {
       addAction("Edit", "cp-btn-secondary", () => openCclMatchEditModal(data, match));
@@ -9205,7 +9733,7 @@
     addButtonEl.onclick = adminMode ? () => openCclMatchEditModal(data) : null;
     hintEl.textContent = adminMode
       ? "Players of each match agree on its time here. Setting the time yourself replaces their proposal."
-      : "Propose a time for each match; it is set once your opponent accepts it. Times are in UTC.";
+      : "Propose a time for each match; it is set once your opponent accepts it. Match times are shown in your device's local time.";
 
     const visibleMatches = adminMode ? data.matches : myMatches;
     const render = () => {

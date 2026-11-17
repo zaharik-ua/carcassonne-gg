@@ -18,6 +18,7 @@ import {
   planDuelTimeProposal,
 } from "./duel-time-proposals.js";
 import { calculateGgDuelRating, loadGgRatingContext } from "./gg-ratings.js";
+import { getCclResultEditAccess, isCclResultEditableStatus } from "./ccl-result-edit.js";
 import { hasTournamentAdminAccess } from "./tournament-admin-access.js";
 
 // A CCL match is one duels row; stage, round and proposal live in the generic duels columns.
@@ -193,7 +194,29 @@ function formatPlayer(playerId, { slotsByPlayer, profilesById, associationsById,
   };
 }
 
-function formatMatch(match, context, viewerPlayerId) {
+// Games of completed matches, for the result editor; keyed by duel id.
+async function loadGamesByDuel(db, rows) {
+  const ids = rows.filter((row) => isCclResultEditableStatus(row.status)).map((row) => row.id);
+  const byDuel = new Map();
+  if (!ids.length) return byDuel;
+  const games = await dbAll(
+    db,
+    `SELECT id, duel_id, bga_table_id, game_number, player_1_score, player_2_score,
+       player_1_rank, player_2_rank, player_1_clock, player_2_clock, status
+     FROM games
+     WHERE deleted_at IS NULL AND duel_id IN (${ids.map(() => "?").join(", ")})
+     ORDER BY game_number`,
+    ids
+  );
+  games.forEach((game) => {
+    if (!byDuel.has(game.duel_id)) byDuel.set(game.duel_id, []);
+    byDuel.get(game.duel_id).push(game);
+  });
+  return byDuel;
+}
+
+function formatMatch(match, context, viewerPlayerId, { isAdmin = false, games = null, now = new Date() } = {}) {
+  const resultAccess = getCclResultEditAccess({ duel: match, playerId: viewerPlayerId, isAdmin, now });
   return {
     id: match.id,
     tournament_id: match.tournament_id,
@@ -214,6 +237,10 @@ function formatMatch(match, context, viewerPlayerId) {
     proposed_time_by_player_id: match.proposed_time_by_player_id || null,
     proposed_time_status: match.proposed_time_status || null,
     my_side: getDuelSide(match, viewerPlayerId),
+    can_edit_result: resultAccess.allowed,
+    // End of the players' editing window; admins may edit after it.
+    result_edit_until: isCclResultEditableStatus(match.status) ? resultAccess.until : null,
+    ...(games ? { games } : {}),
   };
 }
 
@@ -276,6 +303,7 @@ export function registerCclMatchRoutes(app, {
       ? slots.map((slot) => slot.player_id)
       : rows.flatMap((row) => [row.player_1_id, row.player_2_id]);
     const context = await buildFormatContext(db, slots, playerIds);
+    const gamesByDuel = await loadGamesByDuel(db, rows);
     const formats = actor.isAdmin
       ? (await dbAll(db, "SELECT format FROM duel_formats ORDER BY format")).map((row) => text(row.format))
       : [];
@@ -293,7 +321,11 @@ export function registerCclMatchRoutes(app, {
           players: getCclEligiblePlayerIds(slots, stage).map((id) => formatPlayer(id, context)),
         }))
         : [],
-      matches: rows.sort(compareCclMatches).map((row) => formatMatch(row, context, actor.playerId)),
+      matches: rows.sort(compareCclMatches).map((row) => formatMatch(row, context, actor.playerId, {
+        isAdmin: actor.isAdmin,
+        games: isCclResultEditableStatus(row.status) ? gamesByDuel.get(row.id) || [] : null,
+        now: now(),
+      })),
     });
   }));
 
