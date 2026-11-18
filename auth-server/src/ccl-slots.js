@@ -273,23 +273,28 @@ export function isCclEntryEloSet(entry, slot) {
 /**
  * Phase state for admin screens:
  * - elo_set: every phase slot has Elo set for its current player;
+ * - filled_elo_set: every filled phase slot has Elo set (pots can be formed, partly while slots are open);
+ * - seeded: filled phase slots that already have a pot;
  * - pots_formed: in addition, every phase slot has a seed;
- * - pots_blockers: why pots cannot be formed yet.
+ * - pots_blockers: why pots cannot be formed completely yet.
  */
 export function getCclPhaseStatus({ slots, entries, phase }) {
   const stages = CCL_PHASES[phase] || [];
   const phaseEntries = (entries || []).filter((entry) => stages.includes(entry.stage));
   const entriesBySlot = new Map(phaseEntries.map((entry) => [idKey(entry.slot_id), entry]));
   const phaseSlots = getCclPhaseSlots(slots, phase);
+  const filledSlots = phaseSlots.filter((slot) => text(slot.player_id));
   const fixedAt = phaseEntries.map((entry) => text(entry.fixed_at)).filter(Boolean).sort();
-  const eloSet = phaseSlots.length > 0
-    && phaseSlots.every((slot) => isCclEntryEloSet(entriesBySlot.get(idKey(slot.id)), slot));
+  const hasElo = (slot) => isCclEntryEloSet(entriesBySlot.get(idKey(slot.id)), slot);
+  const eloSet = phaseSlots.length > 0 && phaseSlots.every(hasElo);
   return {
     phase,
     slots: phaseSlots.length,
-    filled: phaseSlots.filter((slot) => text(slot.player_id)).length,
+    filled: filledSlots.length,
     elo_set: eloSet,
+    filled_elo_set: filledSlots.length > 0 && filledSlots.every(hasElo),
     elo_set_at: fixedAt.at(-1) || null,
+    seeded: filledSlots.filter((slot) => hasElo(slot) && !!entriesBySlot.get(idKey(slot.id))?.seed).length,
     pots_formed: eloSet && phaseSlots.every((slot) => !!entriesBySlot.get(idKey(slot.id))?.seed),
     pots_blockers: getCclPotsBlockers(slots, phase),
   };
@@ -314,8 +319,13 @@ function splitRated(entries) {
   };
 }
 
-function formQualificationSeeds(entries, ratingPositionByPlayerId) {
+// "missing" players are still to come (open slots, undecided Q results). A known player gets a pot
+// only when no missing player can move them out of it, whatever their Elo; the others wait.
+const openSlotsNote = (missing) => (missing ? ` and ${missing} open slot${missing === 1 ? "" : "s"}` : "");
+
+function formQualificationSeeds(entries, ratingPositionByPlayerId, missing) {
   const seeds = [];
+  const pending = [];
   for (const stage of CCL_QUALIFICATION_STAGES) {
     const stageEntries = entries.filter((entry) => entry.stage === stage);
     if (!stageEntries.length) continue;
@@ -323,72 +333,87 @@ function formQualificationSeeds(entries, ratingPositionByPlayerId) {
     if (stageEntries.length > maxPlayers) {
       return { error: `${stage} has ${stageEntries.length} players; at most ${maxPlayers} are allowed` };
     }
+    const open = Math.min(missing, maxPlayers - stageEntries.length);
     const { rated, unrated } = splitRated(stageEntries);
-    if (seededCount > rated.length) {
-      return { error: `${stage} needs ${seededCount} rated players for Seeded, but has ${rated.length}` };
+    if (seededCount > rated.length + open) {
+      return { error: `${stage} needs ${seededCount} rated players for Seeded, but has ${rated.length}${openSlotsNote(open)}` };
     }
+    // Places 1..seeded-open stay Seeded and places after seeded stay Unseeded, however the open slots are filled.
     sortByRating(rated, ratingPositionByPlayerId).forEach((entry, index) => {
-      seeds.push({ slot_id: entry.slot_id, stage, seed: index < seededCount ? "Seeded" : "Unseeded" });
+      if (index >= seededCount) seeds.push({ slot_id: entry.slot_id, stage, seed: "Unseeded" });
+      else if (index < seededCount - open) seeds.push({ slot_id: entry.slot_id, stage, seed: "Seeded" });
+      else pending.push(entry.slot_id);
     });
     unrated.forEach((entry) => seeds.push({ slot_id: entry.slot_id, stage, seed: "Unseeded" }));
   }
-  return { seeds };
+  return { seeds, pending };
 }
 
-function formLeaguePots(entries, ratingPositionByPlayerId) {
+function formLeaguePots(entries, ratingPositionByPlayerId, missing) {
   const maxPlayers = CCL_LEAGUE_POT_SIZE * CCL_LEAGUE_POTS.length;
   if (entries.length > maxPlayers) {
     return { error: `League Stage has ${entries.length} players; at most ${maxPlayers} are allowed` };
   }
+  const open = Math.min(missing, maxPlayers - entries.length);
   const { rated, unrated } = splitRated(entries);
   const lastPot = CCL_LEAGUE_POTS.length - 1;
   // Pots 1-4 are full and rated; Pot 5 takes the rest, including every player without rating.
   const ratedNeeded = CCL_LEAGUE_POT_SIZE * lastPot;
-  if (rated.length < ratedNeeded) {
-    return { error: `League Stage needs ${ratedNeeded} rated players for Pot 1-${lastPot}, but has ${rated.length}` };
+  if (rated.length + open < ratedNeeded) {
+    return { error: `League Stage needs ${ratedNeeded} rated players for Pot 1-${lastPot}, but has ${rated.length}${openSlotsNote(open)}` };
   }
-  const seeds = sortByRating(rated, ratingPositionByPlayerId).map((entry, index) => ({
-    slot_id: entry.slot_id,
-    stage: "Main",
-    seed: CCL_LEAGUE_POTS[Math.min(Math.floor(index / CCL_LEAGUE_POT_SIZE), lastPot)],
-  }));
+  const potIndex = (place) => Math.min(Math.floor(place / CCL_LEAGUE_POT_SIZE), lastPot);
+  const seeds = [];
+  const pending = [];
+  // A player's final place is between their place now and that place + open.
+  sortByRating(rated, ratingPositionByPlayerId).forEach((entry, index) => {
+    if (potIndex(index) === potIndex(index + open)) {
+      seeds.push({ slot_id: entry.slot_id, stage: "Main", seed: CCL_LEAGUE_POTS[potIndex(index)] });
+    } else {
+      pending.push(entry.slot_id);
+    }
+  });
   unrated.forEach((entry) => seeds.push({ slot_id: entry.slot_id, stage: "Main", seed: CCL_LEAGUE_POTS[lastPot] }));
-  return { seeds };
+  return { seeds, pending };
 }
+
+// Blockers that only mean "players are still to come": pots can be formed partly meanwhile.
+const OPEN_SLOT_REASONS = new Set(["association_missing", "player_missing", "league_status_pending"]);
 
 /**
  * Forms pots from Elo already set for the phase. Players without rating always land in the
  * last pot (Unseeded / Pot 5). Qualification uses CCL_QUALIFICATION_POTS per path;
  * the league has five pots of CCL_LEAGUE_POT_SIZE.
- * Returns { seeds: [{ slot_id, stage, seed }] } or { error, blockers? }.
+ * While some slots are open (no association or player, undecided Q results for the league),
+ * only the players whose pot cannot change any more get one; the others are returned in pending.
+ * Returns { seeds: [{ slot_id, stage, seed }], pending: [slot_id], open_slots } or { error, blockers? }.
  */
 export function formCclPots({ slots, entries, phase, ratingPositionByPlayerId }) {
-  const phaseSlots = getCclPhaseSlots(slots, phase);
   const stages = CCL_PHASES[phase];
   if (!stages) return { error: "phase must be q1, q2, q3 or league" };
+  const filledSlots = getCclPhaseSlots(slots, phase).filter((slot) => text(slot.player_id));
   const entriesBySlot = new Map(
     (entries || [])
       .filter((entry) => stages.includes(entry.stage))
       .map((entry) => [idKey(entry.slot_id), entry])
   );
-  const blockers = getCclPotsBlockers(slots, phase);
-  phaseSlots.forEach((slot) => {
-    if (text(slot.player_id) && !isCclEntryEloSet(entriesBySlot.get(idKey(slot.id)), slot)) {
-      blockers.push({ slot_id: slot.id, reason: "elo_not_set" });
-    }
-  });
-  if (blockers.length) {
-    const onlyElo = blockers.every((blocker) => blocker.reason === "elo_not_set");
-    return { error: onlyElo ? "Elo must be set for every player of the phase" : "Pots cannot be formed yet", blockers };
-  }
+  const eloBlockers = filledSlots
+    .filter((slot) => !isCclEntryEloSet(entriesBySlot.get(idKey(slot.id)), slot))
+    .map((slot) => ({ slot_id: slot.id, reason: "elo_not_set" }));
+  if (eloBlockers.length) return { error: "Elo must be set for every player of the phase", blockers: eloBlockers };
+  if (!filledSlots.length) return { error: "The phase has no players yet" };
 
-  const phaseEntries = phaseSlots.map((slot) => {
+  const openSlots = new Set(getCclPotsBlockers(slots, phase)
+    .filter((blocker) => OPEN_SLOT_REASONS.has(blocker.reason))
+    .map((blocker) => idKey(blocker.slot_id))).size;
+  const phaseEntries = filledSlots.map((slot) => {
     const entry = entriesBySlot.get(idKey(slot.id));
     return { slot_id: slot.id, stage: entry.stage, player_id: entry.player_id, elo: entry.elo ?? null };
   });
-  return phase === "league"
-    ? formLeaguePots(phaseEntries, ratingPositionByPlayerId)
-    : formQualificationSeeds(phaseEntries, ratingPositionByPlayerId);
+  const result = phase === "league"
+    ? formLeaguePots(phaseEntries, ratingPositionByPlayerId, openSlots)
+    : formQualificationSeeds(phaseEntries, ratingPositionByPlayerId, openSlots);
+  return result.error ? result : { ...result, open_slots: openSlots };
 }
 
 function buildPlayerRow({ slot, entry, profile, association }) {

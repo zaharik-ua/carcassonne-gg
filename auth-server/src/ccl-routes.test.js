@@ -327,14 +327,15 @@ test("qualification Elo, results, league Elo and pots work end to end", async (t
   const [empty] = await createSlot(api, { association_id: "DE", entry_stage: "Q2", qualified_by_name: "X" });
   const slots = await seedFullTournament(api);
 
-  // Elo can be issued early, while slots are still open; empty slots only block pots of their path.
+  // Elo can be issued early, while slots are still open; an empty slot counts as an open place in its path.
   const early = await setElo(api, "q2");
   assert.equal(early.status, 200, JSON.stringify(early.body));
   assert.deepEqual(early.body.skipped, [{ slot_id: empty.id, reason: "player_missing" }]);
   assert.equal(early.body.phase.elo_set, false);
+  assert.equal(early.body.phase.filled_elo_set, true);
   const blockedPots = await formPots(api, "q2");
-  assert.equal(blockedPots.status, 409);
-  assert.deepEqual(blockedPots.body.blockers, [{ slot_id: empty.id, reason: "player_missing" }]);
+  assert.equal(blockedPots.status, 400);
+  assert.match(blockedPots.body.message, /Q2 needs 16 rated players for Seeded, but has 0 and 1 open slot/);
   assert.equal((await setElo(api, "q1", USERS.captainAr)).status, 403);
   assert.equal((await setElo(api, "q12")).status, 400);
   assert.equal((await setElo(api, "groups")).status, 400);
@@ -402,10 +403,10 @@ test("qualification Elo, results, league Elo and pots work end to end", async (t
     body: { elo: 1700 },
   })).status, 404);
 
-  // League: every Q slot needs a result before pots can be formed.
+  // League: pots need Elo of every League Stage player; undecided Q results only leave places open.
   const pending = await formPots(api, "league");
   assert.equal(pending.status, 409);
-  assert.equal(pending.body.blockers.filter((row) => row.reason === "league_status_pending").length, 3);
+  assert.deepEqual(pending.body.blockers, [{ slot_id: slots.arMain.id, reason: "elo_not_set" }]);
   assert.match((await setResult(api, slots.arMain.id, { league_status: "eliminated" })).body.message, /only to Q1/);
   assert.match((await setResult(api, slots.arQ1.id, { league_status: "qualified" })).body.message, /qualified_by_name/);
   const qualified = await setResult(api, slots.arQ1.id, {
@@ -460,10 +461,11 @@ test("qualification Elo, results, league Elo and pots work end to end", async (t
     replaced.body.slot.entries.map((entry) => [entry.player_id, entry.elo, entry.elo_fixed, entry.seed]),
     [["leo", 1700.5, true, null]]
   );
-  // Removing the player clears the slot's Elo, so pots are blocked.
+  // Removing the player clears the slot's Elo; the slot becomes an open place.
   await patchSlot(api, USERS.admin, slots.arMain.id, { player_id: null });
   const cleared = await formPots(api, "league");
-  assert.deepEqual(cleared.body.blockers, [{ slot_id: slots.arMain.id, reason: "player_missing" }]);
+  assert.equal(cleared.status, 400);
+  assert.match(cleared.body.message, /needs 48 rated players for Pot 1-4, but has 0 and 1 open slot/);
   assert.deepEqual(
     await all(db, "SELECT player_id, elo, fixed_at FROM ccl_stage_entries WHERE slot_id = ?", [slots.arMain.id]),
     [{ player_id: null, elo: null, fixed_at: null }]
@@ -512,6 +514,29 @@ test("a full Q3 path forms 12 Seeded and 12 Unseeded", async (t) => {
   const seeds = await seedsByPlayer(db);
   assert.deepEqual(players.filter((id) => seeds.get(id) === "Seeded"), players.slice(0, 12));
   assert.deepEqual(players.filter((id) => seeds.get(id) === "Unseeded"), players.slice(12));
+});
+
+test("a Q3 path with open slots forms the pots that cannot change any more", async (t) => {
+  const db = await createDatabase(t);
+  const api = createApi(db);
+  // 22 of 24 players: 14 rated, 8 without rating; two slots are still empty.
+  const players = await fillStage(api, db, "Q3", 22, (index) => (index <= 14 ? 2010 - index * 10 : null));
+  await createSlot(api, { association_id: "AR", entry_stage: "Q3", qualified_by_name: "Ranking", count: 2 });
+  assert.equal((await setElo(api, "q3")).status, 200);
+  const pots = await formPots(api, "q3");
+  assert.equal(pots.status, 200, JSON.stringify(pots.body));
+  assert.equal(pots.body.open_slots, 2);
+  assert.equal(pots.body.pending.length, 2);
+  const seeds = await seedsByPlayer(db);
+  // Places 1-10 stay Seeded and 13+ stay Unseeded whoever fills the two open slots; 11 and 12 wait.
+  assert.deepEqual(players.filter((id) => seeds.get(id) === "Seeded"), players.slice(0, 10));
+  assert.deepEqual(players.filter((id) => seeds.get(id) === "Unseeded"), players.slice(12));
+  assert.deepEqual(players.slice(10, 12).map((id) => seeds.get(id)), [null, null]);
+  const view = await getSlots(api, USERS.admin);
+  assert.equal(view.body.phases.q3.seeded, 20);
+  assert.equal(view.body.phases.q3.filled_elo_set, true);
+  assert.equal(view.body.phases.q3.pots_formed, false);
+  assert.equal(view.body.phases.q3.drawn, false);
 });
 
 test("a full League Stage forms five pots of 12", async (t) => {

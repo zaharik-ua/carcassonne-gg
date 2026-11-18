@@ -13152,7 +13152,7 @@
 
     // ---- Draws: Elo and pots per phase ----
     const setPhaseElo = (phase, info) => {
-      if (info.pots_formed && !window.confirm("Updating Elo resets the pots of this phase. Continue?")) return;
+      if ((info.pots_formed || Number(info.seeded) > 0) && !window.confirm("Updating Elo resets the pots of this phase. Continue?")) return;
       run(async () => {
         const result = await send(`/${encodedTournamentId}/elo/${phase}`, "POST", {});
         const skipped = Array.isArray(result?.skipped) ? result.skipped.length : 0;
@@ -13163,37 +13163,42 @@
     };
     const formPots = (phase) => {
       run(async () => {
-        await send(`/${encodedTournamentId}/pots/${phase}`, "POST", {});
-        return "Pots formed.";
+        const result = await send(`/${encodedTournamentId}/pots/${phase}`, "POST", {});
+        const pending = Array.isArray(result?.pending) ? result.pending.length : 0;
+        const open = Number(result?.open_slots) || 0;
+        if (!open) return "Pots formed.";
+        const openText = `${open} place${open === 1 ? " is" : "s are"} still open`;
+        return pending
+          ? `Pots partly formed: ${openText}, so ${pending} player${pending === 1 ? " waits" : "s wait"} for a pot.`
+          : `Pots formed for every current player; ${openText}.`;
       }, "Failed to form pots.");
-    };
-    // Per-stage numbers for Q1, Q2 and Q3, counted from the loaded slots (the server reports whole phases).
-    const getStageDrawInfo = (stage) => {
-      const slots = data.slots.filter((slot) => slot.entry_stage === stage);
-      const entries = slots.map((slot) => getSlotEntry(slot, stage));
-      const withElo = entries.filter((entry) => entry?.elo_fixed);
-      const fixedAt = withElo.map((entry) => String(entry.fixed_at || "")).filter(Boolean).sort();
-      return {
-        slots: slots.length,
-        filled: slots.filter((slot) => slot.player_id).length,
-        elo_set: slots.length > 0 && withElo.length === slots.length,
-        elo_set_at: fixedAt.at(-1) || null,
-        pots_formed: slots.length > 0 && entries.every((entry) => entry?.seed),
-      };
     };
     const describeElo = (info) => {
       const eloDate = formatCclDate(info.elo_set_at);
       return info.elo_set ? `Set ${eloDate}` : (eloDate ? `Partly set ${eloDate}` : "—");
     };
-    const createPhaseActions = (phase, info, blockers) => {
+    // Pots can be formed partly while slots are open: only the players whose pot can no longer change get one.
+    const describePots = (info) => {
+      if (info.pots_formed) return "Formed";
+      const seeded = Number(info.seeded) || 0;
+      return seeded ? `Partly ${seeded}/${Number(info.slots) || 0}` : "—";
+    };
+    const createPhaseActions = (phase, info) => {
       const actions = el("div", "cp-ccl-actions");
-      actions.appendChild(createButton(
+      const drawnTitle = "The draw of this stage is made; reset the draw first.";
+      const eloButton = createButton(
         info.elo_set_at ? "Update Elo" : "Set Elo",
         () => setPhaseElo(phase, info),
         "secondary",
-        !Number(info.filled)
-      ));
-      actions.appendChild(createButton("Form pots", () => formPots(phase), "primary", !info.elo_set || blockers.length > 0));
+        info.drawn === true || !Number(info.filled)
+      );
+      if (info.drawn) eloButton.title = drawnTitle;
+      actions.appendChild(eloButton);
+      const canFormPots = info.filled_elo_set ?? info.elo_set;
+      const potsButton = createButton("Form pots", () => formPots(phase), "primary", info.drawn === true || !canFormPots);
+      if (info.drawn) potsButton.title = drawnTitle;
+      else if (!canFormPots) potsButton.title = "Set Elo of every current player first.";
+      actions.appendChild(potsButton);
       return actions;
     };
     const renderDraws = () => {
@@ -13206,40 +13211,24 @@
         if (!date) return "Not set";
         return `${date}${stageInfo?.registration_open === false ? " (closed)" : ""}`;
       };
-      const addStageRow = (label, stage, info) => {
-        const row = el("tr");
-        addCell(row, label, "cp-ccl-strong");
-        addCell(row, formatDeadline(stage));
-        addCell(row, `${info.filled}/${info.slots}`);
-        addCell(row, String(info.slots - info.filled));
-        addCell(row, describeElo(info));
-        addCell(row, info.pots_formed ? "Formed" : "—");
-        tbody.appendChild(row);
-        return row;
-      };
-
-      // Qualification: every path has its own Elo and pots (phase q1, q2, q3), so a full path
+      // Every qualification path has its own Elo and pots (phase q1, q2, q3), so a full path
       // can be drawn while the others are still filling up.
-      CCL_QUALIFICATION_STAGES.forEach((stage, index) => {
-        const phase = stage.toLowerCase();
-        const phaseInfo = data.phases?.[phase] || {};
-        const blockers = Array.isArray(phaseInfo.pots_blockers) ? phaseInfo.pots_blockers : [];
-        const row = addStageRow(stage, stage, getStageDrawInfo(stage));
-        if (index === 0) row.className = "cp-ccl-group-start";
-        addCell(row, createPhaseActions(phase, phaseInfo, blockers), "cp-ccl-phase-actions");
-      });
-
-      const league = data.phases?.league || {};
-      const leagueBlockers = Array.isArray(league.pots_blockers) ? league.pots_blockers : [];
-      const leagueRow = addStageRow("League", "Main", {
-        slots: Number(league.slots) || 0,
-        filled: Number(league.filled) || 0,
-        elo_set: !!league.elo_set,
-        elo_set_at: league.elo_set_at,
-        pots_formed: !!league.pots_formed,
-      });
-      leagueRow.className = "cp-ccl-group-start";
-      addCell(leagueRow, createPhaseActions("league", league, leagueBlockers), "cp-ccl-phase-actions");
+      [...CCL_QUALIFICATION_STAGES.map((stage) => [stage, stage, stage.toLowerCase()]), ["League", "Main", "league"]]
+        .forEach(([label, stage, phase], index, rows) => {
+          const info = data.phases?.[phase] || {};
+          const slots = Number(info.slots) || 0;
+          const filled = Number(info.filled) || 0;
+          const row = el("tr");
+          if (index === 0 || index === rows.length - 1) row.className = "cp-ccl-group-start";
+          addCell(row, label, "cp-ccl-strong");
+          addCell(row, formatDeadline(stage));
+          addCell(row, `${filled}/${slots}`);
+          addCell(row, String(slots - filled));
+          addCell(row, describeElo(info));
+          addCell(row, info.drawn ? `${describePots(info)} · Drawn` : describePots(info));
+          addCell(row, createPhaseActions(phase, info), "cp-ccl-phase-actions");
+          tbody.appendChild(row);
+        });
 
       block.appendChild(wrap);
       return block;

@@ -327,6 +327,57 @@ test("League Stage has five pots of 12: Pot 1-4 by Elo, Pot 5 the rest and every
   assert.match(formCclPots({ ...fewRated, phase: "league" }).error, /needs 48 rated players for Pot 1-4, but has 47/);
 });
 
+test("open slots: pots are formed for the players whose pot cannot change any more", () => {
+  // Q1: 38 of 40 players, all rated; places 1-18 stay Seeded and 21-38 Unseeded, 19-20 wait.
+  const q1 = stagePlayers("Q1", 38, (index) => 2100 - index);
+  const open = [1, 2].map((index) => ({ id: `Q1-open-${index}`, association_id: "AR", entry_stage: "Q1", player_id: null }));
+  const result = formCclPots({ slots: [...q1.slots, ...open], entries: q1.entries, phase: "q1" });
+  assert.equal(result.error, undefined);
+  assert.equal(result.open_slots, 2);
+  assert.deepEqual(result.pending, ["Q1-19", "Q1-20"]);
+  const seedOf = (id) => result.seeds.find((row) => row.slot_id === id)?.seed;
+  assert.equal(result.seeds.filter((row) => row.seed === "Seeded").length, 18);
+  assert.equal(result.seeds.filter((row) => row.seed === "Unseeded").length, 18);
+  assert.equal(seedOf("Q1-18"), "Seeded");
+  assert.equal(seedOf("Q1-21"), "Unseeded");
+
+  // An unassigned slot is open too; players without rating are Unseeded anyway.
+  const q3 = stagePlayers("Q3", 20, (index) => (index > 15 ? null : 2000 - index));
+  const tbd = { id: "Q3-tbd", association_id: null, entry_stage: "Q3", player_id: null };
+  const q3Result = formCclPots({ slots: [...q3.slots, tbd], entries: q3.entries, phase: "q3" });
+  assert.deepEqual(q3Result.pending, ["Q3-12"]);
+  assert.ok(q3.slots.slice(15).every((slot) => q3Result.seeds.find((row) => row.slot_id === slot.id).seed === "Unseeded"));
+  // Not enough rated players even if every open slot gets one.
+  const fewRated = stagePlayers("Q2", 30, (index) => (index > 13 ? null : 1700));
+  const q2Open = [1, 2].map((index) => ({ id: `Q2-open-${index}`, association_id: "AR", entry_stage: "Q2", player_id: null }));
+  assert.match(
+    formCclPots({ slots: [...fewRated.slots, ...q2Open], entries: fewRated.entries, phase: "q2" }).error,
+    /Q2 needs 16 rated players for Seeded, but has 13 and 2 open slots/
+  );
+  // Elo of every filled slot is still required, and an empty phase has nothing to form.
+  assert.deepEqual(formCclPots({ slots: [...q1.slots, ...open], entries: q1.entries.slice(1), phase: "q1" }).blockers, [
+    { slot_id: "Q1-01", reason: "elo_not_set" },
+  ]);
+  assert.match(formCclPots({ slots: open, entries: [], phase: "q1" }).error, /no players/);
+});
+
+test("League Stage with open slots and undecided Q results: a player gets a pot only if it is fixed", () => {
+  // 55 Main players (all rated), 2 empty Main slots and 3 Q slots without a result: 5 open places.
+  const league = stagePlayers("Main", 55, (index) => 2200 - index);
+  const openMain = [1, 2].map((index) => ({ id: `Main-open-${index}`, association_id: "AR", entry_stage: "Main", player_id: null }));
+  const undecided = [1, 2, 3].map((index) => ({
+    id: `Q1-${index}`, association_id: "UA", entry_stage: "Q1", player_id: `q-${index}`, league_status: null,
+  }));
+  const result = formCclPots({ slots: [...league.slots, ...openMain, ...undecided], entries: league.entries, phase: "league" });
+  assert.equal(result.error, undefined);
+  assert.equal(result.open_slots, 5);
+  const potOf = (index) => result.seeds.find((row) => row.slot_id === `Main-${String(index).padStart(2, "0")}`)?.seed;
+  // Places 1-7 stay in Pot 1; 8-12 may drop to Pot 2; 44-48 may drop to Pot 5; 49+ are Pot 5.
+  assert.deepEqual([1, 7, 13, 19, 43, 49, 55].map(potOf), ["Pot 1", "Pot 1", "Pot 2", "Pot 2", "Pot 4", "Pot 5", "Pot 5"]);
+  assert.equal(result.pending.length, 20);
+  assert.ok([8, 12, 20, 24, 44, 48].every((index) => potOf(index) === undefined));
+});
+
 test("pots need Elo set for the current player of every phase slot", () => {
   const entries = [
     fixed("ar-main", "Main", "juan", 1810),

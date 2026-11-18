@@ -196,6 +196,21 @@ export async function loadProfilesById(db, playerIds) {
   return new Map(rows.map((row) => [text(row.id), row]));
 }
 
+// Stage keys of the tournament whose draw is made (status past "structure").
+async function loadDrawnStages(db, tournamentId) {
+  const rows = await dbAll(
+    db,
+    `
+      SELECT stage_key
+      FROM tournament_stages
+      WHERE upper(trim(tournament_id)) = upper(trim(?))
+        AND status <> 'structure'
+    `,
+    [tournamentId]
+  );
+  return new Set(rows.map((row) => text(row.stage_key)));
+}
+
 // Once a path is drawn its field is fixed: player, stage and Elo changes that would reset its pots
 // are refused until the draw is reset.
 async function assertPhasesNotDrawn(db, tournamentId, phases) {
@@ -411,9 +426,12 @@ export function registerCclRoutes(app, {
       ));
     if (!actor.isAdmin && !visibleSlots.length) throw requestError(403, "Forbidden");
 
+    const drawnStages = await loadDrawnStages(db, tournament.id);
     const phases = Object.fromEntries(Object.keys(CCL_PHASES).map((phase) => {
       const status = getCclPhaseStatus({ slots: state.slots, entries: state.entries, phase });
       if (!actor.isAdmin) delete status.pots_blockers;
+      // A drawn phase is fixed: its Elo and pots cannot change until the draw is reset.
+      status.drawn = CCL_PHASES[phase].some((stage) => drawnStages.has(stage));
       return [phase, status];
     }));
     return res.json({
@@ -870,9 +888,9 @@ export function registerCclRoutes(app, {
       action: "update",
       record_id: `${tournament.id}|${phase}`,
       changes: Object.fromEntries(result.seeds.map((row) => [`${row.slot_id}|${row.stage}`, { new: row.seed }])),
-      metadata: { tournament_id: tournament.id, phase },
+      metadata: { tournament_id: tournament.id, phase, pending: result.pending.length, open_slots: result.open_slots },
     });
-    return res.json({ ok: true, phase, seeds: result.seeds });
+    return res.json({ ok: true, phase, seeds: result.seeds, pending: result.pending, open_slots: result.open_slots });
   }));
 
   app.get("/public/ccl/:tournamentId/players", handle("Failed to load CCL players", async (req, res) => {
