@@ -4,6 +4,7 @@ import sqlite3 from "sqlite3";
 
 import { registerCclMatchRoutes } from "./ccl-match-routes.js";
 import { ensureCclSchema } from "./ccl-schema.js";
+import { ensureTournamentStructureSchema } from "./tournament-structure-schema.js";
 
 function exec(db, sql) {
   return new Promise((resolve, reject) => {
@@ -230,10 +231,30 @@ test("players see only their own matches; admins see all with eligible players",
   assert.equal(olena.body.matches[0].my_side, 1);
   assert.deepEqual(olena.body.players, []);
 
+  assert.deepEqual(olena.body.my_registration, { stage: "Q1", start_date: null });
+
   const juan = await listMatches(api, USERS.juan);
   assert.equal(juan.status, 200);
   assert.equal(juan.body.matches.length, 0);
+  assert.deepEqual(juan.body.my_registration, { stage: "Main", start_date: null });
+  assert.equal(admin.body.my_registration, null);
   assert.equal((await listMatches(api, USERS.stranger)).status, 403);
+});
+
+test("a player without matches gets the stage they are registered for and its start date", async (t) => {
+  const db = await createDatabase(t);
+  await ensureTournamentStructureSchema(db);
+  await exec(db, `
+    INSERT INTO tournament_stages (id, tournament_id, stage_key, name, format, start_date) VALUES
+      ('CCL-2027-Q1', 'CCL-2027', 'Q1', 'Q1', 'double_elimination', '2026-12-07'),
+      ('CCL-2027-league', 'CCL-2027', 'league', 'League Stage', 'league', '2027-02-01');
+    UPDATE tournament_players SET league_status = 'qualified' WHERE id = 's3';
+  `);
+  const api = createApi(db);
+
+  assert.deepEqual((await listMatches(api, USERS.olena)).body.my_registration, { stage: "Q1", start_date: "2026-12-07" });
+  assert.deepEqual((await listMatches(api, USERS.taras)).body.my_registration, { stage: "Main", start_date: "2027-02-01" });
+  assert.deepEqual((await listMatches(api, USERS.juan)).body.my_registration, { stage: "Main", start_date: "2027-02-01" });
 });
 
 test("players agree on a time; the match gets it on acceptance", async (t) => {

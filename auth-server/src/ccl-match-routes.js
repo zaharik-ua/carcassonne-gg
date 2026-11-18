@@ -137,6 +137,23 @@ async function resolveActor(db, user, tournament, slots) {
   return { isAdmin, isParticipant, playerId: playerId || null };
 }
 
+// The stage a player waits for and its start date: League Stage once qualified, else the entry stage.
+async function loadMyRegistration(db, tournamentId, slots, playerId) {
+  const slot = playerId ? slots.find((entry) => text(entry.player_id) === playerId) : null;
+  if (!slot) return null;
+  const entryStage = text(slot.entry_stage);
+  const stage = entryStage === "Main" || text(slot.league_status) === "qualified" ? "Main" : entryStage;
+  const stageKey = stage === "Main" ? "league" : stage;
+  const row = await dbGet(
+    db,
+    `SELECT start_date FROM tournament_stages
+     WHERE upper(trim(tournament_id)) = upper(trim(?)) AND upper(trim(stage_key)) = upper(trim(?))
+     LIMIT 1`,
+    [tournamentId, stageKey]
+  ).catch(() => null);
+  return { stage, start_date: row?.start_date || null };
+}
+
 async function loadMatchContext(db, user, duelId) {
   const match = await loadMatch(db, duelId);
   if (!match) throw requestError(404, "Match not found");
@@ -313,6 +330,7 @@ export function registerCclMatchRoutes(app, {
       tournament: { id: tournament.id, name: tournament.name, short_title: tournament.short_title || null },
       can_manage: actor.isAdmin,
       my_player_id: actor.playerId,
+      my_registration: await loadMyRegistration(db, tournament.id, slots, actor.playerId),
       stages: CCL_MATCH_STAGES,
       duel_formats: formats,
       players: actor.isAdmin

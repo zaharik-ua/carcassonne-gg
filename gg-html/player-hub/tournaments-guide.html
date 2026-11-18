@@ -1,0 +1,329 @@
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+<style>
+  .guide {
+    --text: #2f3947;
+    --heading: #223040;
+    --muted: #667286;
+    --border: #d6dbe3;
+    --soft: #f3f8fd;
+    --soft-border: #c9dced;
+    --primary: #1a73b7;
+    padding: 10px 12px 12px;
+    color: var(--text);
+    font-family: "Montserrat", sans-serif;
+    font-size: 13px;
+    line-height: 1.45;
+  }
+
+  .guide * { box-sizing: border-box; }
+
+  .guide-title {
+    margin: 0 0 6px;
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--heading);
+  }
+
+  .guide-lead {
+    margin: 0 0 8px;
+    font-weight: 600;
+    color: var(--heading);
+  }
+
+  .guide-who {
+    margin: 0 0 10px;
+    font-size: 12px;
+    color: var(--muted);
+  }
+
+
+  .guide-steps {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    counter-reset: step;
+    display: grid;
+    gap: 8px;
+  }
+
+  .guide-steps li {
+    position: relative;
+    padding-left: 26px;
+    counter-increment: step;
+  }
+
+  .guide-steps li::before {
+    content: counter(step);
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: #eef2f6;
+    color: var(--heading);
+    font-size: 11px;
+    font-weight: 700;
+    line-height: 18px;
+    text-align: center;
+  }
+
+  .guide b { font-weight: 500; color: var(--heading); }
+  .guide .guide-step-title { font-weight: 600; color: var(--heading); }
+
+  .guide-btn {
+    display: inline-block;
+    padding: 0 5px;
+    border: 1px solid #c8ced8;
+    border-radius: 4px;
+    background: #fff;
+    font-size: 11px;
+    font-weight: 600;
+    line-height: 16px;
+    white-space: nowrap;
+  }
+
+
+
+
+  .guide-note {
+    margin-top: 10px;
+    padding: 8px 10px;
+    border: 1px solid var(--soft-border);
+    border-radius: 6px;
+    background: var(--soft);
+    font-size: 12px;
+  }
+
+  .guide-note + .guide-note { margin-top: 6px; }
+
+  .guide-cards {
+    display: grid;
+    gap: 8px;
+    margin-top: 10px;
+  }
+
+  .guide-card {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    padding: 10px 12px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+  }
+
+  .guide-card-icon {
+    flex: 0 0 32px;
+    width: 32px;
+    height: 32px;
+    border-radius: 8px;
+    background: var(--soft);
+    color: var(--primary);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+  }
+
+  .guide-card-title {
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--heading);
+  }
+
+  .guide-card-text {
+    margin-top: 2px;
+    font-size: 12px;
+    color: var(--muted);
+  }
+
+  .guide-hint {
+    margin-top: 10px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    color: var(--muted);
+  }
+
+  .guide-hint i { color: var(--primary); }
+
+  .guide-footer {
+    margin-top: 12px;
+    font-size: 11px;
+    color: var(--muted);
+  }
+
+  .guide-footer a { color: var(--primary); }
+</style>
+
+<div class="guide">
+  <div class="guide-body"></div>
+  <div class="guide-footer">
+    Questions? Write to <a href="mailto:carcassonne.gg@gmail.com">carcassonne.gg@gmail.com</a>.
+  </div>
+</div>
+
+<script>
+(function () {
+  // `b(text)` renders a button name the way it looks on the page.
+  const b = (text) => `<span class="guide-btn">${text}</span>`;
+  const steps = (items) => `<ol class="guide-steps">${items.map((item) => `<li>${item}</li>`).join("")}</ol>`;
+  const notes = (items) => items.map((item) => `<div class="guide-note">${item}</div>`).join("");
+
+  // Shown on the tournaments list (no tournament id) and for types without their own guide.
+  const GENERAL_GUIDE = `
+    <h2 class="guide-title">Manage your tournament matches</h2>
+    <p class="guide-who">Here you can schedule matches, submit lineups and check results of your tournaments.</p>
+    <div class="guide-cards">
+      <div class="guide-card">
+        <span class="guide-card-icon"><i class="fa-solid fa-user"></i></span>
+        <div>
+          <div class="guide-card-title">Individual tournaments</div>
+          <div class="guide-card-text">Tournaments you play in: agree on match times with your opponents and check your results.</div>
+        </div>
+      </div>
+      <div class="guide-card">
+        <span class="guide-card-icon"><i class="fa-solid fa-users"></i></span>
+        <div>
+          <div class="guide-card-title">National team tournaments</div>
+          <div class="guide-card-text">Available if you are the captain of your team: manage the roster, schedule matches and submit lineups.</div>
+        </div>
+      </div>
+    </div>
+    <div class="guide-hint"><i class="fa-solid fa-circle-info"></i><span>Open a tournament to see how it works.</span></div>`;
+
+  // To add a new tournament type: add a guide here and a rule in detectGuideKey().
+  const GUIDES = {
+    friendly: `
+      <h2 class="guide-title">Friendly Matches</h2>
+      <p class="guide-lead">Register friendly matches you have agreed on with another team's captain.</p>
+      ${steps([
+        `Agree with the opponent captain on the date and the lineup type.`,
+        `Click ${b("Create")}, choose the opponent team, the match time (UTC) and the <b>Lineup Type</b>: Open or Blind.`,
+        `<span class="guide-step-title">Open lineups.</span> The captains agree on the pairings together. One of them opens the match with ${b("Edit")}, clicks ${b("Create Lineups")} and picks the players for each duel. If an opponent player is missing from the list, their association captain must create them.`,
+        `<span class="guide-step-title">Blind lineups.</span> Each captain submits their players in duel order without seeing the opponent's lineup. Set the <b>Lineup Deadline</b> (6–48 hours before the match); both lineups are revealed after it.`,
+        `Results are loaded from BGA automatically. If a duel shows <b>Error</b>, open the match with ${b("View")} → ${b("Edit Results")} and fix it: no show, replace a player, or add games by BGA Table ID.`,
+      ])}`,
+
+    official: `
+      <h2 class="guide-title">National team tournaments</h2>
+      <p class="guide-lead">Official national team tournaments: WTCOC, ETCOC, Asian Cup, Copa America.</p>
+      ${steps([
+        `<span class="guide-step-title">Roster.</span> Under <b>Players: your team</b> click ${b("Manage team")} and select your players for the tournament. Until the playoffs you can add players to free slots. After registration ends, players can be replaced only by the tournament admins.`,
+        `<span class="guide-step-title">Match time.</span> Click ${b("Propose time")} and choose a time in UTC.`,
+        `The opponent captain clicks ${b("Review proposal")} and accepts the time or proposes another one. The time is set once it is accepted.`,
+        `<span class="guide-step-title">Lineup.</span> Click ${b("Submit lineup")} and choose 5 players in duel order before the lineup deadline. You can change it with ${b("Edit lineup")} until the deadline. Both lineups are revealed after the deadline.`,
+        `<span class="guide-step-title">Results</span> are loaded from BGA automatically. Within 24 hours of the match start you can correct them: ${b("View")} → ${b("Edit Results")}. Later, contact the tournament admins.`,
+      ])}
+      ${notes([
+        "Changing the time of a match that already has lineups deletes them: both teams will have to submit lineups again.",
+      ])}`,
+
+    ccl: `
+      <h2 class="guide-title">Carcassonne Champions League</h2>
+      <p class="guide-lead">Your CCL matches.</p>
+      ${steps([
+        `Click ${b("Propose time")} and choose a time in UTC. Each match must be played before the deadline shown next to it.`,
+        `Your opponent clicks ${b("Review time")} and accepts the time or sends another one. To move an agreed match, use ${b("Change time")}: the opponent has to accept again.`,
+        `Play the match on BGA at the agreed time. The result is recorded from BGA automatically.`,
+        `If the result is missing or wrong, within 24 hours of the match start click ${b("Edit results")} and add the games by BGA Table ID, or mark a No show.`,
+      ])}`,
+  };
+
+  const AUTH_BASE = window.AUTH_BASE_URL || "https://api.carcassonne.gg";
+  const TOURNAMENTS_URL = `${AUTH_BASE}/tournaments`;
+  const OFFICIAL_CATEGORIES = ["wtcoc", "etcoc", "asian cup", "copa america"];
+  const bodyEl = document.querySelector(".guide-body");
+
+  function show(key) {
+    bodyEl.innerHTML = GUIDES[key] || GENERAL_GUIDE;
+    reportHeight();
+  }
+
+  // Same classification as player-hub/tournaments.html, reduced to the guide keys.
+  function detectGuideKey(tournament) {
+    if (!tournament) return "";
+    const rawType = String(tournament.type || tournament.tournament_type || "Teams").trim().toLowerCase();
+    const isIndividuals = ["individual", "individuals", "national", "nationals"].includes(rawType);
+    const category = String(tournament.category || "").trim().toLowerCase();
+    if (isIndividuals) return category === "ccl" ? "ccl" : "";
+    if (OFFICIAL_CATEGORIES.includes(category)) return "official";
+    const legacyMode = String(tournament.subtype || tournament.access_type || "").trim().toLowerCase();
+    if (!category && ["official", "closed", "2"].includes(legacyMode)) return "official";
+    if (category === "friendly" || !category) return "friendly";
+    return "";
+  }
+
+  let tournamentsPromise = null;
+  function loadTournaments() {
+    if (!tournamentsPromise) {
+      tournamentsPromise = fetch(TOURNAMENTS_URL, { method: "GET", credentials: "include" })
+        .then((response) => (response.ok ? response.json() : {}))
+        .then((data) => (Array.isArray(data?.tournaments) ? data.tournaments : []))
+        .catch(() => []);
+    }
+    return tournamentsPromise;
+  }
+
+  // Tournament id from the page URL; inside an iframe, from the parent page (same origin only).
+  function readTournamentId() {
+    const read = (search) => {
+      const params = new URLSearchParams(search);
+      return String(params.get("id") || params.get("tournament") || "").trim();
+    };
+    const own = read(window.location.search);
+    if (own || window.parent === window) return own;
+    try {
+      return read(window.parent.location.search);
+    } catch (_error) {
+      return "";
+    }
+  }
+
+  let lastTournamentId = null;
+  async function showForTournament(tournamentId) {
+    const id = String(tournamentId || "").trim();
+    if (id === lastTournamentId) return;
+    lastTournamentId = id;
+    if (!id) {
+      show("");
+      return;
+    }
+    bodyEl.innerHTML = "";
+    const tournaments = await loadTournaments();
+    if (id !== lastTournamentId) return;
+    show(detectGuideKey(tournaments.find((tournament) => String(tournament?.id || "").trim() === id)));
+  }
+
+  // Inside an iframe the guide sends its height so the parent can fit the frame to the content.
+  function reportHeight() {
+    if (window.parent === window) return;
+    const height = Math.ceil(document.documentElement.scrollHeight);
+    window.parent.postMessage({ type: "gg-tournaments-guide-height", height }, "*");
+  }
+  window.addEventListener("load", reportHeight);
+  if (window.ResizeObserver) new ResizeObserver(reportHeight).observe(document.body);
+
+  // A cross-origin parent can pass the tournament with
+  // postMessage({ type: "gg-tournaments-guide", tournamentId: "..." }).
+  window.addEventListener("message", (event) => {
+    const data = event.data;
+    if (data?.type === "gg-tournaments-guide") showForTournament(data.tournamentId);
+  });
+
+  showForTournament(readTournamentId());
+
+  // Follow navigation between the tournaments list and a tournament.
+  const onNavigate = () => showForTournament(readTournamentId());
+  [window, window.parent].forEach((target) => {
+    try {
+      target.addEventListener("captain-url-change", onNavigate);
+      target.addEventListener("popstate", onNavigate);
+    } catch (_error) {
+      // Cross-origin parent: use postMessage instead.
+    }
+  });
+})();
+</script>

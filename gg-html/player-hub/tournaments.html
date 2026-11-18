@@ -1971,10 +1971,6 @@
     object-fit: contain;
   }
 
-  .cp-ccl-me {
-    font-weight: 700;
-  }
-
   .cp-ccl-score {
     margin-left: auto;
     padding-left: 8px;
@@ -2053,10 +2049,6 @@
 
   .cp-ccl-filter {
     max-width: 220px;
-    height: 30px;
-    border: 1px solid #c8ced8;
-    border-radius: 4px;
-    font-size: 14px;
   }
 
   @media (max-width: 520px) {
@@ -9543,7 +9535,7 @@
     });
   }
 
-  function createCclPlayerLine(player, score, isMe) {
+  function createCclPlayerLine(player, score) {
     const line = document.createElement("div");
     line.className = "cp-team-row";
     if (player?.association_flag) {
@@ -9555,7 +9547,6 @@
     }
     const name = document.createElement("span");
     name.textContent = cclPlayerName(player);
-    if (isMe) name.classList.add("cp-ccl-me");
     line.appendChild(name);
     if (hasValue(score)) {
       const scoreEl = document.createElement("b");
@@ -9600,8 +9591,8 @@
     const players = document.createElement("div");
     players.className = "cp-teams";
     const isDone = String(match.status || "").toLowerCase() === "done";
-    players.appendChild(createCclPlayerLine(match.player_1, isDone ? match.dw1 : null, match.my_side === 1));
-    players.appendChild(createCclPlayerLine(match.player_2, isDone ? match.dw2 : null, match.my_side === 2));
+    players.appendChild(createCclPlayerLine(match.player_1, isDone ? match.dw1 : null));
+    players.appendChild(createCclPlayerLine(match.player_2, isDone ? match.dw2 : null));
     const meta = document.createElement("div");
     meta.className = "cp-ccl-meta";
     const isPlayed = isCclResultEditableStatus(match.status);
@@ -9668,13 +9659,84 @@
     const label = document.createElement("div");
     label.className = "captain-filter-label";
     label.textContent = "Stage";
-    const select = document.createElement("select");
-    select.className = "cp-ccl-filter";
-    select.add(new Option("All stages", ""));
-    stages.forEach((stage) => select.add(new Option(CCL_STAGE_LABELS[stage] || stage, stage)));
-    select.value = cclStageFilters.get(data.tournament.id) || "";
-    select.addEventListener("change", () => onChange(select.value));
-    filtersEl.append(label, select);
+
+    // Same custom dropdown as the admin association filter (cp-dd).
+    const options = [{ value: "", label: "All stages" }]
+      .concat(stages.map((stage) => ({ value: stage, label: CCL_STAGE_LABELS[stage] || stage })));
+    let value = cclStageFilters.get(data.tournament.id) || "";
+    const root = document.createElement("div");
+    root.className = "cp-dd cp-ccl-filter";
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "cp-dd-btn";
+    const buttonText = document.createElement("span");
+    buttonText.className = "cp-dd-btn-content";
+    const chevron = document.createElement("span");
+    chevron.className = "cp-dd-chevron";
+    chevron.textContent = "▾";
+    button.append(buttonText, chevron);
+    const menu = document.createElement("div");
+    menu.className = "cp-dd-menu";
+    const close = () => {
+      menu.classList.remove("open");
+      menu.style.maxHeight = "0px";
+      button.classList.remove("open");
+    };
+    const render = () => {
+      buttonText.textContent = (options.find((option) => option.value === value) || options[0]).label;
+      menu.innerHTML = "";
+      options.forEach((option) => {
+        const item = document.createElement("button");
+        item.type = "button";
+        item.className = "cp-dd-option";
+        item.classList.toggle("active", option.value === value);
+        item.textContent = option.label;
+        item.addEventListener("click", (event) => {
+          event.stopPropagation();
+          close();
+          if (option.value === value) return;
+          value = option.value;
+          render();
+          onChange(value);
+        });
+        menu.appendChild(item);
+      });
+    };
+    button.addEventListener("click", (event) => {
+      event.stopPropagation();
+      if (menu.classList.contains("open")) {
+        close();
+        return;
+      }
+      menu.classList.add("open");
+      menu.style.maxHeight = `${menu.scrollHeight}px`;
+      button.classList.add("open");
+    });
+    document.addEventListener("click", (event) => {
+      if (!root.contains(event.target)) close();
+    });
+    render();
+    root.append(button, menu);
+    filtersEl.append(label, root);
+  }
+
+  const CCL_REGISTRATION_STAGE_LABELS = { Q1: "Qualifiers 1", Q2: "Qualifiers 2", Q3: "Qualifiers 3", Main: "League Stage" };
+
+  // Shown to a registered player who has no matches yet: their stage, its start date, the draw.
+  function cclRegistrationMessage(registration) {
+    const stageLabel = CCL_REGISTRATION_STAGE_LABELS[registration?.stage];
+    if (!stageLabel) return "";
+    const parts = [`You are registered for the ${stageLabel} of this tournament.`];
+    const match = String(registration.start_date || "").match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (match) {
+      const startTs = Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
+      const startText = new Intl.DateTimeFormat("en-GB", {
+        timeZone: "UTC", weekday: "long", day: "numeric", month: "long", year: "numeric",
+      }).format(new Date(startTs));
+      parts.push(startTs > Date.now() ? `The stage starts on ${startText}.` : `The stage started on ${startText}.`);
+    }
+    parts.push("Your matches will appear here after the draw.");
+    return parts.join(" ");
   }
 
   // Groups matches under "Stage · Round · Group" headings, in the server order.
@@ -9685,7 +9747,7 @@
       contentEl.className = "captain-alert";
       contentEl.textContent = options.manage
         ? "No matches yet. Use Create to add the first one."
-        : "You have no matches in this tournament yet.";
+        : cclRegistrationMessage(data.my_registration) || "You have no matches in this tournament yet.";
       return;
     }
     let currentHeading = null;
