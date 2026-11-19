@@ -72,6 +72,12 @@ export function buildPublicGroupRows({ tournamentId, stageKey, groupKey, setting
     // An empty side of a match settled by a Bye is the Bye itself, and so is the "loser" of such a match.
     const parsed = parseSlotSource(source);
     if (isByeMatch(match) || (parsed?.kind === "loser" && isByeMatch(byNo.get(parsed.ref)))) return { name: "Bye", id: "" };
+    // "Winner of N" is shown only when the player crosses from the lower bracket to the upper one:
+    // inside one side the connector line already shows where the winner goes.
+    if (parsed?.kind === "winner") {
+      const from = byNo.get(parsed.ref);
+      if (!from || from.bracket_side !== "lower" || match.bracket_side === "lower") return { name: "", id: "" };
+    }
     return { name: describeSlotSource(source), id: "" };
   };
 

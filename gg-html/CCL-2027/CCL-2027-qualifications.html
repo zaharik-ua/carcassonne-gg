@@ -495,15 +495,21 @@
     border-radius: 2px;
   }
   
-  .match-box a {
+  .match-box .player-name {
     color: #333333;
-    text-decoration: none;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
   }
-  .match-box a:hover {
-    color: #0277BD;
+  .match-box.is-clickable {
+    cursor: pointer;
+    transition: border-color 0.18s ease, box-shadow 0.18s ease;
+  }
+  .match-box.is-clickable:hover,
+  .match-box.is-clickable:focus-visible {
+    border-color: #7a8ea3;
+    box-shadow: 0 2px 6px rgba(15, 28, 48, 0.16);
+    outline: none;
   }
 
   .match-row-winner {
@@ -522,6 +528,511 @@
   }
   .highlight-text {
     font-weight: 600;
+  }
+
+
+  /* Match details popup (same as in matches.html) */
+  .challenge-match-modal-overlay {
+    position: fixed;
+    inset: 44px 0 0;
+    z-index: 10002; /* above the fullscreen bracket overlay */
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 16px;
+    background: rgba(24, 31, 41, 0.42);
+    box-sizing: border-box;
+  }
+
+  .challenge-match-modal {
+    position: relative;
+    width: min(100%, 760px);
+    max-height: min(620px, calc(100vh - 44px - 32px));
+    overflow: auto;
+    border: 1px solid #d8dee8;
+    border-radius: 8px;
+    background: #fff;
+    box-shadow: 0 16px 36px rgba(15, 28, 48, 0.22);
+    padding: 22px 24px;
+    box-sizing: border-box;
+  }
+
+  /* BGA profile link under the player's country, as on player-card.html */
+  .challenge-match-player__bga-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    margin-top: 4px;
+    font-size: 12px;
+    color: #1a73b7;
+    text-decoration: none;
+    line-height: 1.2;
+  }
+  .challenge-match-player__bga-link:hover {
+    color: #165e93;
+    text-decoration: underline;
+  }
+  .challenge-match-player__bga-link img {
+    width: 14px;
+    height: 14px;
+    object-fit: contain;
+  }
+
+  .challenge-match-modal__close {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    width: 32px;
+    height: 32px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: 0;
+    border-radius: 4px;
+    background: transparent;
+    color: #667080;
+    font-size: 22px;
+    line-height: 1;
+    cursor: pointer;
+  }
+
+  .challenge-match-modal__close:hover,
+  .challenge-match-modal__close:focus-visible {
+    background: #f1f3f6;
+    color: #172232;
+    outline: none;
+  }
+
+  .challenge-match-card {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+    align-items: center;
+    gap: 24px;
+    padding: 22px 6px 0px;
+  }
+
+  .challenge-match-player {
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .challenge-match-player--right {
+    align-items: flex-end;
+    text-align: right;
+  }
+
+  .challenge-match-player__rating {
+    width: 100%;
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 12px;
+    color: #172232;
+    font-size: 14px;
+    font-weight: 400;
+  }
+
+  .challenge-match-player__rank,
+  .challenge-match-player__rating-value {
+    font-weight: 700;
+  }
+
+  .challenge-match-player__ratings {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 2px;
+  }
+
+  .challenge-match-player__rating-line {
+    display: inline-flex;
+    gap: 4px;
+  }
+
+  .challenge-match-player__profile {
+    width: 100%;
+    max-width: 100%;
+    box-sizing: border-box;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .challenge-match-player--right .challenge-match-player__profile {
+    flex-direction: row-reverse;
+  }
+
+  .challenge-match-player__info {
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    color: #333;
+    font-size: 14px;
+    line-height: 1.25;
+  }
+
+  .challenge-match-player--right .challenge-match-player__info {
+    align-items: flex-end;
+  }
+
+  .challenge-match-player__avatar {
+    width: 48px;
+    height: 48px;
+    flex: 0 0 48px;
+    border-radius: 6px;
+    background: #f2f2f2;
+    object-fit: cover;
+  }
+
+  .challenge-match-player__avatar-fallback {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: #718096;
+    font-size: 18px;
+    font-weight: 700;
+  }
+
+  .challenge-match-player__nickname {
+    min-width: 0;
+    overflow: hidden;
+    color: #172232;
+    font-size: 18px;
+    font-weight: 700;
+    text-decoration: none;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .challenge-match-player__nickname:hover,
+  .challenge-match-player__nickname:focus-visible {
+    color: #0277BD;
+    outline: none;
+  }
+
+  .challenge-match-player__flag {
+    width: 18px;
+    height: 18px;
+    flex: 0 0 auto;
+    object-fit: contain;
+  }
+
+  .challenge-match-player__country-row {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    margin-top: 2px;
+    font-size: 13px;
+  }
+
+  .challenge-match-player__name,
+  .challenge-match-player__country {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .challenge-match-result {
+    grid-column: 1 / -1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    margin-top: 8px;
+    padding: 14px 12px 4px;
+    border-top: 1px solid #d8dee8;
+  }
+
+  .challenge-match-result__status {
+    padding: 3px 8px;
+    border-radius: 3px;
+    background: #d7eaff;
+    color: #073654;
+    font-size: 11px;
+    line-height: 1.2;
+    font-weight: 700;
+  }
+
+  .challenge-match-result__status--completed {
+    background: #d5ead5;
+    color: #2b6f2b;
+  }
+
+  .challenge-match-result__score {
+    color: #172232;
+    font-size: 24px;
+    line-height: 1;
+    font-weight: 700;
+  }
+
+  .challenge-match-result__games {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+  }
+
+  .challenge-match-result__games-row {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+  }
+
+  .challenge-match-result__games-source-icon {
+    width: 16px;
+    height: 16px;
+    flex: 0 0 16px;
+    border-radius: 2px;
+    object-fit: contain;
+  }
+
+  .challenge-match-result__games-links {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+
+  .challenge-match-result__game {
+    display: inline-flex;
+    padding: 3px 7px;
+    border-radius: 3px;
+    background: #e7e7e7;
+    color: #333;
+    font-size: 12px;
+    line-height: 1.2;
+    font-weight: 600;
+    text-decoration: none;
+    transition: background-color 0.18s ease, color 0.18s ease;
+  }
+
+  .challenge-match-result__game--player-1 {
+    background: #f6dada;
+    color: #7a2525;
+  }
+
+  .challenge-match-result__game--player-2 {
+    background: #d7eaff;
+    color: #073654;
+  }
+
+  .challenge-match-result__game--clock {
+    align-items: center;
+    gap: 3px;
+    background: #f3e4c4;
+    color: #8c6418;
+  }
+
+  .challenge-match-result__game-clock {
+    font-size: 10px;
+    line-height: 1;
+  }
+
+  a.challenge-match-result__game:hover,
+  a.challenge-match-result__game:focus-visible {
+    background: #d7eaff;
+    color: #073654;
+    outline: none;
+  }
+
+  a.challenge-match-result__game--player-1:hover,
+  a.challenge-match-result__game--player-1:focus-visible {
+    background: #efc7c7;
+    color: #681b1b;
+  }
+
+  a.challenge-match-result__game--player-2:hover,
+  a.challenge-match-result__game--player-2:focus-visible {
+    background: #c5def8;
+    color: #052c45;
+  }
+
+  a.challenge-match-result__game--clock:hover,
+  a.challenge-match-result__game--clock:focus-visible {
+    background: #ead5b2;
+    color: #795412;
+  }
+
+  .challenge-match-card__vs {
+    display: grid;
+    grid-template-rows: auto minmax(12px, 1fr) auto minmax(12px, 1fr);
+    justify-items: center;
+    align-self: stretch;
+    color: #8b1e2d;
+    font-size: 18px;
+    font-weight: 700;
+  }
+
+  .challenge-match-card__vs-content {
+    grid-row: 3;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+
+  .challenge-match-card__format {
+    grid-row: 1;
+  }
+
+  .challenge-match-format-badge {
+    display: inline-flex;
+    padding: 3px 7px;
+    border-radius: 3px;
+    font-size: 12px;
+    line-height: 1.2;
+    font-weight: 600;
+  }
+
+  .challenge-match-format-badge.bo1 {
+    background-color: #eee;
+    color: #333;
+  }
+
+  .challenge-match-format-badge.bo3 {
+    background-color: #d7eaff;
+    color: #073654;
+  }
+
+  .challenge-match-format-badge.bo5 {
+    background-color: #fce0e0;
+    color: #590f0f;
+  }
+
+  .challenge-match-card__vs::before,
+  .challenge-match-card__vs::after {
+    content: "";
+    width: 1px;
+    height: auto;
+    align-self: stretch;
+    margin: 6px 0;
+    background: #d8dee8;
+  }
+
+  .challenge-match-card__vs::before { grid-row: 2; }
+  .challenge-match-card__vs::after { grid-row: 4; }
+
+  @media (max-width: 600px) {
+    .challenge-match-modal {
+      max-height: calc(100vh - 44px - 24px);
+      padding: 18px 16px;
+    }
+
+    .challenge-match-card {
+      grid-template-columns: 1fr;
+      gap: 14px;
+      padding: 24px 2px 4px;
+    }
+
+    .challenge-match-player--right {
+      align-items: flex-start;
+      text-align: left;
+    }
+
+    .challenge-match-player--right .challenge-match-player__profile {
+      flex-direction: row;
+    }
+
+    .challenge-match-player--right .challenge-match-player__info {
+      align-items: flex-start;
+    }
+
+    .challenge-match-card__vs {
+      width: 100%;
+      align-self: auto;
+      grid-template-columns: 1fr auto 1fr;
+      grid-template-rows: auto auto;
+      column-gap: 12px;
+      row-gap: 6px;
+    }
+
+    .challenge-match-card__format {
+      grid-column: 2;
+      grid-row: 1;
+    }
+
+    .challenge-match-card__vs-content {
+      grid-column: 2;
+      grid-row: 2;
+    }
+
+    .challenge-match-card__vs::before,
+    .challenge-match-card__vs::after {
+      width: auto;
+      height: 1px;
+      align-self: center;
+      margin: 0;
+    }
+
+    .challenge-match-card__vs::before { grid-column: 1; grid-row: 2; }
+    .challenge-match-card__vs::after { grid-column: 3; grid-row: 2; }
+  }
+
+  /* Popup header: group, round and time of the duel */
+  .challenge-match-modal__meta {
+    padding: 0 36px;
+    color: #667080;
+    font-size: 13px;
+    line-height: 1.3;
+    font-weight: 500;
+    text-align: center;
+  }
+
+  /* Streams at the end of the popup, styled like the main event streams in matches.html */
+  .challenge-match-streams {
+    grid-column: 1 / -1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-wrap: wrap;
+    gap: 6px 12px;
+    padding: 12px 12px 2px;
+    border-top: 1px solid #d8dee8;
+  }
+
+  .challenge-match-stream {
+    min-width: 0;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    color: #263647;
+    font-size: 12px;
+    line-height: 1.2;
+    font-weight: 600;
+    text-decoration: none;
+  }
+
+  a.challenge-match-stream:hover,
+  a.challenge-match-stream:focus-visible {
+    color: #0277BD;
+    outline: none;
+  }
+
+  a.challenge-match-stream:hover .stream-icon,
+  a.challenge-match-stream:focus-visible .stream-icon {
+    opacity: 1;
+  }
+
+  .challenge-match-stream__name {
+    max-width: 120px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .stream-icon {
+    width: 22px;
+    border-radius: 3px;
+    border: 0.5px solid #444;
+    height: auto;
+    opacity: 0.7;
+    transition: opacity 0.3s ease;
   }
 
   </style>
@@ -560,6 +1071,8 @@
   let tournamentPlayers = [];
   const playerCountryInfoById = new Map();
   const playerCountryInfoByName = new Map();
+  // Bracket duels by duel_id, for the match details popup.
+  const bracketDuelsById = new Map();
 
   // === GLOBAL CONFIG FOR PLAYOFF BRACKET ===
   const BRACKET_MARGIN = 15;
@@ -702,6 +1215,8 @@
         rebuildDuelPlayersSearchIndex();
         rebuildPlayerCountryIndex();
         initAndRenderTournamentContent(currentTournament);
+        // Prefetch games, streams and ratings for the popup without delaying the bracket.
+        loadDuelDetails();
       })
       .catch(err => {
         console.error("❌ Failed to load tournament data", err);
@@ -1723,11 +2238,9 @@
               player1Logo.title = m.player1;
             }
           }
-          const player1Link = document.createElement(player1HasId ? "a" : "span");
-          if (player1HasId) {
-            player1Link.href = `https://boardgamearena.com/player?id=${player1IdStr}`;
-            player1Link.target = "_blank";
-          } else if (player1HasName) {
+          const player1Link = document.createElement("span");
+          player1Link.className = "player-name";
+          if (!player1HasId && player1HasName) {
             player1Link.classList.add("player-no-id");
           }
           player1Link.textContent = m.player1;
@@ -1772,11 +2285,9 @@
               player2Logo.title = m.player2;
             }
           }
-          const player2Link = document.createElement(player2HasId ? "a" : "span");
-          if (player2HasId) {
-            player2Link.href = `https://boardgamearena.com/player?id=${player2IdStr}`;
-            player2Link.target = "_blank";
-          } else if (player2HasName) {
+          const player2Link = document.createElement("span");
+          player2Link.className = "player-name";
+          if (!player2HasId && player2HasName) {
             player2Link.classList.add("player-no-id");
           }
           player2Link.textContent = m.player2;
@@ -1796,6 +2307,18 @@
           opponent2Div.setAttribute("data-opponent-name", m.player2);  
           if (player2HasId) {
             opponent2Div.setAttribute("data-player-id", player2IdStr);
+          }
+
+          // A duel with both players known opens the match details popup on click.
+          const duelId = m.duel_id !== undefined && m.duel_id !== null ? String(m.duel_id).trim() : "";
+          if (duelId && player1HasId && player2HasId) {
+            bracketDuelsById.set(duelId, m);
+            matchBox.classList.add("is-clickable");
+            matchBox.dataset.duelId = duelId;
+            matchBox.tabIndex = 0;
+            matchBox.setAttribute("role", "button");
+            matchBox.setAttribute("aria-haspopup", "dialog");
+            matchBox.setAttribute("aria-label", `Show match details: ${m.player1} versus ${m.player2}`);
           }
         }
 
@@ -2046,6 +2569,619 @@
       }
     });
   }
+
+  // === MATCH DETAILS POPUP (same as the duel popup in matches.html) ===
+  const BGA_ICON_URL = "https://carcassonne.gg/gallery/bga-logo.png";
+  const CARCASSONNE_LAB_ICON_URL = "https://carcassonne.gg/gallery/carcassonne-lab-icon.png";
+  let duelDetailsPromise = null;
+
+  // Games, streams and player data of the tournament's duels (the endpoint matches.html uses),
+  // plus GG profiles for ratings. Failures leave the popup with the bracket data only.
+  function loadDuelDetails() {
+    if (duelDetailsPromise) return duelDetailsPromise;
+    const fetchOptionalJson = (url) => fetch(url, { cache: "no-store" })
+      .then(res => (res.ok ? res.json() : {}))
+      .catch(() => ({}));
+    duelDetailsPromise = Promise.all([
+      fetchOptionalJson(`${API_BASE}/public/main-page-matches?tournament_id=${encodeURIComponent(currentTournamentId)}`),
+      fetchOptionalJson(`${API_BASE}/profiles/public`),
+      fetchOptionalJson(`${API_BASE}/teams`),
+    ]).then(([matchesPayload, profilesPayload, teamsPayload]) => {
+      const cclDuelsById = new Map();
+      (Array.isArray(matchesPayload?.ccl_duels) ? matchesPayload.ccl_duels : []).forEach(duel => {
+        const id = String(duel?.id || "").trim();
+        if (id) cclDuelsById.set(id, duel);
+      });
+      return {
+        cclDuelsById,
+        playerDetailsById: buildChallengePlayerDetailsIndex(profilesPayload, teamsPayload),
+      };
+    });
+    return duelDetailsPromise;
+  }
+
+  function buildBgaAvatarUrl(playerId, avatarValue) {
+    const playerIdText = String(playerId || "").trim();
+    const avatarText = String(avatarValue || "").trim();
+    if (!avatarText) return "";
+    if (/^https?:\/\//i.test(avatarText)) {
+      // Repair saved BGA photo URLs that use the old 100-million folder boundary.
+      return avatarText.replace(
+        /^(https?:\/\/x\.boardgamearena\.net\/data\/avatar\/)\d+\/\d+\/\d+\/(\d+)(_\d+\.[a-z0-9]+)(?=[?#]|$)/i,
+        (_match, base, photoPlayerId, imageSuffix) => {
+          const id = Number(photoPlayerId);
+          return `${base}${Math.floor(id / 1000000000)}/${Math.floor(id / 1000000)}/${Math.floor(id / 1000)}/${photoPlayerId}${imageSuffix}`;
+        }
+      );
+    }
+    if (avatarText === "x00000") return "https://x.boardgamearena.net/data/avatar/default_184.jpg";
+
+    const defaultMatch = avatarText.match(/^_def_(\d+)$/);
+    if (defaultMatch) {
+      return `https://x.boardgamearena.net/data/avatar/defaults/default-${defaultMatch[1].padStart(4, "0")}.jpg`;
+    }
+
+    if (!/^\d+$/.test(playerIdText)) return "";
+    const playerIdNumber = Number(playerIdText);
+    if (!Number.isFinite(playerIdNumber)) return "";
+    const firstFolder = String(Math.floor(playerIdNumber / 1000000000));
+    const secondFolder = String(Math.floor(playerIdNumber / 1000000));
+    const thirdFolder = String(Math.floor(playerIdNumber / 1000));
+    return `https://x.boardgamearena.net/data/avatar/${firstFolder}/${secondFolder}/${thirdFolder}/${playerIdText}_184.jpg?h=${encodeURIComponent(avatarText)}`;
+  }
+
+  function buildChallengePlayerDetailsIndex(profilesPayload, teamsPayload) {
+    const profiles = Array.isArray(profilesPayload?.profiles) ? profilesPayload.profiles : [];
+    const teamList = Array.isArray(teamsPayload?.teams) ? teamsPayload.teams : [];
+    const teamsById = new Map(
+      teamList.map((team) => [String(team?.id || "").trim().toUpperCase(), team]).filter(([id]) => Boolean(id))
+    );
+    const profileId = (profile) => String(profile?.id ?? profile?.player_id ?? "").trim();
+    const ratingProfiles = profiles.filter((profile) => {
+      const rawElo = String(profile?.gg_elo ?? "").trim();
+      return profileId(profile) && rawElo !== "" && Number.isFinite(Number(rawElo)) && Number(rawElo) > 0;
+    });
+    const fallbackRankById = new Map(
+      ratingProfiles
+        .slice()
+        .sort((a, b) => Number(b.gg_elo) - Number(a.gg_elo))
+        .map((profile, index) => [profileId(profile), index + 1])
+    );
+    const ratingsById = new Map();
+    ratingProfiles.forEach((profile) => {
+      const id = profileId(profile);
+      const position = Number(profile?.gg_rating_position);
+      ratingsById.set(id, {
+        elo: Math.trunc(Number(profile.gg_elo)),
+        rank: Number.isFinite(position) && position > 0
+          ? Math.trunc(position)
+          : fallbackRankById.get(id),
+      });
+    });
+
+    return new Map(profiles.map((profile) => {
+      const id = profileId(profile);
+      const associationId = String(profile?.association || "").trim().toUpperCase();
+      const team = teamsById.get(associationId) || null;
+      const rating = ratingsById.get(id) || null;
+      return [id, {
+        id,
+        nickname: String(profile?.bga_nickname || profile?.nickname || id).trim(),
+        name: String(profile?.name || "").trim(),
+        avatar: buildBgaAvatarUrl(id, profile?.avatar),
+        flag: String(team?.flag || team?.logo || "").trim(),
+        country: String(team?.name || associationId).trim(),
+        elo: rating?.elo ?? null,
+        rank: rating?.rank ?? null,
+        bgaElo: Number.isFinite(Number(profile?.bga_elo)) && Number(profile.bga_elo) > 0
+          ? Math.trunc(Number(profile.bga_elo))
+          : null,
+      }];
+    }).filter(([id]) => Boolean(id)));
+  }
+
+  // Player of one side: GG profile first, then the duel row of main-page-matches, then the bracket.
+  // The flag and country are the ones the bracket shows (the association the player plays for).
+  function getBracketPlayerDetails(bracketDuel, cclDuel, side, playerDetailsById) {
+    const id = String(bracketDuel?.[`player${side}_id`] || "").trim();
+    const indexed = playerDetailsById.get(id) || null;
+    const ccl = cclDuel && String(cclDuel[`player_${side}_id`] || "").trim() === id ? cclDuel : null;
+    const bracketName = String(bracketDuel?.[`player${side}`] || "").trim();
+    const bracketAvatar = players.find(pl => String(pl.player_id || "").trim() === id)?.avatar;
+    const countryInfo = findPlayerCountryInfo(id, bracketName);
+    return {
+      id,
+      nickname: String(indexed?.nickname || ccl?.[`player_${side}_name`] || bracketName || id).trim(),
+      name: String(indexed?.name || ccl?.[`player_${side}_real_name`] || "").trim(),
+      avatar: String(
+        indexed?.avatar
+        || buildBgaAvatarUrl(id, ccl?.[`player_${side}_avatar`])
+        || buildBgaAvatarUrl(id, bracketAvatar)
+        || ""
+      ).trim(),
+      flag: String(countryInfo?.flag || ccl?.[`player_${side}_association_flag`] || indexed?.flag || "").trim(),
+      country: String(countryInfo?.country || ccl?.[`player_${side}_association_name`] || indexed?.country || "").trim(),
+      elo: indexed?.elo ?? ccl?.[`player_${side}_gg_elo`] ?? null,
+      rank: indexed?.rank ?? ccl?.[`player_${side}_gg_rank`] ?? null,
+      bgaElo: indexed?.bgaElo ?? ccl?.[`player_${side}_bga_elo`] ?? null,
+    };
+  }
+
+  // Popup model in the shape the matches.html popup uses.
+  function buildPopupMatch(bracketDuel, details) {
+    const cclDuel = details.cclDuelsById.get(String(bracketDuel.duel_id || "").trim()) || null;
+    const hasBracketScore = String(bracketDuel.score1 ?? "").trim() !== "" && String(bracketDuel.score2 ?? "").trim() !== "";
+    return {
+      team1: bracketDuel.player1,
+      team2: bracketDuel.player2,
+      format: String(cclDuel?.duel_format || bracketDuel.duel_format || "").trim(),
+      status: String(cclDuel?.status || bracketDuel.status || "").trim(),
+      gw1: cclDuel ? cclDuel.dw1 : (hasBracketScore ? bracketDuel.score1 : null),
+      gw2: cclDuel ? cclDuel.dw2 : (hasBracketScore ? bracketDuel.score2 : null),
+      games: Array.isArray(cclDuel?.games) ? cclDuel.games.filter(Boolean) : [],
+      ...normalizeStreamFields(cclDuel),
+      player1Details: getBracketPlayerDetails(bracketDuel, cclDuel, 1, details.playerDetailsById),
+      player2Details: getBracketPlayerDetails(bracketDuel, cclDuel, 2, details.playerDetailsById),
+    };
+  }
+
+  function getPlayerInitials(player) {
+    const source = String(player?.nickname || player?.name || "?").trim();
+    const parts = source.split(/\s+/).filter(Boolean);
+    return (parts.length > 1 ? `${parts[0][0]}${parts[1][0]}` : source.slice(0, 2)).toUpperCase();
+  }
+
+  function isTruthyOne(value) {
+    return value === 1 || value === true || String(value || "").trim() === "1";
+  }
+
+  function getCarcassonneLabUrl(value) {
+    const raw = String(value || "").trim();
+    if (!raw) return "";
+    try {
+      const url = new URL(raw);
+      if (url.protocol !== "https:" || url.hostname !== "www.carcassonnelab.com") return "";
+      if (!url.hash.startsWith("#/")) return "";
+      return url.href;
+    } catch (_error) {
+      return "";
+    }
+  }
+
+  function createMatchFormatBadge(formatValue, badgeClass) {
+    const rawFormat = typeof formatValue === "string" ? formatValue.trim() : "";
+    const formatKey = rawFormat.toLowerCase();
+    if (!rawFormat || !["bo1", "bo3", "bo5"].includes(formatKey)) return null;
+
+    const badge = document.createElement("div");
+    badge.className = `${badgeClass} ${formatKey}`;
+    badge.textContent = rawFormat;
+    return badge;
+  }
+
+  // Keep stream links, streamer icons and streamer names index-aligned.
+  function normalizeStreamFields(source) {
+    const links = Array.isArray(source?.streams) ? source.streams : [];
+    const icons = Array.isArray(source?.streamers) ? source.streamers : [];
+    const names = Array.isArray(source?.streamer_names) ? source.streamer_names : [];
+    const result = { streams: [], streamers: [], streamer_names: [] };
+    const count = Math.max(links.length, icons.length);
+    for (let index = 0; index < count; index += 1) {
+      const link = String(links[index] || "").trim();
+      const icon = String(icons[index] || "").trim();
+      if (!link && !icon) continue;
+      result.streams.push(link);
+      result.streamers.push(icon);
+      result.streamer_names.push(String(names[index] || "").trim());
+    }
+    return result;
+  }
+
+  function createChallengePlayerCard(player, side) {
+    const card = document.createElement("section");
+    card.className = `challenge-match-player challenge-match-player--${side}`;
+    const eloValue = Number(player?.elo);
+    const hasRating = Number.isFinite(eloValue) && eloValue > 0;
+    const bgaEloValue = Number(player?.bgaElo);
+    const hasBgaRating = Number.isFinite(bgaEloValue) && bgaEloValue > 0;
+
+    const rating = document.createElement("div");
+    rating.className = "challenge-match-player__rating";
+    const rank = document.createElement("span");
+    rank.className = "challenge-match-player__rank";
+    rank.textContent = hasRating && player?.rank ? `#${player.rank}` : "New";
+    const ratings = document.createElement("span");
+    ratings.className = "challenge-match-player__ratings";
+    const elo = document.createElement("span");
+    elo.className = "challenge-match-player__rating-line";
+    if (hasRating) {
+      const eloLabel = document.createElement("span");
+      eloLabel.textContent = "GG Elo:";
+      const eloRating = document.createElement("span");
+      eloRating.className = "challenge-match-player__rating-value";
+      eloRating.textContent = String(Math.trunc(eloValue));
+      elo.appendChild(eloLabel);
+      elo.appendChild(eloRating);
+    } else {
+      elo.classList.add("challenge-match-player__rating-value");
+      elo.textContent = "Unrated";
+    }
+    ratings.appendChild(elo);
+
+    const bgaElo = document.createElement("span");
+    bgaElo.className = "challenge-match-player__rating-line";
+    const bgaEloLabel = document.createElement("span");
+    bgaEloLabel.textContent = "BGA Elo:";
+    const bgaEloRating = document.createElement("span");
+    bgaEloRating.className = "challenge-match-player__rating-value";
+    bgaEloRating.textContent = hasBgaRating ? String(Math.trunc(bgaEloValue)) : "Unrated";
+    bgaElo.appendChild(bgaEloLabel);
+    bgaElo.appendChild(bgaEloRating);
+    ratings.appendChild(bgaElo);
+    rating.appendChild(rank);
+    rating.appendChild(ratings);
+    card.appendChild(rating);
+
+    const profile = document.createElement("div");
+    profile.className = "challenge-match-player__profile";
+    if (player?.avatar) {
+      const avatar = document.createElement("img");
+      avatar.className = "challenge-match-player__avatar";
+      avatar.src = player.avatar;
+      avatar.alt = "";
+      avatar.loading = "lazy";
+      profile.appendChild(avatar);
+    } else {
+      const avatarFallback = document.createElement("span");
+      avatarFallback.className = "challenge-match-player__avatar challenge-match-player__avatar-fallback";
+      avatarFallback.textContent = getPlayerInitials(player);
+      profile.appendChild(avatarFallback);
+    }
+
+    const info = document.createElement("div");
+    info.className = "challenge-match-player__info";
+    const nickname = document.createElement("a");
+    nickname.className = "challenge-match-player__nickname";
+    nickname.href = `https://carcassonne.gg/player/?id=${encodeURIComponent(String(player?.id || ""))}`;
+    nickname.textContent = player?.nickname || player?.id || "Unknown player";
+    info.appendChild(nickname);
+
+    const realName = String(player?.name || "").trim();
+    if (realName) {
+      const name = document.createElement("span");
+      name.className = "challenge-match-player__name";
+      name.textContent = realName;
+      info.appendChild(name);
+    }
+
+    const countryRow = document.createElement("div");
+    countryRow.className = "challenge-match-player__country-row";
+    if (player?.flag) {
+      const flag = document.createElement("img");
+      flag.className = "challenge-match-player__flag";
+      flag.src = player.flag;
+      flag.alt = "";
+      countryRow.appendChild(flag);
+    }
+    const country = document.createElement("span");
+    country.className = "challenge-match-player__country";
+    country.textContent = player?.country || "—";
+    countryRow.appendChild(country);
+    info.appendChild(countryRow);
+
+    // BGA profile link, as on player-card.html.
+    const bgaId = String(player?.id || "").trim();
+    if (bgaId) {
+      const bgaLink = document.createElement("a");
+      bgaLink.className = "challenge-match-player__bga-link";
+      bgaLink.href = `https://boardgamearena.com/player?id=${encodeURIComponent(bgaId)}`;
+      bgaLink.target = "_blank";
+      bgaLink.rel = "noopener noreferrer";
+      const bgaLogo = document.createElement("img");
+      bgaLogo.src = BGA_ICON_URL;
+      bgaLogo.alt = "BGA";
+      bgaLink.appendChild(bgaLogo);
+      bgaLink.appendChild(document.createTextNode("BGA profile"));
+      info.appendChild(bgaLink);
+    }
+    profile.appendChild(info);
+    card.appendChild(profile);
+
+    return card;
+  }
+
+  function createChallengeMatchResult(match) {
+    const normalizedStatus = String(match?.status || "").trim().toLowerCase();
+    const isInProgress = normalizedStatus === "in progress";
+    const isCompleted = normalizedStatus === "done" || normalizedStatus === "completed";
+    if (!isInProgress && !isCompleted) return null;
+
+    const games = (Array.isArray(match?.games) ? match.games : [])
+      .map((game) => {
+        const player1Score = game?.player_1_score;
+        const player2Score = game?.player_2_score;
+        const tableId = String(game?.bga_table_id || "").trim();
+        const player1Clock = isTruthyOne(game?.player_1_clock);
+        const player2Clock = isTruthyOne(game?.player_2_clock);
+        const carcassonneLabUrl = getCarcassonneLabUrl(game?.carcassonne_lab_url);
+        const hasPlayer1Score = player1Score !== null && player1Score !== undefined && String(player1Score).trim() !== "";
+        const hasPlayer2Score = player2Score !== null && player2Score !== undefined && String(player2Score).trim() !== "";
+        return hasPlayer1Score && hasPlayer2Score
+          ? { player1Score, player2Score, player1Clock, player2Clock, tableId, carcassonneLabUrl }
+          : null;
+      })
+      .filter(Boolean);
+
+    const hasMatchScore = match?.gw1 !== null && match?.gw1 !== undefined && String(match.gw1).trim() !== ""
+      && match?.gw2 !== null && match?.gw2 !== undefined && String(match.gw2).trim() !== "";
+    if (!hasMatchScore && !games.length) return null;
+
+    let score1 = hasMatchScore ? match.gw1 : 0;
+    let score2 = hasMatchScore ? match.gw2 : 0;
+    if (!hasMatchScore) {
+      games.forEach((game) => {
+        if (game.player1Clock !== game.player2Clock) {
+          if (game.player1Clock) score2 += 1;
+          if (game.player2Clock) score1 += 1;
+          return;
+        }
+        const gameScore1 = Number(game.player1Score);
+        const gameScore2 = Number(game.player2Score);
+        if (!Number.isFinite(gameScore1) || !Number.isFinite(gameScore2)) return;
+        if (gameScore1 > gameScore2) score1 += 1;
+        if (gameScore2 > gameScore1) score2 += 1;
+      });
+    }
+
+    const result = document.createElement("section");
+    result.className = "challenge-match-result";
+
+    const status = document.createElement("div");
+    status.className = `challenge-match-result__status${isCompleted ? " challenge-match-result__status--completed" : ""}`;
+    status.textContent = isCompleted ? "COMPLETED" : "IN PROGRESS";
+    result.appendChild(status);
+
+    const score = document.createElement("div");
+    score.className = "challenge-match-result__score";
+    score.textContent = `${score1} - ${score2}`;
+    result.appendChild(score);
+
+    if (games.length) {
+      const gameScores = document.createElement("div");
+      gameScores.className = "challenge-match-result__games";
+      const bgaRow = document.createElement("div");
+      const bgaLinks = document.createElement("div");
+      const bgaIcon = document.createElement("img");
+      bgaRow.className = "challenge-match-result__games-row";
+      bgaLinks.className = "challenge-match-result__games-links";
+      bgaIcon.className = "challenge-match-result__games-source-icon";
+      bgaIcon.src = BGA_ICON_URL;
+      bgaIcon.alt = "BGA";
+      bgaIcon.loading = "lazy";
+      bgaRow.appendChild(bgaIcon);
+      bgaRow.appendChild(bgaLinks);
+
+      const labRow = document.createElement("div");
+      const labLinks = document.createElement("div");
+      const labIcon = document.createElement("img");
+      labRow.className = "challenge-match-result__games-row";
+      labLinks.className = "challenge-match-result__games-links";
+      labIcon.className = "challenge-match-result__games-source-icon";
+      labIcon.src = CARCASSONNE_LAB_ICON_URL;
+      labIcon.alt = "CarcassonneLab";
+      labIcon.loading = "lazy";
+      labRow.appendChild(labIcon);
+      labRow.appendChild(labLinks);
+
+      games.forEach((game) => {
+        const badge = document.createElement(game.tableId ? "a" : "span");
+        badge.className = "challenge-match-result__game";
+        const hasClockLoss = game.player1Clock !== game.player2Clock;
+        if (hasClockLoss) {
+          badge.classList.add("challenge-match-result__game--clock");
+          const clock = document.createElement("i");
+          clock.className = "fa-regular fa-clock challenge-match-result__game-clock";
+          const clockScore = document.createElement("span");
+          clockScore.textContent = game.player1Clock ? "0:1" : "1:0";
+          badge.appendChild(clock);
+          badge.appendChild(clockScore);
+        } else {
+          const player1Score = Number(game.player1Score);
+          const player2Score = Number(game.player2Score);
+          if (Number.isFinite(player1Score) && Number.isFinite(player2Score)) {
+            if (player1Score > player2Score) {
+              badge.classList.add("challenge-match-result__game--player-1");
+            } else if (player2Score > player1Score) {
+              badge.classList.add("challenge-match-result__game--player-2");
+            }
+          }
+          badge.textContent = `${game.player1Score}:${game.player2Score}`;
+        }
+        if (game.tableId) {
+          badge.href = `https://boardgamearena.com/table?table=${encodeURIComponent(game.tableId)}`;
+          badge.target = "_blank";
+          badge.rel = "noopener noreferrer";
+          badge.title = "Open game on Board Game Arena";
+        }
+        bgaLinks.appendChild(badge);
+
+        if (game.carcassonneLabUrl) {
+          const labBadge = document.createElement("a");
+          labBadge.className = badge.className;
+          Array.from(badge.childNodes).forEach((node) => {
+            labBadge.appendChild(node.cloneNode(true));
+          });
+          labBadge.href = game.carcassonneLabUrl;
+          labBadge.target = "_blank";
+          labBadge.rel = "noopener noreferrer";
+          labBadge.title = "Review game in CarcassonneLab";
+          labBadge.setAttribute(
+            "aria-label",
+            `Review game ${badge.textContent.trim()} in CarcassonneLab`
+          );
+          labLinks.appendChild(labBadge);
+        }
+      });
+      gameScores.appendChild(bgaRow);
+      if (labLinks.childNodes.length) gameScores.appendChild(labRow);
+      result.appendChild(gameScores);
+    }
+
+    return result;
+  }
+
+  // Streams of the duel, rendered like the main event streams in matches.html.
+  function createChallengeMatchStreams(match) {
+    if (!Array.isArray(match?.streamers)) return null;
+    const streamUrls = Array.isArray(match?.streams) ? match.streams : [];
+    const streamerNames = Array.isArray(match?.streamer_names) ? match.streamer_names : [];
+    const section = document.createElement("section");
+    section.className = "challenge-match-streams";
+    match.streamers.forEach((iconUrl, index) => {
+      const normalizedIconUrl = String(iconUrl || "").trim();
+      const streamerName = String(streamerNames[index] || "").trim();
+      if (!normalizedIconUrl && !streamerName) return;
+      const streamUrl = String(streamUrls[index] || "").trim();
+      const stream = document.createElement(streamUrl ? "a" : "span");
+      stream.className = "challenge-match-stream";
+      if (streamUrl) {
+        stream.href = streamUrl;
+        stream.target = "_blank";
+        stream.rel = "noopener noreferrer";
+      }
+      if (normalizedIconUrl) {
+        const icon = document.createElement("img");
+        icon.className = "stream-icon";
+        icon.src = normalizedIconUrl;
+        icon.alt = streamerName ? "" : "Stream";
+        stream.appendChild(icon);
+      }
+      if (streamerName) {
+        const name = document.createElement("span");
+        name.className = "challenge-match-stream__name";
+        name.textContent = streamerName;
+        stream.title = streamerName;
+        stream.appendChild(name);
+      }
+      section.appendChild(stream);
+    });
+    return section.childNodes.length ? section : null;
+  }
+
+  // "Group A · Round 1 · 22 Nov 14:30" (local time), or the round's week when no time is set.
+  function getPopupMetaText(bracketDuel) {
+    const rawRound = String(bracketDuel?.round || "").trim();
+    const idx = rawRound.indexOf(":");
+    const roundTitle = (idx === -1 ? rawRound : rawRound.slice(0, idx)).trim();
+    const roundDates = idx === -1 ? "" : rawRound.slice(idx + 1).trim();
+    const group = String(bracketDuel?.group || "").trim();
+    const time = String(bracketDuel?.time || "").trim();
+    return [
+      group ? `Group ${group}` : "",
+      roundTitle,
+      time ? formatMatchTime(time) : roundDates,
+    ].filter(Boolean).join(" · ");
+  }
+
+  function closeChallengeMatchModal() {
+    const overlay = document.querySelector(".challenge-match-modal-overlay");
+    if (!overlay) return;
+    const returnFocus = overlay._returnFocus;
+    overlay.remove();
+    document.removeEventListener("keydown", handleChallengeMatchModalKeydown, true);
+    if (returnFocus instanceof HTMLElement) returnFocus.focus({ preventScroll: true });
+  }
+
+  // Captured so that Esc closes only the popup, not the fullscreen bracket under it.
+  function handleChallengeMatchModalKeydown(event) {
+    if (event.key !== "Escape" && event.key !== "Esc") return;
+    event.stopPropagation();
+    closeChallengeMatchModal();
+  }
+
+  function openChallengeMatchModal(match, metaText, returnFocus) {
+    closeChallengeMatchModal();
+    const overlay = document.createElement("div");
+    overlay.className = "challenge-match-modal-overlay";
+    overlay._returnFocus = returnFocus;
+
+    const dialog = document.createElement("div");
+    dialog.className = "challenge-match-modal";
+    dialog.setAttribute("role", "dialog");
+    dialog.setAttribute("aria-modal", "true");
+    dialog.setAttribute("aria-label", `${match?.team1 || "Player 1"} versus ${match?.team2 || "Player 2"}`);
+
+    const closeButton = document.createElement("button");
+    closeButton.type = "button";
+    closeButton.className = "challenge-match-modal__close";
+    closeButton.setAttribute("aria-label", "Close match details");
+    closeButton.innerHTML = "&times;";
+    closeButton.addEventListener("click", closeChallengeMatchModal);
+    dialog.appendChild(closeButton);
+
+    if (metaText) {
+      const meta = document.createElement("div");
+      meta.className = "challenge-match-modal__meta";
+      meta.textContent = metaText;
+      dialog.appendChild(meta);
+    }
+
+    const matchCard = document.createElement("div");
+    matchCard.className = "challenge-match-card";
+    matchCard.appendChild(createChallengePlayerCard(match?.player1Details || {}, "left"));
+    const vs = document.createElement("div");
+    vs.className = "challenge-match-card__vs";
+    const vsContent = document.createElement("div");
+    vsContent.className = "challenge-match-card__vs-content";
+    const formatBadge = createMatchFormatBadge(match?.format, "challenge-match-format-badge");
+    if (formatBadge) {
+      formatBadge.classList.add("challenge-match-card__format");
+      vs.appendChild(formatBadge);
+    }
+    const vsLabel = document.createElement("span");
+    vsLabel.textContent = "VS";
+    vsContent.appendChild(vsLabel);
+    vs.appendChild(vsContent);
+    matchCard.appendChild(vs);
+    matchCard.appendChild(createChallengePlayerCard(match?.player2Details || {}, "right"));
+    const matchResult = createChallengeMatchResult(match);
+    if (matchResult) matchCard.appendChild(matchResult);
+    const matchStreams = createChallengeMatchStreams(match);
+    if (matchStreams) matchCard.appendChild(matchStreams);
+    dialog.appendChild(matchCard);
+    overlay.appendChild(dialog);
+
+    overlay.addEventListener("click", (event) => {
+      if (event.target === overlay) closeChallengeMatchModal();
+    });
+    document.body.appendChild(overlay);
+    document.addEventListener("keydown", handleChallengeMatchModalKeydown, true);
+    closeButton.focus({ preventScroll: true });
+  }
+
+  function openBracketDuelModal(duelId, returnFocus) {
+    const bracketDuel = bracketDuelsById.get(duelId);
+    if (!bracketDuel) return;
+    loadDuelDetails()
+      .catch(() => ({ cclDuelsById: new Map(), playerDetailsById: new Map() }))
+      .then(details => {
+        openChallengeMatchModal(buildPopupMatch(bracketDuel, details), getPopupMetaText(bracketDuel), returnFocus);
+      });
+  }
+
+  // Delegated, so the boxes of the fullscreen copy of a bracket open the popup too.
+  document.addEventListener("click", (event) => {
+    if (!(event.target instanceof Element)) return;
+    const box = event.target.closest(".match-box[data-duel-id]");
+    if (!box) return;
+    openBracketDuelModal(box.dataset.duelId, box);
+  });
+  document.addEventListener("keydown", (event) => {
+    if (event.key !== "Enter" && event.key !== " ") return;
+    if (!(event.target instanceof Element) || !event.target.matches(".match-box[data-duel-id]")) return;
+    event.preventDefault();
+    openBracketDuelModal(event.target.dataset.duelId, event.target);
+  });
 
   function runWhenReady(callback) {
     if (document.readyState === "loading") {

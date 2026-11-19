@@ -311,6 +311,27 @@ code {
     box-sizing: border-box;
   }
 
+  /* BGA profile link under the player's country, as on player-card.html */
+  .challenge-match-player__bga-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    margin-top: 4px;
+    font-size: 12px;
+    color: #1a73b7;
+    text-decoration: none;
+    line-height: 1.2;
+  }
+  .challenge-match-player__bga-link:hover {
+    color: #165e93;
+    text-decoration: underline;
+  }
+  .challenge-match-player__bga-link img {
+    width: 14px;
+    height: 14px;
+    object-fit: contain;
+  }
+
   .challenge-match-modal__close {
     position: absolute;
     top: 8px;
@@ -2307,10 +2328,13 @@ function createChallengePlayerCard(player, side) {
   nickname.textContent = player?.nickname || player?.id || "Unknown player";
   info.appendChild(nickname);
 
-  const name = document.createElement("span");
-  name.className = "challenge-match-player__name";
-  name.textContent = player?.name || "—";
-  info.appendChild(name);
+  const realName = String(player?.name || "").trim();
+  if (realName) {
+    const name = document.createElement("span");
+    name.className = "challenge-match-player__name";
+    name.textContent = realName;
+    info.appendChild(name);
+  }
 
   const countryRow = document.createElement("div");
   countryRow.className = "challenge-match-player__country-row";
@@ -2326,6 +2350,22 @@ function createChallengePlayerCard(player, side) {
   country.textContent = player?.country || "—";
   countryRow.appendChild(country);
   info.appendChild(countryRow);
+
+  // BGA profile link, as on player-card.html.
+  const bgaId = String(player?.id || "").trim();
+  if (bgaId) {
+    const bgaLink = document.createElement("a");
+    bgaLink.className = "challenge-match-player__bga-link";
+    bgaLink.href = `https://boardgamearena.com/player?id=${encodeURIComponent(bgaId)}`;
+    bgaLink.target = "_blank";
+    bgaLink.rel = "noopener noreferrer";
+    const bgaLogo = document.createElement("img");
+    bgaLogo.src = BGA_ICON_URL;
+    bgaLogo.alt = "BGA";
+    bgaLink.appendChild(bgaLogo);
+    bgaLink.appendChild(document.createTextNode("BGA profile"));
+    info.appendChild(bgaLink);
+  }
   profile.appendChild(info);
   card.appendChild(profile);
 

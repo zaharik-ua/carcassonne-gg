@@ -152,6 +152,14 @@ test("public brackets: placeholders before the draw, players, Byes and scores af
   assert.equal(before.duels.length, 162 + 18 + 3);
   const firstF = before.duels.find((row) => row.group === "F" && row.knockout_id === "1");
   assert.deepEqual([firstF.player1, firstF.player1_id, firstF.player2], ["Seeded #1", "", "Unseeded #1"]);
+  // "Winner of N" only where a player crosses from the lower bracket to the upper one; no connector shows it.
+  const slotsF = (no) => {
+    const item = before.duels.find((row) => row.group === "F" && row.knockout_id === String(no));
+    return [item.player1, item.player2];
+  };
+  assert.deepEqual(slotsF(7), ["", ""]);
+  assert.deepEqual(slotsF(9), ["Loser of 8", ""]);
+  assert.deepEqual(slotsF(13), ["Loser of 11", ""]);
   assert.deepEqual(before.players, []);
 
   await call("POST /ccl/:tournamentId/stages/:stageKey/draw", { tournamentId: "CCL-2027", stageKey: "Q2" }, { id: 1, admin: 1 });
