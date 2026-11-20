@@ -1,0 +1,636 @@
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+<style>
+  :root {
+    --text: #222;
+    --muted: #666;
+    --border: #e0e0e0;
+    --card: #fff;
+    --link: #1a73b7;
+    --attention: #b23a48;
+    --attention-bg: #fdecee;
+    --warn: #8a5a00;
+    --warn-bg: #fff4dc;
+    --ok: #2d6a3e;
+    --ok-bg: #e8f5ec;
+    --neutral-bg: #eef1f5;
+  }
+
+  body {
+    margin: 0;
+    font-family: "Montserrat", sans-serif;
+    color: var(--text);
+  }
+
+  .dash-wrap {
+    display: grid;
+    gap: 12px;
+    margin: 0 8px 12px;
+  }
+
+  .dash-head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 10px;
+  }
+
+  .dash-title {
+    font-size: 22px;
+    font-weight: 700;
+    line-height: 1.2;
+  }
+
+  .dash-subtitle {
+    font-size: 13px;
+    color: var(--muted);
+    margin-top: 4px;
+  }
+
+  .dash-filters {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .dash-filters label {
+    display: grid;
+    gap: 3px;
+    font-size: 11px;
+    color: var(--muted);
+  }
+
+  .dash-filters select {
+    font: inherit;
+    font-size: 13px;
+    color: var(--text);
+    padding: 6px 8px;
+    border: 1px solid #cfd5de;
+    border-radius: 6px;
+    background: #fff;
+    min-width: 140px;
+  }
+
+  .dash-alert {
+    background: #fff;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 12px;
+    font-size: 14px;
+  }
+
+  .dash-tiles {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+    gap: 8px;
+  }
+
+  .dash-tile {
+    display: grid;
+    gap: 2px;
+    padding: 10px 12px;
+    border: 1px solid #d6dbe3;
+    border-radius: 8px;
+    background: var(--card);
+    color: inherit;
+    text-decoration: none;
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+  }
+
+  .dash-tile:hover {
+    border-color: #aeb7c4;
+  }
+
+  .dash-tile-count {
+    font-size: 24px;
+    font-weight: 700;
+    line-height: 1.1;
+    color: #8a94a3;
+  }
+
+  .dash-tile.has-items .dash-tile-count {
+    color: var(--attention);
+  }
+
+  .dash-tile.is-info.has-items .dash-tile-count {
+    color: #223040;
+  }
+
+  .dash-tile-label {
+    font-size: 12px;
+    font-weight: 600;
+    color: #4a5566;
+  }
+
+  .dash-section {
+    background: #fff;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    overflow: hidden;
+  }
+
+  .dash-section-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 10px 12px;
+    border-bottom: 1px solid var(--border);
+    background: #fafbfc;
+  }
+
+  .dash-section.is-empty .dash-section-head {
+    border-bottom: 0;
+  }
+
+  .dash-section-title {
+    font-size: 15px;
+    font-weight: 700;
+  }
+
+  .dash-section-meta {
+    font-size: 12px;
+    color: var(--muted);
+    white-space: nowrap;
+  }
+
+  .dash-section-note {
+    padding: 8px 12px 0;
+    font-size: 12px;
+    color: var(--muted);
+  }
+
+  .dash-rows {
+    display: grid;
+  }
+
+  .dash-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 4px 12px;
+    padding: 10px 12px;
+    border-top: 1px solid #f0f1f3;
+  }
+
+  .dash-row:first-child {
+    border-top: 0;
+  }
+
+  .dash-row-main {
+    display: grid;
+    gap: 3px;
+    min-width: 0;
+  }
+
+  .dash-row-title {
+    font-size: 14px;
+    font-weight: 600;
+    overflow-wrap: anywhere;
+  }
+
+  .dash-row-line {
+    font-size: 12px;
+    color: var(--muted);
+    overflow-wrap: anywhere;
+  }
+
+  .dash-row-error {
+    font-size: 12px;
+    color: var(--attention);
+    overflow-wrap: anywhere;
+  }
+
+  .dash-row-side {
+    display: grid;
+    justify-items: end;
+    align-content: start;
+    gap: 6px;
+  }
+
+  .dash-badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-size: 11px;
+    font-weight: 600;
+    white-space: nowrap;
+    background: var(--neutral-bg);
+    color: #3d4757;
+  }
+
+  .dash-badge.attention { background: var(--attention-bg); color: var(--attention); }
+  .dash-badge.warn { background: var(--warn-bg); color: var(--warn); }
+  .dash-badge.ok { background: var(--ok-bg); color: var(--ok); }
+
+  .dash-link {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--link);
+    text-decoration: none;
+    white-space: nowrap;
+  }
+
+  .dash-link:hover {
+    text-decoration: underline;
+  }
+
+  .dash-more {
+    padding: 8px 12px 10px;
+    font-size: 12px;
+    color: var(--muted);
+    border-top: 1px solid #f0f1f3;
+  }
+
+  @media (max-width: 560px) {
+    .dash-row {
+      grid-template-columns: minmax(0, 1fr);
+    }
+
+    .dash-row-side {
+      justify-items: start;
+      grid-auto-flow: column;
+      justify-content: start;
+      align-items: center;
+    }
+
+    .dash-filters,
+    .dash-filters label,
+    .dash-filters select {
+      width: 100%;
+    }
+  }
+</style>
+
+<div class="dash-wrap">
+  <div class="dash-head">
+    <div>
+      <div class="dash-title">Dashboard</div>
+      <div class="dash-subtitle">What needs your attention right now.</div>
+    </div>
+    <div class="dash-filters" id="dashFilters" hidden>
+      <label>
+        Tournament
+        <select id="dashTournament"></select>
+      </label>
+      <label>
+        Deadline within
+        <select id="dashDays">
+          <option value="1">1 day</option>
+          <option value="3">3 days</option>
+          <option value="7">7 days</option>
+          <option value="14">14 days</option>
+          <option value="30">30 days</option>
+        </select>
+      </label>
+    </div>
+  </div>
+  <div id="dashContent" class="dash-alert">Loading...</div>
+</div>
+
+<script>
+(function () {
+  const AUTH_BASE = window.AUTH_BASE_URL || "https://api.carcassonne.gg";
+  const DASHBOARD_URL = `${AUTH_BASE}/dashboard`;
+  const SITE_BASE = window.location.origin;
+
+  const contentEl = document.getElementById("dashContent");
+  const filtersEl = document.getElementById("dashFilters");
+  const tournamentSelect = document.getElementById("dashTournament");
+  const daysSelect = document.getElementById("dashDays");
+
+  const PLANNING_STATUS = {
+    deadline_passed: { label: "Deadline passed", tone: "attention" },
+    no_proposal: { label: "No time proposed", tone: "attention" },
+    time_proposed: { label: "Time proposed, awaiting reply", tone: "warn" },
+    change_pending: { label: "Time being renegotiated", tone: "warn" },
+  };
+
+  const PLAYER_ACTION = {
+    accept_time: { label: "Accept or counter the proposed time", tone: "attention" },
+    propose_time: { label: "Propose a time", tone: "attention" },
+    deadline_passed: { label: "Deadline passed", tone: "attention" },
+    result_error: { label: "Result check failed", tone: "attention" },
+    waiting_opponent: { label: "Waiting for opponent", tone: "warn" },
+    time_not_set: { label: "Captains are agreeing the time", tone: "" },
+    planned: { label: "Planned", tone: "ok" },
+  };
+
+  // Block order on the page and in the counter tiles.
+  const BLOCKS = [
+    { key: "unplanned_duels", title: "Unplanned matches", tile: "Unplanned matches", render: renderUnplannedDuel },
+    { key: "error_duels", title: "Matches in Error", tile: "Errors", render: renderErrorDuel },
+    { key: "news_drafts", title: "News proposals in Draft", tile: "News proposals", render: renderNewsDraft },
+    { key: "new_users", title: "New users with a BGA profile", tile: "New users", render: renderNewUser, info: true },
+    { key: "my_duels", title: "My matches", tile: "My matches: action needed", render: renderMyDuel, countKey: "action_count" },
+  ];
+
+  function readUrlState() {
+    const params = new URLSearchParams(window.location.search);
+    return {
+      tournamentId: String(params.get("tournament_id") || "").trim(),
+      days: String(params.get("days") || "").trim(),
+    };
+  }
+
+  function writeUrlState(state) {
+    const url = new URL(window.location.href);
+    if (state.tournamentId) url.searchParams.set("tournament_id", state.tournamentId);
+    else url.searchParams.delete("tournament_id");
+    if (state.days) url.searchParams.set("days", state.days);
+    else url.searchParams.delete("days");
+    window.history.replaceState(null, "", url.toString());
+  }
+
+  function el(tag, className, textValue) {
+    const node = document.createElement(tag);
+    if (className) node.className = className;
+    if (textValue !== undefined && textValue !== null) node.textContent = String(textValue);
+    return node;
+  }
+
+  function absoluteLink(link) {
+    if (!link) return "";
+    return /^https?:\/\//i.test(link) ? link : `${SITE_BASE}${link}`;
+  }
+
+  function formatUtc(iso) {
+    const ts = Date.parse(iso || "");
+    if (!Number.isFinite(ts)) return "";
+    return new Intl.DateTimeFormat("en-GB", {
+      weekday: "short", day: "numeric", month: "short", year: "numeric",
+      hour: "2-digit", minute: "2-digit", timeZone: "UTC",
+    }).format(new Date(ts)) + " UTC";
+  }
+
+  // Deadlines are stored as Sunday 23:59 UTC; the tournament page shows them as Monday 00:00.
+  function formatDeadline(iso) {
+    let ts = Date.parse(iso || "");
+    if (!Number.isFinite(ts)) return "";
+    if (new Date(ts).getUTCMinutes() === 59) ts = Math.ceil((ts + 1) / 60000) * 60000;
+    return formatUtc(new Date(ts).toISOString());
+  }
+
+  function formatDate(iso) {
+    const ts = Date.parse(iso || "");
+    if (!Number.isFinite(ts)) return "";
+    return new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" })
+      .format(new Date(ts));
+  }
+
+  function daysText(days) {
+    if (days === null || days === undefined) return "";
+    if (days < 0) return `${Math.abs(days)} day${Math.abs(days) === 1 ? "" : "s"} ago`;
+    if (days === 0) return "today";
+    return `in ${days} day${days === 1 ? "" : "s"}`;
+  }
+
+  function badge(info) {
+    if (!info) return null;
+    return el("span", `dash-badge ${info.tone || ""}`.trim(), info.label);
+  }
+
+  function linkTo(href, label = "Open") {
+    if (!href) return null;
+    const anchor = el("a", "dash-link", label);
+    anchor.href = absoluteLink(href);
+    if (/^https?:\/\//i.test(href)) {
+      anchor.target = "_blank";
+      anchor.rel = "noopener noreferrer";
+    }
+    return anchor;
+  }
+
+  function duelContext(item) {
+    return [item.tournament?.name, item.stage, item.round, item.group].filter(Boolean).join(" · ");
+  }
+
+  function playerName(player) {
+    return player?.name || "TBD";
+  }
+
+  function contactsText(player, contacts) {
+    const entries = Object.entries(contacts || {});
+    if (!entries.length) return "";
+    const labels = { telegram: "Telegram", whatsapp: "WhatsApp", discord: "Discord", contact_email: "Email" };
+    return `${playerName(player)}: ${entries.map(([key, value]) => `${labels[key] || key} ${value}`).join(", ")}`;
+  }
+
+  function row({ title, lines = [], errorLine = "", side = [] }) {
+    const node = el("div", "dash-row");
+    const main = el("div", "dash-row-main");
+    main.appendChild(el("div", "dash-row-title", title));
+    lines.filter(Boolean).forEach((line) => main.appendChild(el("div", "dash-row-line", line)));
+    if (errorLine) main.appendChild(el("div", "dash-row-error", errorLine));
+    const sideEl = el("div", "dash-row-side");
+    side.filter(Boolean).forEach((child) => sideEl.appendChild(child));
+    node.appendChild(main);
+    node.appendChild(sideEl);
+    return node;
+  }
+
+  function renderUnplannedDuel(item) {
+    const lines = [duelContext(item)];
+    if (item.deadline_utc) lines.push(`Play before ${formatDeadline(item.deadline_utc)} (${daysText(item.days_to_deadline)})`);
+    if (item.proposed_time_utc && (item.planning_status === "time_proposed" || item.planning_status === "change_pending")) {
+      const proposer = [item.player_1, item.player_2].find((player) => player?.id === item.proposed_by_player_id);
+      lines.push(`Proposed${proposer ? ` by ${proposer.name}` : ""}: ${formatUtc(item.proposed_time_utc)}`);
+    }
+    if (item.planning_status === "change_pending" && item.time_utc) lines.push(`Current time: ${formatUtc(item.time_utc)}`);
+    lines.push(contactsText(item.player_1, item.player_1_contacts));
+    lines.push(contactsText(item.player_2, item.player_2_contacts));
+    return row({
+      title: `${playerName(item.player_1)} vs ${playerName(item.player_2)}`,
+      lines,
+      side: [badge(PLANNING_STATUS[item.planning_status]), linkTo(item.link)],
+    });
+  }
+
+  function renderErrorDuel(item) {
+    return row({
+      title: `${playerName(item.player_1)} vs ${playerName(item.player_2)}`,
+      lines: [
+        duelContext(item),
+        item.time_utc ? `Played ${formatUtc(item.time_utc)}` : "",
+        item.checked_at ? `Last check ${formatUtc(item.checked_at)}` : "",
+      ],
+      errorLine: item.error || "No error message saved",
+      side: [badge({ label: "Error", tone: "attention" }), linkTo(item.link)],
+    });
+  }
+
+  function renderNewsDraft(item) {
+    return row({
+      title: item.title || `News #${item.id}`,
+      lines: [
+        [item.author?.name ? `By ${item.author.name}` : "", item.tournament?.name].filter(Boolean).join(" · "),
+        item.created_at ? `Submitted ${formatDate(item.created_at)}` : "",
+      ],
+      side: [
+        badge({ label: `${item.days_waiting ?? 0} d waiting`, tone: (item.days_waiting ?? 0) >= 3 ? "attention" : "warn" }),
+        linkTo(item.link),
+      ],
+    });
+  }
+
+  function renderNewUser(item) {
+    const name = [item.bga_nickname, item.name && item.name !== item.bga_nickname ? `(${item.name})` : ""]
+      .filter(Boolean).join(" ");
+    return row({
+      title: name || `User #${item.user_id}`,
+      lines: [
+        [item.association, item.bga_elo !== null && item.bga_elo !== undefined ? `BGA Elo ${item.bga_elo}` : ""]
+          .filter(Boolean).join(" · "),
+        item.created_at ? `Registered ${formatDate(item.created_at)}` : "",
+      ],
+      side: [linkTo(item.link, "Profile")],
+    });
+  }
+
+  function renderMyDuel(item) {
+    const lines = [duelContext(item)];
+    if (item.time_utc) lines.push(`Time: ${formatUtc(item.time_utc)}`);
+    if (item.proposed_time_utc && (item.action === "accept_time" || item.action === "waiting_opponent")) {
+      lines.push(`Proposed time: ${formatUtc(item.proposed_time_utc)}`);
+    }
+    if (item.deadline_utc) lines.push(`Play before ${formatDeadline(item.deadline_utc)}`);
+    return row({
+      title: `vs ${playerName(item.opponent)}`,
+      lines,
+      side: [badge(PLAYER_ACTION[item.action]), linkTo(item.link)],
+    });
+  }
+
+  function blockCount(block, config) {
+    return Number(block?.[config.countKey || "count"] || 0);
+  }
+
+  function blockMeta(block, config) {
+    if (config.key === "new_users") return `${block.count} in the last ${block.days || 30} days`;
+    if (config.key === "my_duels") return `${block.action_count} need action · ${block.count} active`;
+    return `${block.count}`;
+  }
+
+  function renderSection(config, block, data) {
+    const section = el("section", "dash-section");
+    section.id = `dash-${config.key}`;
+    const count = Number(block?.count || 0);
+    if (!count) section.classList.add("is-empty");
+
+    const head = el("div", "dash-section-head");
+    head.appendChild(el("div", "dash-section-title", config.title));
+    head.appendChild(el("div", "dash-section-meta", count ? blockMeta(block, config) : "Nothing here"));
+    section.appendChild(head);
+
+    if (config.key === "unplanned_duels") {
+      section.appendChild(el(
+        "div",
+        "dash-section-note",
+        `Matches with a stage deadline (CCL) due within ${data.filters?.days_before_deadline ?? 3} days or already overdue. Team tournament matches are not included yet.`
+      ));
+    }
+    if (!count) return section;
+
+    const rows = el("div", "dash-rows");
+    (block.items || []).forEach((item) => rows.appendChild(config.render(item)));
+    section.appendChild(rows);
+    if (count > (block.items || []).length) {
+      section.appendChild(el("div", "dash-more", `Showing ${(block.items || []).length} of ${count}.`));
+    }
+    return section;
+  }
+
+  function renderTiles(data, visibleBlocks) {
+    const tiles = el("div", "dash-tiles");
+    visibleBlocks.forEach((config) => {
+      const block = data.blocks[config.key];
+      const count = blockCount(block, config);
+      const tile = el("button", `dash-tile${count ? " has-items" : ""}${config.info ? " is-info" : ""}`);
+      tile.type = "button";
+      tile.appendChild(el("div", "dash-tile-count", count));
+      tile.appendChild(el("div", "dash-tile-label", config.tile));
+      tile.addEventListener("click", () => {
+        document.getElementById(`dash-${config.key}`)?.scrollIntoView({ behavior: "smooth", block: "start" });
+      });
+      tiles.appendChild(tile);
+    });
+    return tiles;
+  }
+
+  function renderFilters(data) {
+    if (!data.roles?.tournament_admin) {
+      filtersEl.hidden = true;
+      return;
+    }
+    filtersEl.hidden = false;
+    tournamentSelect.innerHTML = "";
+    const all = el("option", "", "All my tournaments");
+    all.value = "";
+    tournamentSelect.appendChild(all);
+    (data.tournaments || []).forEach((tournament) => {
+      const option = el("option", "", tournament.name);
+      option.value = tournament.id;
+      tournamentSelect.appendChild(option);
+    });
+    tournamentSelect.value = data.filters?.tournament_id || "";
+    const days = String(data.filters?.days_before_deadline ?? 3);
+    if (![...daysSelect.options].some((option) => option.value === days)) {
+      daysSelect.appendChild(Object.assign(el("option", "", `${days} days`), { value: days }));
+    }
+    daysSelect.value = days;
+  }
+
+  function renderDashboard(data) {
+    renderFilters(data);
+    const visibleBlocks = BLOCKS.filter((config) => data.blocks?.[config.key]);
+    contentEl.className = "";
+    contentEl.innerHTML = "";
+    if (!visibleBlocks.length) {
+      contentEl.className = "dash-alert";
+      contentEl.textContent = "Nothing to show yet. Link your BGA profile to see your matches here.";
+      return;
+    }
+    const wrap = el("div", "dash-wrap");
+    wrap.style.margin = "0";
+    wrap.appendChild(renderTiles(data, visibleBlocks));
+    visibleBlocks.forEach((config) => wrap.appendChild(renderSection(config, data.blocks[config.key], data)));
+    contentEl.appendChild(wrap);
+  }
+
+  async function load() {
+    const state = readUrlState();
+    const url = new URL(DASHBOARD_URL);
+    if (state.tournamentId) url.searchParams.set("tournament_id", state.tournamentId);
+    if (state.days) url.searchParams.set("days_before_deadline", state.days);
+    try {
+      const response = await fetch(url.toString(), { method: "GET", credentials: "include" });
+      if (response.status === 401) {
+        contentEl.className = "dash-alert";
+        contentEl.textContent = "Please sign in to view your dashboard.";
+        return;
+      }
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok || !data?.ok) throw new Error(data?.message || "Failed to load dashboard");
+      renderDashboard(data);
+    } catch (_error) {
+      contentEl.className = "dash-alert";
+      contentEl.textContent = "Failed to load the dashboard. Please refresh the page.";
+    }
+  }
+
+  function onFilterChange() {
+    writeUrlState({ tournamentId: tournamentSelect.value, days: daysSelect.value === "3" ? "" : daysSelect.value });
+    contentEl.className = "dash-alert";
+    contentEl.textContent = "Loading...";
+    load();
+  }
+
+  tournamentSelect.addEventListener("change", onFilterChange);
+  daysSelect.addEventListener("change", onFilterChange);
+  window.addEventListener("gg-auth-state-change", load);
+
+  load();
+})();
+</script>

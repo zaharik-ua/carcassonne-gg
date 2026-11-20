@@ -201,6 +201,13 @@
   const MY_TOURNAMENTS_URL = `${TOURNAMENTS_URL}?scope=my-tournaments`;
   const IN_PERSON_TOURNAMENTS_URL = `${AUTH_BASE}/in-person-tournaments/accessible`;
   const STREAMERS_URL = `${AUTH_BASE}/streamers`;
+  // Shown first to every signed-in user; the server picks the blocks by role.
+  const DASHBOARD_ITEM = {
+    type: "view",
+    view: "dashboard",
+    label: "Dashboard",
+    icon: "https://carcassonne.gg/gallery/GG-logo.svg",
+  };
   const STATIC_SECTION_ITEMS = [
     {
       type: "view",
@@ -380,7 +387,8 @@
       ? path.slice(`${PLAYER_HUB_BASE_PATH}/`.length).split("/")[0].trim().toLowerCase()
       : String(url.searchParams.get("view") || "").trim().toLowerCase();
     if (
-      view === "players"
+      view === "dashboard"
+      || view === "players"
       || view === "friendly-find"
       || view === "my-tournaments"
       || view === "in-person"
@@ -601,7 +609,7 @@
         && String(tournament?.access_role || "").trim().toLowerCase() === "captain";
     });
 
-    const items = tournaments
+    const items = [{ ...DASHBOARD_ITEM, key: "view:dashboard" }].concat(tournaments
       .filter((tournament) => canSeeTournament(tournament, {
         currentUserAuthId,
         isAuthenticatedUser,
@@ -639,7 +647,7 @@
       }).map((item) => ({
         ...item,
         key: `view:${item.view}`,
-      })));
+      }))));
 
     renderDesktop(items);
     renderMobile(items);

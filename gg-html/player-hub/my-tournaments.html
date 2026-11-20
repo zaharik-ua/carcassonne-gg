@@ -2913,6 +2913,22 @@
     font-size: 13px;
   }
 
+  /* Pots of more than 12 players: two tables per pot, all four fit the screen width */
+  .cp-ccl-draw-pots--split {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .cp-ccl-draw-pot-columns {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-items: start;
+    gap: 8px;
+  }
+
+  .cp-ccl-draw-pot-columns > * {
+    min-width: 0;
+  }
+
   .cp-ccl-draw-actions {
     justify-content: flex-start;
     flex-wrap: wrap;
@@ -2932,7 +2948,7 @@
 
   .cp-ccl-draw-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, 450px), 1fr));
     gap: 12px;
   }
 
@@ -3099,6 +3115,16 @@
   @media (max-width: 640px) {
     .cp-ccl-draw-pots {
       grid-template-columns: minmax(0, 450px);
+    }
+
+    .cp-ccl-draw-pots--split {
+      grid-template-columns: minmax(0, 1fr);
+    }
+  }
+
+  @media (max-width: 420px) {
+    .cp-ccl-draw-pot-columns {
+      grid-template-columns: minmax(0, 1fr);
     }
   }
 
@@ -12682,19 +12708,30 @@
     const renderPotTable = (title, players) => {
       const block = el("div", "cp-ccl-stack");
       block.appendChild(el("div", "cp-ccl-strong", `${title} (${players.length})`));
-      const { wrap, tbody } = createTable(["Player", "Elo"]);
-      players
-        .slice()
-        .sort((a, b) => Number(b.elo ?? 0) - Number(a.elo ?? 0))
-        .forEach((player) => {
+      const sorted = players.slice().sort((a, b) => Number(b.elo ?? 0) - Number(a.elo ?? 0));
+      const buildTable = (list) => {
+        const { wrap, tbody } = createTable(["Player", "Elo"]);
+        list.forEach((player) => {
           const row = el("tr");
           addCell(row, createPlayerLabel(player));
           addCell(row, player.elo === null || player.elo === undefined ? "—" : Math.round(Number(player.elo)), "cp-ccl-elo");
           tbody.appendChild(row);
         });
-      block.appendChild(wrap);
+        return wrap;
+      };
+      // A pot with more than CCL_POT_SPLIT_THRESHOLD players is shown as two side-by-side tables.
+      if (sorted.length > CCL_POT_SPLIT_THRESHOLD) {
+        const half = Math.ceil(sorted.length / 2);
+        const columns = el("div", "cp-ccl-draw-pot-columns");
+        columns.appendChild(buildTable(sorted.slice(0, half)));
+        columns.appendChild(buildTable(sorted.slice(half)));
+        block.appendChild(columns);
+      } else {
+        block.appendChild(buildTable(sorted));
+      }
       return block;
     };
+    const CCL_POT_SPLIT_THRESHOLD = 12;
 
     // mode: "test" (Test draw, never saved), "run" (Run draw, saved once) or "view" (a saved draw).
     const openDrawPopup = (pathKey, mode) => {
@@ -12848,9 +12885,12 @@
       const paint = () => {
         content.innerHTML = "";
         const players = Array.isArray(info.players) ? info.players : [];
-        const pots = el("div", "cp-ccl-draw-pots");
-        pots.appendChild(renderPotTable("Seeded", players.filter((player) => player.seed === "Seeded")));
-        pots.appendChild(renderPotTable("Unseeded", players.filter((player) => player.seed === "Unseeded")));
+        const seededPot = players.filter((player) => player.seed === "Seeded");
+        const unseededPot = players.filter((player) => player.seed === "Unseeded");
+        const splitPots = Math.max(seededPot.length, unseededPot.length) > CCL_POT_SPLIT_THRESHOLD;
+        const pots = el("div", `cp-ccl-draw-pots${splitPots ? " cp-ccl-draw-pots--split" : ""}`);
+        pots.appendChild(renderPotTable("Seeded", seededPot));
+        pots.appendChild(renderPotTable("Unseeded", unseededPot));
         content.appendChild(pots);
 
         const action = el("div", "cp-ccl-draw-run");

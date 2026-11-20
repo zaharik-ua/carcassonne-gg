@@ -161,6 +161,14 @@
   const MY_TOURNAMENTS_URL = `${TOURNAMENTS_URL}?scope=my-tournaments`;
   const IN_PERSON_TOURNAMENTS_URL = `${AUTH_BASE}/in-person-tournaments/accessible`;
   const STREAMERS_URL = `${AUTH_BASE}/streamers`;
+  // Shown first to every signed-in user; the server picks the blocks by role.
+  const DASHBOARD_ITEM = {
+    type: "view",
+    view: "dashboard",
+    label: "Dashboard",
+    subtitle: "What needs your attention right now",
+    icon: "https://carcassonne.gg/gallery/GG-logo.svg",
+  };
   const STATIC_SECTION_ITEMS = [
     {
       type: "view",
@@ -549,7 +557,7 @@
       return;
     }
 
-    const items = tournaments
+    const items = [DASHBOARD_ITEM].concat(tournaments
       .filter((tournament) => canSeeTournament(tournament, {
         currentUserAuthId,
         isAuthenticatedUser,
@@ -586,7 +594,7 @@
           }
           return false;
         })
-      );
+      ));
 
     renderHome(items);
   }

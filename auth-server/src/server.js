@@ -104,6 +104,7 @@ import { hasCclStructure, registerCclStructureRoutes } from "./ccl-structure.js"
 import { registerCclDrawRoutes } from "./ccl-draw.js";
 import { registerCclBracketRoutes, startCclBracketSync } from "./ccl-bracket.js";
 import { registerCclPublicBracketRoutes } from "./ccl-public-brackets.js";
+import { registerDashboardRoutes } from "./dashboard.js";
 import { registerCclRoutes } from "./ccl-routes.js";
 import { registerCclMatchRoutes } from "./ccl-match-routes.js";
 import { CCL_MATCH_SOURCE_TYPE } from "./ccl-matches.js";
@@ -8495,6 +8496,7 @@ registerCclBracketRoutes(app, {
 });
 
 registerCclPublicBracketRoutes(app, { db });
+registerDashboardRoutes(app, { db, requireAuthenticated });
 
 registerTournamentRegistrationRoutes(app, {
   db,
