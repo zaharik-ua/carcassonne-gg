@@ -2000,6 +2000,60 @@
     color: #8a5a00;
   }
 
+  /* A match action with an arrow menu: [Propose time][▾] → Report a problem. */
+  .cp-ccl-split {
+    position: relative;
+    display: inline-flex;
+  }
+
+  .cp-ccl-split > .cp-btn:not(:last-of-type) {
+    border-top-right-radius: 0;
+    border-bottom-right-radius: 0;
+  }
+
+  .cp-ccl-split > .cp-ccl-split-toggle {
+    padding: 4px 6px;
+    font-size: 10px;
+  }
+
+  .cp-ccl-split > .cp-btn + .cp-ccl-split-toggle {
+    border-left-width: 0;
+    border-top-left-radius: 0;
+    border-bottom-left-radius: 0;
+  }
+
+  .cp-ccl-split-toggle.open {
+    filter: brightness(0.95);
+  }
+
+  .cp-ccl-split .cp-dd-menu {
+    left: auto;
+    right: 0;
+    min-width: 0;
+  }
+
+  .cp-ccl-case-hint {
+    margin-top: 4px;
+    font-size: 12px;
+    line-height: 1.4;
+    color: #667286;
+  }
+
+  .cp-ccl-case-hint:empty {
+    display: none;
+  }
+
+  .cp-ccl-case-sent {
+    font-size: 14px;
+    line-height: 1.5;
+    color: #344054;
+  }
+
+  .cp-ccl-case-sent a {
+    color: #1a73b7;
+    font-weight: 600;
+  }
+
   .cp-duel-edit-grid.cp-ccl-games-grid {
     grid-template-columns: minmax(55px, 1fr) repeat(2, minmax(55px, 1fr));
   }
@@ -9573,6 +9627,216 @@
     return panel;
   }
 
+  // ---- CCL cases: a player reports a problem with a match (auth-server/src/ccl-cases.js) ----
+  const CCL_DASHBOARD_URL = "https://carcassonne.gg/player-hub/dashboard/";
+  const CCL_CASE_TYPE_LABELS = {
+    problem: "Match problem", complaint: "Complaint", request: "Request", feedback: "Feedback",
+  };
+  const CCL_CASE_CATEGORY_LABELS = {
+    scheduling: "Scheduling the match time",
+    not_played: "Match was not played",
+    incomplete: "Match not finished",
+    result_dispute: "Wrong match result",
+    conduct: "Rule violation or opponent's behaviour",
+    general: "Other question for admins",
+  };
+  // Types and categories a player may choose under Resolve → Other (MATCH_CASE_CHOICES on the server).
+  const CCL_MATCH_CASE_CHOICES = [
+    { case_type: "problem", categories: ["scheduling", "not_played", "incomplete", "result_dispute"] },
+    { case_type: "complaint", categories: ["conduct"] },
+    { case_type: "request", categories: ["general"] },
+    { case_type: "feedback", categories: [] },
+  ];
+  let cclSplitMenusBound = false;
+
+  function closeCclSplitMenus(except = null) {
+    document.querySelectorAll(".cp-ccl-split .cp-dd-menu.open").forEach((menu) => {
+      if (menu === except) return;
+      menu.classList.remove("open");
+      menu.style.maxHeight = "0px";
+      menu.parentElement?.querySelector(".cp-ccl-split-toggle")?.classList.remove("open");
+    });
+  }
+
+  // `mainButton` (optional) with an arrow that opens a menu of { label, onClick } items.
+  function createCclSplitAction(mainButton, items) {
+    if (!cclSplitMenusBound) {
+      cclSplitMenusBound = true;
+      document.addEventListener("click", (event) => {
+        if (!event.target.closest?.(".cp-ccl-split")) closeCclSplitMenus();
+      });
+    }
+    const root = document.createElement("div");
+    root.className = "cp-ccl-split";
+    if (mainButton) root.appendChild(mainButton);
+    const toggle = document.createElement("button");
+    toggle.type = "button";
+    toggle.className = "cp-btn cp-btn-secondary cp-ccl-split-toggle";
+    toggle.textContent = "▾";
+    toggle.setAttribute("aria-haspopup", "menu");
+    toggle.setAttribute("aria-label", "More actions");
+    const menu = document.createElement("div");
+    menu.className = "cp-dd-menu";
+    menu.setAttribute("role", "menu");
+    items.forEach((item) => {
+      const option = document.createElement("button");
+      option.type = "button";
+      option.className = "cp-dd-option";
+      option.textContent = item.label;
+      option.addEventListener("click", (event) => {
+        event.stopPropagation();
+        closeCclSplitMenus();
+        item.onClick();
+      });
+      menu.appendChild(option);
+    });
+    toggle.addEventListener("click", (event) => {
+      event.stopPropagation();
+      const isOpen = menu.classList.contains("open");
+      closeCclSplitMenus(menu);
+      menu.classList.toggle("open", !isOpen);
+      menu.style.maxHeight = isOpen ? "0px" : `${menu.scrollHeight}px`;
+      toggle.classList.toggle("open", !isOpen);
+    });
+    root.append(toggle, menu);
+    return root;
+  }
+
+  function createCclCaseTextarea() {
+    const textarea = document.createElement("textarea");
+    textarea.maxLength = 5000;
+    textarea.placeholder = "Describe what happened";
+    return textarea;
+  }
+
+  function createCclReadonlyInput(value) {
+    const input = document.createElement("input");
+    input.type = "text";
+    input.value = value;
+    input.readOnly = true;
+    input.className = "cp-readonly-input";
+    return input;
+  }
+
+  // Shown once the case is saved; the page reloads underneath.
+  function showCclCaseSent(result) {
+    const ui = createCclModal(result?.appended ? "Case updated" : "Case sent");
+    const message = document.createElement("div");
+    message.className = "cp-ccl-case-sent";
+    const link = document.createElement("a");
+    link.href = CCL_DASHBOARD_URL;
+    link.target = "_top";
+    link.textContent = "Dashboard";
+    message.append(
+      result?.appended
+        ? "You already had an open case about this match; your details were added to it. "
+        : "Your case was sent. ",
+      "The admins will review it. You can follow your cases on the ",
+      link,
+      "."
+    );
+    ui.fields.appendChild(message);
+    ui.addButton("OK", "cp-btn-primary", ui.close);
+  }
+
+  // Sends `work()` from the modal; on success the page reloads and the confirmation opens.
+  async function submitCclCase(ui, work) {
+    let result = null;
+    await ui.submit(async () => {
+      result = await work();
+    });
+    if (result?.case) showCclCaseSent(result);
+  }
+
+  // Report a problem: the scenario sets the type and category, the player writes the details.
+  function openCclReportProblemModal(match, scenario) {
+    const ui = createCclModal("Report a problem");
+    ui.fields.appendChild(createCclMatchTitle(match));
+    ui.addField("Type", createCclReadonlyInput(CCL_CASE_TYPE_LABELS.problem));
+    ui.addField("Category", createCclReadonlyInput(CCL_CASE_CATEGORY_LABELS[scenario] || scenario));
+    const details = createCclCaseTextarea();
+    ui.addField("Details", details);
+    ui.addButton("Cancel", "cp-btn-secondary", ui.close);
+    ui.addButton("Send", "cp-btn-primary", () => submitCclCase(ui, () => {
+      if (!details.value.trim()) throw new Error("Describe the problem in Details.");
+      return cclRequest(`${CCL_MATCH_URL(match.id)}/cases`, "POST", { category: scenario, details: details.value.trim() });
+    }));
+    details.focus();
+  }
+
+  // Resolve a match in Error without games: a no-show, an agreed reschedule, or another case.
+  function openCclResolveModal(match) {
+    const ui = createCclModal("Resolve match");
+    ui.fields.appendChild(createCclMatchTitle(match));
+    const RESET_HINT = "The match time will be reset — agree on a new time with your opponent.";
+    const outcomes = [
+      ...[match.player_1, match.player_2].filter((player) => player?.id).map((player) => ({
+        value: `no_show:${player.id}`,
+        label: `Player ${cclPlayerName(player)} did not show up for the match`,
+        hint: `The admins will review the case. ${RESET_HINT}`,
+        button: "Submit",
+      })),
+      { value: "reschedule", label: "We agreed to reschedule the match", hint: RESET_HINT, button: "Confirm" },
+      { value: "other", label: "Other", hint: "", button: "Submit" },
+    ];
+    const outcomeSelect = document.createElement("select");
+    outcomeSelect.add(new Option("Choose what happened", ""));
+    outcomes.forEach((outcome) => outcomeSelect.add(new Option(outcome.label, outcome.value)));
+    const outcomeRow = ui.addField("Match outcome", outcomeSelect);
+    const hint = document.createElement("div");
+    hint.className = "cp-ccl-case-hint";
+    outcomeRow.appendChild(hint);
+
+    // Resolve → Other: type, category of that type, details.
+    const typeSelect = document.createElement("select");
+    CCL_MATCH_CASE_CHOICES.forEach((choice) => typeSelect.add(new Option(CCL_CASE_TYPE_LABELS[choice.case_type], choice.case_type)));
+    const categorySelect = document.createElement("select");
+    const details = createCclCaseTextarea();
+    const otherRows = [
+      ui.addField("Type", typeSelect),
+      ui.addField("Category", categorySelect),
+      ui.addField("Details", details),
+    ];
+    const syncCategories = () => {
+      const choice = CCL_MATCH_CASE_CHOICES.find((entry) => entry.case_type === typeSelect.value);
+      categorySelect.innerHTML = "";
+      (choice?.categories || []).forEach((category) => categorySelect.add(new Option(CCL_CASE_CATEGORY_LABELS[category], category)));
+      otherRows[1].classList.toggle("cp-hidden", !choice?.categories.length || outcomeSelect.value !== "other");
+    };
+
+    ui.addButton("Cancel", "cp-btn-secondary", ui.close);
+    const submitButton = ui.addButton("Submit", "cp-btn-primary", () => {
+      const value = outcomeSelect.value;
+      if (value === "other") {
+        return submitCclCase(ui, () => {
+          if (!details.value.trim()) throw new Error("Describe the problem in Details.");
+          return cclRequest(`${CCL_MATCH_URL(match.id)}/cases`, "POST", {
+            case_type: typeSelect.value,
+            category: categorySelect.value || null,
+            details: details.value.trim(),
+          });
+        });
+      }
+      const [action, playerId] = value.split(":");
+      return submitCclCase(ui, () => cclRequest(`${CCL_MATCH_URL(match.id)}/resolve`, "POST", {
+        action,
+        no_show_player_id: playerId || null,
+      }));
+    });
+
+    const syncOutcome = () => {
+      const outcome = outcomes.find((entry) => entry.value === outcomeSelect.value) || null;
+      hint.textContent = outcome?.hint || "";
+      submitButton.textContent = outcome?.button || "Submit";
+      submitButton.disabled = !outcome;
+      otherRows.forEach((row) => row.classList.toggle("cp-hidden", outcome?.value !== "other"));
+      syncCategories();
+    };
+    typeSelect.addEventListener("change", syncCategories, { signal: ui.signal });
+    outcomeSelect.addEventListener("change", syncOutcome, { signal: ui.signal });
+    syncOutcome();
+  }
+
   function createCclMatchRow(match, data, options) {
     const wrap = document.createElement("div");
     wrap.className = "cp-ccl-match";
@@ -9615,26 +9879,40 @@
 
     const actions = document.createElement("div");
     actions.className = "cp-ccl-actions";
-    const addAction = (text, className, onClick) => {
+    const createAction = (text, className, onClick) => {
       const button = document.createElement("button");
       button.type = "button";
       button.className = `cp-btn ${className}`;
       button.textContent = text;
       button.addEventListener("click", onClick);
-      actions.appendChild(button);
+      return button;
     };
+    const addAction = (text, className, onClick) => actions.appendChild(createAction(text, className, onClick));
+    // The case the player may send now (case_scenario from the server, ccl-cases.js).
+    const scenario = match.my_side ? match.case_scenario : null;
+    const reportProblem = { label: "Report a problem", onClick: () => openCclReportProblemModal(match, scenario) };
     const isPlanned = String(match.status || "Planned").toLowerCase() === "planned";
     if (match.my_side && isPlanned) {
       const myId = (match.my_side === 1 ? match.player_1 : match.player_2)?.id;
       const incoming = isCclActiveProposal(match) && match.proposed_time_by_player_id !== myId;
-      addAction(
+      const timeButton = createAction(
         incoming ? "Review time" : isCclActiveProposal(match) ? "Edit proposal" : hasValue(match.time_utc) ? "Change time" : "Propose time",
         incoming ? "cp-btn-primary" : "cp-btn-secondary",
         () => openCclTimeProposalModal(match)
       );
+      actions.appendChild(scenario === "scheduling" ? createCclSplitAction(timeButton, [reportProblem]) : timeButton);
+    }
+    if (scenario === "not_played") {
+      addAction("Resolve", "cp-btn-primary", () => openCclResolveModal(match));
+    }
+    if (scenario === "incomplete") {
+      addAction("Report a problem", "cp-btn-secondary", reportProblem.onClick);
     }
     if (canEditResult) {
       addAction("Edit results", "cp-btn-secondary", () => openCclResultsModal(match));
+    }
+    if (scenario === "result_dispute") {
+      actions.appendChild(createCclSplitAction(null, [reportProblem]));
     }
     if (options.manage) {
       addAction("Edit", "cp-btn-secondary", () => openCclMatchEditModal(data, match));

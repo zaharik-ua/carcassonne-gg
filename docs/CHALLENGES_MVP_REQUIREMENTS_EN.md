@@ -408,7 +408,7 @@ This flow is used if players have already played a match, but did not create an 
 - [x] **CH-CAS-005** Mutual cancellation changes the duel to `Cancelled`, stores `cancellation_reason = 'Match cancelled by mutual agreement of both players.'`, and does not create a `tournament_cases` record.
 - [x] **CH-CAS-006** For a no-show, the modal displays a required editable `Details` textarea prefilled in English with the absent player, opponent, Challenge period name, and scheduled UTC date and time.
 - [x] **CH-CAS-007** A no-show changes the duel to `Cancelled`, stores the final `Details` text in `duels.cancellation_reason`, and creates an open `tournament_cases` record with type `complaint` and category `no_show`.
-- [x] **CH-CAS-008** The no-show case is linked to the duel, Challenge period, and the period's `rivals_tournament_id` when present; it also stores the submitting player and reported player.
+- [x] **CH-CAS-008** The no-show case is linked to the duel, Challenge period, and the period's `rivals_tournament_id` when present; it also stores the submitting player; the no-show player is named in `details`.
 - [ ] **CH-CAS-009** Both resolution flows transactionally change the related request to `auto_cancelled`; the `Cancelled` duel stops occupying a slot, but neither player's participation status changes.
 - [x] **CH-CAS-010** The backend permits resolution only to a participant in the relevant Challenge duel, rechecks the `Error` status and absence of a result, and returns a conflict when the match has already changed.
 - [x] **CH-CAS-011** `tournament_cases` is not exposed by a dedicated list API and is not displayed anywhere in the UI yet.
@@ -613,16 +613,14 @@ This universal table stores tournament complaints, problems, and player requests
 | Field | Type | Null | Default | Purpose |
 |---|---|---:|---|---|
 | `id` | `INTEGER` | no | auto | Autoincrement primary key. |
-| `case_type` | `TEXT` | no | `'problem'` | `complaint`, `problem`, `request`, or `other`. |
+| `case_type` | `TEXT` | no | `'problem'` | `problem`, `complaint`, `request`, `feedback`, or `other`. |
 | `category` | `TEXT` | yes | `NULL` | Case subtype; `no_show` for the current flow. |
 | `status` | `TEXT` | no | `'open'` | `open`, `in_progress`, `resolved`, or `closed`. |
 | `priority` | `TEXT` | no | `'normal'` | `low`, `normal`, `high`, or `urgent`. |
-| `subject` | `TEXT` | no | — | Short case subject. |
 | `details` | `TEXT` | no | `''` | Details supplied by the player or system. |
 | `submitted_by_user_id` | `INTEGER` | yes | `NULL` | FK → `users.id`; authenticated user who created the case. |
 | `submitted_by_player_id` | `TEXT` | no | — | FK → `profiles.id`; player who submitted the case. |
 | `responsible_user_id` | `INTEGER` | yes | `NULL` | FK → `users.id`; user responsible for handling the case. |
-| `reported_player_id` | `TEXT` | yes | `NULL` | FK → `profiles.id`; player the case concerns. |
 | `match_id` | `TEXT` | yes | `NULL` | FK → `matches.id`; related team match, when present. |
 | `duel_id` | `TEXT` | yes | `NULL` | FK → `duels.id`; related duel, when present. |
 | `tournament_id` | `TEXT` | yes | `NULL` | FK → `tournaments.id`; related tournament, when present. |

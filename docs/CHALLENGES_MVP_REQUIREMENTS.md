@@ -408,7 +408,7 @@ Terminal-статуси для повторного запрошення:
 - [x] **CH-CAS-005** Взаємне скасування переводить duel у `Cancelled`, записує `cancellation_reason = 'Match cancelled by mutual agreement of both players.'` і не створює `tournament_cases`.
 - [x] **CH-CAS-006** Для no-show modal показує обов'язкове editable textarea `Details`, попередньо заповнене англійським текстом із no-show гравцем, суперником, назвою Challenge period і запланованими UTC датою та часом.
 - [x] **CH-CAS-007** No-show переводить duel у `Cancelled`, зберігає фінальний текст `Details` у `duels.cancellation_reason` і створює відкритий `tournament_cases` типу `complaint` та категорії `no_show`.
-- [x] **CH-CAS-008** No-show case пов'язується з duel, Challenge period і `rivals_tournament_id` періоду, якщо турнір заданий; також зберігаються автор звернення та reported player.
+- [x] **CH-CAS-008** No-show case пов'язується з duel, Challenge period і `rivals_tournament_id` періоду, якщо турнір заданий; також зберігається автор звернення; гравець, який не з'явився, вказаний у `details`.
 - [ ] **CH-CAS-009** Обидва resolution flow транзакційно переводять пов'язану заявку в `auto_cancelled`; `Cancelled` duel перестає займати слот, але статус участі обох гравців не змінюється.
 - [x] **CH-CAS-010** Backend дозволяє resolution лише учаснику відповідного Challenge-duel, повторно перевіряє `Error` і відсутність результату та повертає conflict для вже зміненого матчу.
 - [x] **CH-CAS-011** `tournament_cases` поки не повертається окремим list API і ніде не відображається в UI.
@@ -613,16 +613,14 @@ Terminal-статуси для повторного запрошення:
 | Поле | Тип | Null | Default | Призначення |
 |---|---|---:|---|---|
 | `id` | `INTEGER` | ні | auto | Autoincrement primary key. |
-| `case_type` | `TEXT` | ні | `'problem'` | `complaint`, `problem`, `request` або `other`. |
+| `case_type` | `TEXT` | ні | `'problem'` | `problem`, `complaint`, `request`, `feedback` або `other`. |
 | `category` | `TEXT` | так | `NULL` | Підтип кейсу; для поточного flow — `no_show`. |
 | `status` | `TEXT` | ні | `'open'` | `open`, `in_progress`, `resolved` або `closed`. |
 | `priority` | `TEXT` | ні | `'normal'` | `low`, `normal`, `high` або `urgent`. |
-| `subject` | `TEXT` | ні | — | Коротка тема кейсу. |
 | `details` | `TEXT` | ні | `''` | Деталі, надані гравцем або системою. |
 | `submitted_by_user_id` | `INTEGER` | так | `NULL` | FK → `users.id`; auth-користувач, який створив кейс. |
 | `submitted_by_player_id` | `TEXT` | ні | — | FK → `profiles.id`; гравець, який відправив звернення. |
 | `responsible_user_id` | `INTEGER` | так | `NULL` | FK → `users.id`; відповідальний за опрацювання кейсу. |
-| `reported_player_id` | `TEXT` | так | `NULL` | FK → `profiles.id`; гравець, щодо якого створено звернення. |
 | `match_id` | `TEXT` | так | `NULL` | FK → `matches.id`; пов'язаний командний матч, якщо є. |
 | `duel_id` | `TEXT` | так | `NULL` | FK → `duels.id`; пов'язаний duel, якщо є. |
 | `tournament_id` | `TEXT` | так | `NULL` | FK → `tournaments.id`; пов'язаний турнір, якщо є. |

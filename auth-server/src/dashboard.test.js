@@ -35,16 +35,16 @@ async function createDatabase(t) {
     CREATE TABLE tournament_access_users (tournament_entity_type TEXT, tournament_id TEXT, user_id INTEGER, role TEXT);
     CREATE TABLE matches (id TEXT PRIMARY KEY, time_utc TEXT, deleted_at TEXT);
     CREATE TABLE tournament_cases (id INTEGER PRIMARY KEY, case_type TEXT, category TEXT, status TEXT, priority TEXT,
-      subject TEXT, submitted_by_user_id INTEGER, submitted_by_player_id TEXT, resolution TEXT, resolved_at TEXT,
-      responsible_user_id INTEGER, reported_player_id TEXT, match_id TEXT,
+      details TEXT, submitted_by_user_id INTEGER, submitted_by_player_id TEXT, resolution TEXT, resolved_at TEXT,
+      responsible_user_id INTEGER, match_id TEXT,
       duel_id TEXT, tournament_id TEXT, challenge_period_id TEXT, created_at TEXT, deleted_at TEXT);
-    INSERT INTO tournament_cases (id, case_type, category, status, priority, subject, submitted_by_player_id,
-      responsible_user_id, reported_player_id, duel_id, tournament_id, challenge_period_id, created_at, deleted_at) VALUES
-      (1, 'complaint', 'no_show', 'open', 'normal', 'No-show report: two vs one', 'p1', NULL, 'p2', 'error', 'WTCOC', NULL, '2026-11-10 10:00:00', NULL),
-      (2, 'problem', NULL, 'in_progress', 'urgent', 'Wrong result', 'p2', 1, NULL, NULL, 'OTHER', NULL, '2026-11-18 10:00:00', NULL),
-      (3, 'complaint', 'no_show', 'open', 'normal', 'Challenge no-show', 'p3', NULL, 'p1', NULL, NULL, 'cp1', '2026-11-12 10:00:00', NULL),
-      (4, 'request', NULL, 'resolved', 'high', 'Resolved', 'p1', NULL, NULL, NULL, 'WTCOC', NULL, '2026-11-01 10:00:00', NULL),
-      (5, 'other', NULL, 'open', 'high', 'Deleted', 'p1', NULL, NULL, NULL, 'WTCOC', NULL, '2026-11-01 10:00:00', '2026-11-02');
+    INSERT INTO tournament_cases (id, case_type, category, status, priority, details, submitted_by_player_id,
+      responsible_user_id, duel_id, tournament_id, challenge_period_id, created_at, deleted_at) VALUES
+      (1, 'complaint', 'no_show', 'open', 'normal', 'Player two did not show up', 'p1', NULL, 'error', 'WTCOC', NULL, '2026-11-10 10:00:00', NULL),
+      (2, 'problem', NULL, 'in_progress', 'urgent', 'Wrong result', 'p2', 1, NULL, 'OTHER', NULL, '2026-11-18 10:00:00', NULL),
+      (3, 'complaint', 'no_show', 'open', 'normal', 'Challenge no-show', 'p3', NULL, NULL, NULL, 'cp1', '2026-11-12 10:00:00', NULL),
+      (4, 'request', NULL, 'resolved', 'high', 'Resolved', 'p1', NULL, NULL, 'WTCOC', NULL, '2026-11-01 10:00:00', NULL),
+      (5, 'other', NULL, 'open', 'high', 'Deleted', 'p1', NULL, NULL, 'WTCOC', NULL, '2026-11-01 10:00:00', '2026-11-02');
     UPDATE tournament_cases SET resolution = 'Fixed', resolved_at = '2026-11-03 10:00:00' WHERE id = 4;
     CREATE TABLE news (id INTEGER PRIMARY KEY, title TEXT, status TEXT, is_proposal INTEGER, tournament_id TEXT,
       created_by TEXT, created_at TEXT, deleted_at TEXT);
@@ -165,7 +165,7 @@ test("global admin sees global blocks and only the tournaments they were added t
   assert.equal(cases.count, 3);
   assert.equal(cases.items[0].responsible, "Admin");
   assert.equal(cases.items[1].submitted_by.name, "one");
-  assert.equal(cases.items[1].reported_player.name, "two");
+  assert.equal(cases.items[1].details, "Player two did not show up");
   assert.equal(cases.items[1].days_open, 10);
   assert.equal(cases.items[1].link, "/player-hub/tournaments?id=WTCOC&edit=1&match_id=M1");
   assert.equal(cases.items[2].link, "/player-hub/challenges");
@@ -190,7 +190,8 @@ test("tournament admin: unplanned duels with a deadline and error duels of their
   const dashboard = await buildDashboard(db, USERS.tournamentAdmin, { now: NOW });
   assert.deepEqual(dashboard.roles, { global_admin: false, tournament_admin: true, player: false });
   assert.equal(dashboard.blocks.news_drafts, undefined);
-  assert.equal(dashboard.blocks.cases, undefined);
+  // Open cases of their tournaments only (WTCOC, CCL-2027): not OTHER, not resolved or deleted ones.
+  assert.deepEqual(dashboard.blocks.cases.items.map((item) => item.id), [1]);
   assert.equal(dashboard.blocks.my_duels, undefined);
   assert.deepEqual(dashboard.tournaments.map((item) => item.id).sort(), ["WTCOC", "ccl-2027"]);
 
@@ -226,6 +227,7 @@ test("days and tournament filters", async (t) => {
   // A tournament the user does not administer shows nothing.
   const foreign = await buildDashboard(db, USERS.tournamentAdmin, { now: NOW, query: { tournament_id: "OTHER" } });
   assert.equal(foreign.blocks.error_duels.count, 0);
+  assert.equal(foreign.blocks.cases.count, 0);
   assert.equal(foreign.filters.tournament_id, null);
 });
 
@@ -254,11 +256,11 @@ test("player sees the cases they submitted in every tournament, active first", a
   const db = await createDatabase(t);
   const dashboard = await buildDashboard(db, USERS.player, { now: NOW });
   const myCases = dashboard.blocks.my_cases;
-  // Case 3 is about p1 but was filed by p3, case 5 is deleted.
+  // Case 3 was filed by p3, case 5 is deleted.
   assert.deepEqual(myCases.items.map((item) => [item.id, item.status]), [[1, "open"], [4, "resolved"]]);
   assert.equal(myCases.count, 2);
   assert.equal(myCases.active_count, 1);
-  assert.equal(myCases.items[0].reported_player.name, "two");
+  assert.equal(myCases.items[0].details, "Player two did not show up");
   assert.equal(myCases.items[0].link, "/player-hub/tournaments?id=WTCOC");
   assert.equal(myCases.items[1].resolution, "Fixed");
   assert.equal(myCases.items[1].resolved_at, "2026-11-03T10:00:00.000Z");

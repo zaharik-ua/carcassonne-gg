@@ -59,7 +59,8 @@ import {
   resolveMaxPendingRequestsPerPlayer,
   shouldCloseChallengeRequestsForPlayerStatus,
 } from "./challenges.js";
-import { ensureTournamentCasesSchema } from "./tournament-cases.js";
+import { ensureTournamentCasesSchema, registerTournamentCaseRoutes } from "./tournament-cases.js";
+import { registerCclCaseRoutes } from "./ccl-cases.js";
 import { registerDuelGameBgaResultRoutes } from "./duel-game-bga-result.js";
 import { registerBgaPlayerAvatarRoutes } from "./bga-player-avatar.js";
 import { ensureInPersonSchema } from "./in-person/schema.js";
@@ -8474,6 +8475,22 @@ registerCclMatchRoutes(app, {
   logAuditEvent,
 });
 
+registerCclCaseRoutes(app, {
+  db,
+  requireAuthenticated,
+  requireTrustedJsonRequest,
+  getAuditActor,
+  logAuditEvent,
+});
+
+registerTournamentCaseRoutes(app, {
+  db,
+  requireAuthenticated,
+  requireTrustedJsonRequest,
+  getAuditActor,
+  logAuditEvent,
+});
+
 registerCclStructureRoutes(app, {
   db,
   requireAuthenticated,
@@ -11694,20 +11711,7 @@ app.patch("/challenge-periods/:id/matches/:duelId/resolve-issue", requireAuthent
         );
       }
       if (resolution === "player_no_show") {
-        const profileRows = await dbAllAsync(
-          `
-            SELECT id, bga_nickname, name
-            FROM profiles
-            WHERE id IN (?, ?)
-          `,
-          participantIds
-        );
-        const profilesById = new Map((profileRows || []).map((row) => [normalizeNullableText(row?.id), row]));
-        const otherPlayerId = participantIds.find((playerId) => playerId !== reportedPlayerId) || null;
-        const reportedProfile = profilesById.get(reportedPlayerId) || null;
-        const otherProfile = profilesById.get(otherPlayerId) || null;
-        const reportedName = normalizeNullableText(reportedProfile?.bga_nickname ?? reportedProfile?.name) || reportedPlayerId;
-        const otherName = normalizeNullableText(otherProfile?.bga_nickname ?? otherProfile?.name) || otherPlayerId || "opponent";
+        // The Details the player confirmed already name the no-show player and the opponent.
         const insertResult = await dbRunAsync(
           `
             INSERT INTO tournament_cases (
@@ -11715,25 +11719,21 @@ app.patch("/challenge-periods/:id/matches/:duelId/resolve-issue", requireAuthent
               category,
               status,
               priority,
-              subject,
               details,
               submitted_by_user_id,
               submitted_by_player_id,
-              reported_player_id,
               duel_id,
               tournament_id,
               challenge_period_id,
               created_at,
               updated_at
             )
-            VALUES ('complaint', 'no_show', 'open', 'normal', ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+            VALUES ('complaint', 'no_show', 'open', 'normal', ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
           `,
           [
-            `No-show report: ${reportedName} vs ${otherName}`,
             submittedDetails,
             actorUserId,
             actorPlayerId,
-            reportedPlayerId,
             duelId,
             normalizeNullableText(period.rivals_tournament_id),
             periodId,

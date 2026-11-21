@@ -647,23 +647,33 @@
   }
 
   const CASE_PRIORITY_TONE = { urgent: "attention", high: "attention", normal: "warn", low: "" };
+  // Case types and categories as players see them (auth-server/src/tournament-cases.js).
   const CASE_LABELS = {
-    complaint: "Complaint", problem: "Problem", request: "Request", other: "Other",
-    open: "Open", in_progress: "In progress", resolved: "Resolved", closed: "Closed", no_show: "No-show",
+    problem: "Match problem", complaint: "Complaint", request: "Request", feedback: "Feedback", other: "Other",
+    scheduling: "Scheduling the match time", not_played: "Match was not played", incomplete: "Match not finished",
+    result_dispute: "Wrong match result", conduct: "Rule violation or opponent's behaviour",
+    general: "Other question for admins", no_show: "No-show",
+    open: "Open", in_progress: "In progress", resolved: "Resolved", closed: "Closed",
     urgent: "Urgent", high: "High", normal: "Normal", low: "Low",
   };
   const caseLabel = (value) => CASE_LABELS[value] || String(value || "").replace(/_/g, " ");
+  const CASE_DETAILS_PREVIEW = 160;
+
+  function caseTitle(item) {
+    return [caseLabel(item.type), item.category ? caseLabel(item.category) : ""].filter(Boolean).join(": ") || `Case #${item.id}`;
+  }
+
+  function caseDetailsPreview(item) {
+    const details = String(item.details || "").replace(/\s+/g, " ").trim();
+    return details.length > CASE_DETAILS_PREVIEW ? `${details.slice(0, CASE_DETAILS_PREVIEW - 1)}…` : details;
+  }
 
   function renderCase(item) {
-    const who = [
-      item.submitted_by?.name ? `From ${item.submitted_by.name}` : "",
-      item.reported_player?.name ? `about ${item.reported_player.name}` : "",
-    ].filter(Boolean).join(" ");
     return row({
-      title: item.subject || `Case #${item.id}`,
+      title: caseTitle(item),
       lines: [
-        [caseLabel(item.type), item.category ? caseLabel(item.category) : "", item.tournament?.name].filter(Boolean).join(" · "),
-        who,
+        [item.tournament?.name, item.submitted_by?.name ? `From ${item.submitted_by.name}` : ""].filter(Boolean).join(" · "),
+        caseDetailsPreview(item),
         [
           item.created_at ? `Opened ${formatDate(item.created_at)} (${item.days_open ?? 0} d)` : "",
           `${caseLabel(item.status)}${item.responsible ? `, ${item.responsible}` : ", unassigned"}`,
@@ -681,8 +691,8 @@
   function renderMyCase(item) {
     const active = item.status === "open" || item.status === "in_progress";
     const lines = [
-      [caseLabel(item.type), item.category ? caseLabel(item.category) : "", item.tournament?.name].filter(Boolean).join(" · "),
-      item.reported_player?.name ? `About ${item.reported_player.name}` : "",
+      item.tournament?.name || "",
+      caseDetailsPreview(item),
       active
         ? [
           item.created_at ? `Submitted ${formatDate(item.created_at)} (${item.days_open ?? 0} d)` : "",
@@ -695,7 +705,7 @@
       !active && item.resolution ? `Resolution: ${item.resolution}` : "",
     ];
     return row({
-      title: item.subject || `Case #${item.id}`,
+      title: caseTitle(item),
       lines,
       side: [badge({ label: caseLabel(item.status), tone: MY_CASE_STATUS_TONE[item.status] ?? "" }), linkTo(item.link)],
     });
@@ -769,7 +779,11 @@
       section.appendChild(el(
         "div",
         "dash-section-note",
-        data.filters?.tournament_id ? "Cases of the selected tournament." : "Cases of all tournaments, most urgent and oldest first."
+        data.filters?.tournament_id
+          ? "Cases of the selected tournament."
+          : data.roles?.global_admin
+            ? "Cases of all tournaments, most urgent and oldest first."
+            : "Cases of the tournaments you manage, most urgent and oldest first."
       ));
     }
     if (config.key === "my_cases") {

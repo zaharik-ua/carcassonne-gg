@@ -1,0 +1,383 @@
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+<!-- Contact admins: a case without a match, for the CCL Rules page (auth-server/src/tournament-cases.js). -->
+<!-- СТИЛІ -->
+<style>
+  :root {
+    --main-bg-color: #15375c;
+    --hover-bg-color: #0e2c4d;
+    --accent-text-color: #fff;
+    --muted: #666;
+  }
+
+  body {
+    font-family: 'Montserrat', sans-serif;
+    margin: 0;
+    color: #222;
+  }
+
+  .ca-wrap {
+    display: grid;
+    gap: 10px;
+    padding: 4px 2px 12px;
+    max-width: 520px;
+    margin: 0 auto;
+  }
+
+  .ca-btn {
+    box-sizing: border-box;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    height: 32px;
+    border: 1px solid #c8ced8;
+    border-radius: 2px;
+    padding: 0 14px;
+    font: inherit;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    line-height: 1.2;
+    background: #eef2f6;
+    color: #333;
+    text-decoration: none;
+  }
+
+  .ca-btn-primary {
+    background-color: var(--main-bg-color);
+    border-color: var(--main-bg-color);
+    color: var(--accent-text-color);
+  }
+
+  .ca-btn-primary:hover,
+  .ca-btn-primary:focus-visible {
+    background-color: var(--hover-bg-color);
+    border-color: var(--hover-bg-color);
+  }
+
+  .ca-btn:disabled {
+    cursor: not-allowed;
+    opacity: 0.6;
+  }
+
+  .ca-start {
+    justify-self: center;
+    min-width: 200px;
+  }
+
+  .ca-card {
+    background: #fff;
+    padding: 12px;
+    display: grid;
+    gap: 10px;
+    font-size: 14px;
+    line-height: 1.4;
+  }
+
+  .ca-card form {
+    display: grid;
+    gap: 10px;
+  }
+
+  .ca-title {
+    font-size: 16px;
+    font-weight: 700;
+  }
+
+  .ca-row {
+    display: grid;
+    gap: 2px;
+    min-width: 0;
+  }
+
+  .ca-row[hidden] {
+    display: none;
+  }
+
+  .ca-row label {
+    font-size: 12px;
+    font-weight: 600;
+    color: #333;
+  }
+
+  .ca-row select,
+  .ca-row textarea {
+    width: 100%;
+    border: 1px solid #c8ced8;
+    border-radius: 4px;
+    padding: 4px 8px;
+    font: inherit;
+    font-size: 14px;
+    box-sizing: border-box;
+    background: #fff;
+  }
+
+  .ca-row select {
+    height: 32px;
+  }
+
+  .ca-row textarea {
+    min-height: 120px;
+    resize: vertical;
+    padding-top: 8px;
+    line-height: 1.4;
+  }
+
+  .ca-row select:focus,
+  .ca-row textarea:focus {
+    outline: none;
+    border-color: #9ea7b3;
+  }
+
+  .ca-hint {
+    font-size: 12px;
+    color: var(--muted);
+  }
+
+  .ca-note {
+    padding: 8px 10px;
+    border-radius: 4px;
+    background: #f5f8fc;
+    border: 1px solid #d6e2f0;
+    font-size: 13px;
+    color: #334155;
+    display: grid;
+    gap: 6px;
+    justify-items: start;
+  }
+
+  .ca-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .ca-actions .ca-btn-primary {
+    margin-left: auto;
+  }
+
+  .ca-error {
+    color: #c62828;
+    font-size: 13px;
+    font-weight: 600;
+  }
+
+  .ca-error:empty {
+    display: none;
+  }
+
+  .ca-card a:not(.ca-btn) {
+    color: #0277BD;
+    font-weight: 600;
+    text-decoration: none;
+  }
+
+  .ca-card a:not(.ca-btn):hover {
+    text-decoration: underline;
+  }
+</style>
+
+<!-- HTML -->
+<div class="ca-wrap" id="cclContactAdmins">
+  <button type="button" class="ca-btn ca-btn-primary ca-start" id="caStart">Contact admins</button>
+  <div id="caPanel" hidden></div>
+</div>
+
+<!-- СКРИПТ -->
+<script>
+(function () {
+  const API_BASE = window.AUTH_BASE_URL || "https://api.carcassonne.gg";
+  // CCL for now; the same widget will take the tournament id from the page later.
+  const TOURNAMENT_ID = "CCL-2027";
+  const CASES_URL = `${API_BASE}/tournaments/${encodeURIComponent(TOURNAMENT_ID)}/cases`;
+  const ME_URL = `${API_BASE}/auth/me`;
+  const SIGN_IN_URL = "https://carcassonne.gg/player/?id=noprofile";
+  const DASHBOARD_URL = "https://carcassonne.gg/player-hub/dashboard/";
+  const DETAILS_MAX_LENGTH = 5000;
+  // NON_MATCH_CASE_CHOICES on the server; a type without categories hides the Category field.
+  const CASE_TYPES = [
+    { value: "request", label: "Request", categories: [{ value: "general", label: "Other question for admins" }] },
+    { value: "complaint", label: "Complaint", categories: [{ value: "conduct", label: "Rule violation or opponent's behaviour" }] },
+    { value: "feedback", label: "Feedback", categories: [] },
+  ];
+
+  const startButton = document.getElementById("caStart");
+  const panel = document.getElementById("caPanel");
+  let viewer = null;
+  let panelOpen = false;
+
+  function el(tag, className, textContent) {
+    const node = document.createElement(tag);
+    if (className) node.className = className;
+    if (textContent !== undefined) node.textContent = textContent;
+    return node;
+  }
+
+  function topLink(href, label, className = "") {
+    const link = el("a", className, label);
+    link.href = href;
+    link.target = "_top";
+    return link;
+  }
+
+  function show(card) {
+    panel.innerHTML = "";
+    panel.appendChild(card);
+    panel.hidden = false;
+  }
+
+  function renderSignIn(message) {
+    const card = el("div", "ca-card");
+    const note = el("div", "ca-note");
+    note.append(el("div", "", message), topLink(SIGN_IN_URL, "Sign in", "ca-btn"));
+    card.append(el("div", "ca-title", "Contact admins"), note);
+    show(card);
+  }
+
+  function renderSent(result) {
+    const card = el("div", "ca-card");
+    const text = el("div");
+    text.append("Your case was sent. The admins will review it. You can follow your cases on the ", topLink(DASHBOARD_URL, "Dashboard"), ".");
+    const again = el("button", "ca-btn", "Send another");
+    again.type = "button";
+    again.addEventListener("click", renderForm);
+    const actions = el("div", "ca-actions");
+    actions.appendChild(again);
+    card.append(el("div", "ca-title", "Case sent"), text, actions);
+    show(card);
+  }
+
+  function row(labelText, control) {
+    const wrap = el("div", "ca-row");
+    const label = el("label", "", labelText);
+    control.id = `ca-${labelText.toLowerCase()}`;
+    label.htmlFor = control.id;
+    wrap.append(label, control);
+    return wrap;
+  }
+
+  function renderForm() {
+    const card = el("div", "ca-card");
+    const form = el("form");
+    form.noValidate = true;
+
+    const typeSelect = el("select");
+    CASE_TYPES.forEach((type) => typeSelect.add(new Option(type.label, type.value)));
+    const categorySelect = el("select");
+    const categoryRow = row("Category", categorySelect);
+    const details = el("textarea");
+    details.maxLength = DETAILS_MAX_LENGTH;
+    details.placeholder = "Your question, complaint or feedback";
+    const error = el("div", "ca-error");
+    const cancel = el("button", "ca-btn", "Cancel");
+    cancel.type = "button";
+    const submit = el("button", "ca-btn ca-btn-primary", "Send");
+    submit.type = "submit";
+
+    const syncCategories = () => {
+      const type = CASE_TYPES.find((entry) => entry.value === typeSelect.value);
+      categorySelect.innerHTML = "";
+      (type?.categories || []).forEach((category) => categorySelect.add(new Option(category.label, category.value)));
+      categoryRow.hidden = !type?.categories.length;
+    };
+    typeSelect.addEventListener("change", syncCategories);
+    syncCategories();
+
+    cancel.addEventListener("click", () => {
+      panelOpen = false;
+      panel.hidden = true;
+    });
+
+    form.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const text = details.value.trim();
+      if (!text) {
+        error.textContent = "Write the details of your case.";
+        return;
+      }
+      error.textContent = "";
+      submit.disabled = true;
+      try {
+        const response = await fetch(CASES_URL, {
+          method: "POST",
+          credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ case_type: typeSelect.value, category: categorySelect.value || null, details: text }),
+        });
+        const result = await response.json().catch(() => ({}));
+        if (response.status === 401) {
+          renderSignIn("Sign in on carcassonne.gg to contact the admins.");
+          return;
+        }
+        if (!response.ok || !result.ok) throw new Error(result.message || "Failed to send the case. Please try again.");
+        renderSent(result);
+      } catch (requestError) {
+        error.textContent = requestError.message;
+      } finally {
+        submit.disabled = false;
+      }
+    });
+
+    const actions = el("div", "ca-actions");
+    actions.append(cancel, submit);
+    form.append(
+      row("Type", typeSelect),
+      categoryRow,
+      row("Details", details),
+      el("div", "ca-hint", "For a problem with one of your matches, use Report a problem next to the match in Player Hub."),
+      error,
+      actions
+    );
+    card.append(el("div", "ca-title", "Contact admins"), form);
+    show(card);
+  }
+
+  async function loadViewer() {
+    const response = await fetch(ME_URL, { credentials: "include" });
+    if (response.status === 401) return null;
+    const result = await response.json().catch(() => ({}));
+    return result?.authenticated ? result.user || null : null;
+  }
+
+  async function render() {
+    try {
+      viewer = await loadViewer();
+    } catch (_error) {
+      viewer = null;
+    }
+    if (!viewer) {
+      renderSignIn("Sign in on carcassonne.gg to contact the admins.");
+      return;
+    }
+    if (!viewer.player_id && !viewer.bga_id) {
+      renderSignIn("Link your BGA profile on carcassonne.gg to contact the admins.");
+      return;
+    }
+    renderForm();
+  }
+
+  startButton.addEventListener("click", () => {
+    panelOpen = !panelOpen;
+    if (panelOpen) render();
+    else panel.hidden = true;
+  });
+
+  // The site header announces sign-in and sign-out without a page reload.
+  function onAuthStateChange() {
+    if (panelOpen) render();
+  }
+  window.addEventListener("gg-auth-state-change", onAuthStateChange);
+  try {
+    if (window.parent !== window) window.parent.addEventListener("gg-auth-state-change", onAuthStateChange);
+  } catch (_error) {
+    // Cross-origin parent: only this window's events are heard.
+  }
+
+  // Lets the parent page fit the iframe to the content, if it listens.
+  if (window.parent !== window && "ResizeObserver" in window) {
+    new ResizeObserver(() => {
+      window.parent.postMessage({ type: "ccl-contact-admins:height", height: document.documentElement.scrollHeight }, "*");
+    }).observe(document.body);
+  }
+})();
+</script>

@@ -19,6 +19,7 @@ import {
 } from "./duel-time-proposals.js";
 import { calculateGgDuelRating, loadGgRatingContext } from "./gg-ratings.js";
 import { getCclResultEditAccess, isCclResultEditableStatus } from "./ccl-result-edit.js";
+import { getCclCaseScenario } from "./ccl-cases.js";
 import { hasTournamentAdminAccess } from "./tournament-admin-access.js";
 
 // A CCL match is one duels row; stage, round and proposal live in the generic duels columns.
@@ -257,6 +258,10 @@ function formatMatch(match, context, viewerPlayerId, { isAdmin = false, games = 
     can_edit_result: resultAccess.allowed,
     // End of the players' editing window; admins may edit after it.
     result_edit_until: isCclResultEditableStatus(match.status) ? resultAccess.until : null,
+    // The case the viewer may send now (ccl-cases.js); Error needs the games to tell the cases apart.
+    case_scenario: games || text(match.status).toLowerCase() !== "error"
+      ? getCclCaseScenario({ match, games: games || [], playerId: viewerPlayerId, now })
+      : null,
     ...(games ? { games } : {}),
   };
 }

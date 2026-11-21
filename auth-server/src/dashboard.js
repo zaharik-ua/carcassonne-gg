@@ -2,8 +2,8 @@
 // - Global admins (users.admin = 1): open cases of all tournaments, news proposals in Draft,
 //   new users with a linked BGA profile.
 // - Tournament admins: only tournaments where the user has role = admin in tournament_access_users
-//   (global admins too): unplanned duels with a structured deadline (tournament_stages, CCL for now)
-//   and duels in Error.
+//   (global admins too): open cases of those tournaments (global admins see all), unplanned duels
+//   with a structured deadline (tournament_stages, CCL for now) and duels in Error.
 // - Players with a linked profile: their own active duels and the cases they submitted (all tournaments).
 // Blocks only list records with a link; actions on them come later.
 
@@ -308,31 +308,40 @@ export function buildCaseLink(row) {
   return `/player-hub/tournaments?${params.toString()}`;
 }
 
-// Open and in-progress cases of every tournament (global admins), most urgent and oldest first.
-export async function loadOpenCases(db, { nowIso, tournamentId = "" }) {
-  const filterSql = tournamentId ? "AND upper(trim(COALESCE(c.tournament_id, ''))) = upper(trim(?))" : "";
+// Open and in-progress cases, most urgent and oldest first: of every tournament (global admins,
+// `tournamentIds` = null), or only of `tournamentIds` (tournament admins); `tournamentId` narrows to one.
+export async function loadOpenCases(db, { nowIso, tournamentId = "", tournamentIds = null }) {
+  if (Array.isArray(tournamentIds) && !tournamentIds.length) return { count: 0, items: [] };
+  const filters = [];
+  const params = [];
+  if (tournamentId) {
+    filters.push("AND upper(trim(COALESCE(c.tournament_id, ''))) = upper(trim(?))");
+    params.push(tournamentId);
+  }
+  if (Array.isArray(tournamentIds)) {
+    filters.push(`AND upper(trim(COALESCE(c.tournament_id, ''))) IN (${placeholders(tournamentIds)})`);
+    params.push(...tournamentIds.map((id) => text(id).toUpperCase()));
+  }
   const rows = await dbAll(
     db,
     `
-      SELECT c.id, c.case_type, c.category, c.status, c.priority, c.subject, c.created_at,
+      SELECT c.id, c.case_type, c.category, c.status, c.priority, c.details, c.created_at,
         c.tournament_id, c.match_id, c.duel_id, c.challenge_period_id,
         c.submitted_by_player_id, sp.bga_nickname AS submitted_nickname, sp.name AS submitted_name,
-        c.reported_player_id, rp.bga_nickname AS reported_nickname, rp.name AS reported_name,
         ru.name AS responsible_name, d.match_id AS duel_match_id,
         t.name AS tournament_name, t.short_title AS tournament_short_title
       FROM tournament_cases c
       LEFT JOIN profiles sp ON sp.id = c.submitted_by_player_id
-      LEFT JOIN profiles rp ON rp.id = c.reported_player_id
       LEFT JOIN users ru ON ru.id = c.responsible_user_id
       LEFT JOIN duels d ON d.id = c.duel_id
       LEFT JOIN tournaments t ON upper(trim(t.id)) = upper(trim(c.tournament_id))
       WHERE c.deleted_at IS NULL
         AND c.status IN (${sqlList(OPEN_CASE_STATUSES)})
-        ${filterSql}
+        ${filters.join("\n        ")}
       ORDER BY CASE c.priority ${CASE_PRIORITY_ORDER.map((value, index) => `WHEN '${value}' THEN ${index}`).join(" ")} ELSE 9 END,
         julianday(c.created_at) ASC, c.id ASC
     `,
-    tournamentId ? [tournamentId] : []
+    params
   );
   const person = (row, idField, prefix) => {
     const id = text(row[idField]);
@@ -349,9 +358,8 @@ export async function loadOpenCases(db, { nowIso, tournamentId = "" }) {
         category: text(row.category) || null,
         status: text(row.status),
         priority: text(row.priority) || "normal",
-        subject: text(row.subject),
+        details: text(row.details),
         submitted_by: person(row, "submitted_by_player_id", "submitted"),
-        reported_player: person(row, "reported_player_id", "reported"),
         responsible: text(row.responsible_name) || null,
         tournament: text(row.tournament_id) ? tournamentOf(row) : null,
         duel_id: text(row.duel_id) || null,
@@ -374,19 +382,17 @@ export function buildPlayerCaseLink(row) {
 }
 
 // Cases the player submitted, in every tournament: active ones first (most urgent, oldest),
-// then resolved and closed ones, newest first. Complaints filed about the player are not shown.
+// then resolved and closed ones, newest first.
 export async function loadMyCases(db, { playerId, userId = null, nowIso }) {
   if (!playerId && !userId) return { count: 0, active_count: 0, items: [] };
   const rows = await dbAll(
     db,
     `
-      SELECT c.id, c.case_type, c.category, c.status, c.priority, c.subject, c.created_at,
+      SELECT c.id, c.case_type, c.category, c.status, c.priority, c.details, c.created_at,
         c.resolution, c.resolved_at, c.tournament_id, c.match_id, c.duel_id, c.challenge_period_id,
-        c.reported_player_id, rp.bga_nickname AS reported_nickname, rp.name AS reported_name,
         ru.name AS responsible_name,
         t.name AS tournament_name, t.short_title AS tournament_short_title
       FROM tournament_cases c
-      LEFT JOIN profiles rp ON rp.id = c.reported_player_id
       LEFT JOIN users ru ON ru.id = c.responsible_user_id
       LEFT JOIN tournaments t ON upper(trim(t.id)) = upper(trim(c.tournament_id))
       WHERE c.deleted_at IS NULL
@@ -406,17 +412,13 @@ export async function loadMyCases(db, { playerId, userId = null, nowIso }) {
     active_count: activeCount,
     items: rows.slice(0, DASHBOARD_BLOCK_LIMIT).map((row) => {
       const createdAt = toIso(row.created_at);
-      const reportedId = text(row.reported_player_id);
       return {
         id: row.id,
         type: text(row.case_type) || null,
         category: text(row.category) || null,
         status: ALL_CASE_STATUSES.includes(text(row.status)) ? text(row.status) : "open",
         priority: text(row.priority) || "normal",
-        subject: text(row.subject),
-        reported_player: reportedId
-          ? { id: reportedId, name: text(row.reported_nickname) || text(row.reported_name) || reportedId }
-          : null,
+        details: text(row.details),
         responsible: text(row.responsible_name) || null,
         resolution: text(row.resolution) || null,
         resolved_at: toIso(row.resolved_at),
@@ -504,6 +506,10 @@ export async function buildDashboard(db, user, { query = {}, now = new Date() } 
   const blocks = {};
   if (isGlobalAdmin) {
     blocks.cases = await loadOpenCases(db, { nowIso, tournamentId: requestedTournamentId });
+  } else if (adminTournaments.length) {
+    blocks.cases = await loadOpenCases(db, { nowIso, tournamentIds });
+  }
+  if (isGlobalAdmin) {
     blocks.news_drafts = await loadNewsDrafts(db, { nowIso });
     blocks.new_users = await loadNewUsers(db, { nowIso });
   }
