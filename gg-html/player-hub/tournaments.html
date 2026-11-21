@@ -2023,6 +2023,17 @@
     border-bottom-left-radius: 0;
   }
 
+  /* Report a problem in the arrow menu: light red, like the danger buttons. */
+  .cp-ccl-split .cp-dd-option.cp-dd-option-report {
+    background: #fff3f3;
+    color: #a12a2a;
+    font-weight: 600;
+  }
+
+  .cp-ccl-split .cp-dd-option.cp-dd-option-report:hover {
+    background: #fde8e8;
+  }
+
   .cp-ccl-split-toggle.open {
     filter: brightness(0.95);
   }
@@ -9251,6 +9262,11 @@
   const isCclResultEditableStatus = (status) => ["done", "error"].includes(String(status || "").trim().toLowerCase());
   const isCclNoShowGame = (game) => String(game?.status || "").trim().toLowerCase() === "no show";
   const isCclPendingGame = (game) => !!game?.isNewLocal && !game.bgaResultLoaded && !isCclNoShowGame(game);
+  // A game with a score, a rank or a No show (isCclGamePlayed in auth-server/src/ccl-cases.js).
+  const isCclGamePlayed = (game) => (
+    [game?.player_1_score, game?.player_2_score, game?.player_1_rank, game?.player_2_rank].some(hasValue)
+    || isCclNoShowGame(game)
+  );
 
   function createCclPendingGame(duelId, gameNumber) {
     return {
@@ -9309,14 +9325,11 @@
       });
       setWinner(game, isPlayer1 ? "player2" : "player1");
     };
-    const createSelect = (value, options, onChange) => {
-      const select = document.createElement("select");
-      options.forEach(([optionValue, label]) => select.add(new Option(label, optionValue)));
-      select.value = value;
-      select.disabled = isBusy();
-      select.addEventListener("change", () => onChange(select.value));
-      return select;
-    };
+    // Our dropdown (cp-dd) in place of a native select; `disabled` also locks it.
+    const createSelect = (value, options, onChange, disabled = false) => createCclDropdown(
+      options.map(([optionValue, label]) => ({ value: optionValue, label })),
+      { value, onChange, disabled: isBusy() || disabled }
+    ).root;
     const createButton = (text, className, onClick, disabled = false) => {
       const button = document.createElement("button");
       button.type = "button";
@@ -9365,7 +9378,6 @@
         render();
       });
       mode.classList.add("cp-ccl-game-mode");
-      mode.setAttribute("aria-label", `Game ${game.game_number}: how to add`);
       const modeField = document.createElement("div");
       modeField.className = "cp-duel-edit-field";
       modeField.appendChild(mode);
@@ -9512,14 +9524,12 @@
             else if (nextValue === "0") setWinner(game, side === "player1" ? "player2" : "player1");
             else game[`${prefix}_rank`] = null;
             render();
-          });
-        won.disabled = won.disabled || isNoShow;
+          }, isNoShow);
         addCell("Won", won, "cp-duel-edit-field--compact");
 
         const clock = createSelect(game[`${prefix}_clock`] === 1 ? "1" : "", [["", ""], ["1", "Yes"]], (nextValue) => {
           game[`${prefix}_clock`] = nextValue === "1" ? 1 : 0;
-        });
-        clock.disabled = clock.disabled || isNoShow;
+        }, isNoShow);
         addCell("Time loss", clock, "cp-duel-edit-field--compact");
 
         card.append(name, grid);
@@ -9683,7 +9693,7 @@
     });
   }
 
-  // `mainButton` (optional) with an arrow that opens a menu of { label, onClick } items.
+  // `mainButton` (optional) with an arrow that opens a menu of { label, onClick, className? } items.
   function createCclSplitAction(mainButton, items) {
     if (!cclSplitMenusBound) {
       cclSplitMenusBound = true;
@@ -9706,7 +9716,7 @@
     items.forEach((item) => {
       const option = document.createElement("button");
       option.type = "button";
-      option.className = "cp-dd-option";
+      option.className = `cp-dd-option ${item.className || ""}`.trim();
       option.textContent = item.label;
       option.addEventListener("click", (event) => {
         event.stopPropagation();
@@ -9790,15 +9800,27 @@
   }
 
   // Resolve a match in Error without games: a no-show, an agreed reschedule, or another case.
-  // Our dropdown (cp-dd) without search: { value, label } options; onChange(value) after a pick.
-  // `signal` ends the outside-click listener together with the modal.
-  function createCclDropdown(options, { placeholder = "Choose", onChange = () => {}, signal } = {}) {
-    let value = "";
+  // Our dropdown (cp-dd) without search, in place of a native select: { value, label } options,
+  // onChange(value) after a pick. One document listener closes the open ones on an outside click.
+  let cclDropdownsBound = false;
+
+  function createCclDropdown(options, { value: initialValue = "", placeholder = "", onChange = () => {}, disabled = false } = {}) {
+    if (!cclDropdownsBound) {
+      cclDropdownsBound = true;
+      document.addEventListener("click", (event) => {
+        document.querySelectorAll(".cp-ccl-dd").forEach((node) => {
+          if (!node.contains(event.target)) node.cclClose?.();
+        });
+      });
+    }
+    let value = String(initialValue ?? "");
     const root = document.createElement("div");
-    root.className = "cp-dd";
+    root.className = "cp-dd cp-ccl-dd";
     const button = document.createElement("button");
     button.type = "button";
     button.className = "cp-dd-btn";
+    button.disabled = !!disabled;
+    button.classList.toggle("disabled", !!disabled);
     const buttonText = document.createElement("span");
     buttonText.className = "cp-dd-btn-content";
     const chevron = document.createElement("span");
@@ -9812,20 +9834,23 @@
       menu.style.maxHeight = "0px";
       button.classList.remove("open");
     };
+    root.cclClose = close;
     const render = () => {
       const selected = options.find((option) => option.value === value) || null;
-      buttonText.textContent = selected ? selected.label : placeholder;
-      buttonText.classList.toggle("cp-dd-placeholder", !selected);
+      const label = selected?.label || "";
+      buttonText.textContent = label || placeholder || "\u00a0";
+      buttonText.classList.toggle("cp-dd-placeholder", !label);
       menu.innerHTML = "";
       options.forEach((option) => {
         const item = document.createElement("button");
         item.type = "button";
         item.className = "cp-dd-option";
         item.classList.toggle("active", option.value === value);
-        item.textContent = option.label;
+        item.textContent = option.label || "\u00a0";
         item.addEventListener("click", (event) => {
           event.stopPropagation();
           close();
+          if (option.value === value) return;
           value = option.value;
           render();
           onChange(value);
@@ -9839,13 +9864,13 @@
         close();
         return;
       }
+      document.querySelectorAll(".cp-ccl-dd").forEach((node) => {
+        if (node !== root) node.cclClose?.();
+      });
       menu.classList.add("open");
-      menu.style.maxHeight = `${menu.scrollHeight}px`;
+      menu.style.maxHeight = `${Math.min(menu.scrollHeight, 280)}px`;
       button.classList.add("open");
     });
-    document.addEventListener("click", (event) => {
-      if (!root.contains(event.target)) close();
-    }, { signal });
     render();
     root.append(button, menu);
     return { root, close, getValue: () => value };
@@ -9886,11 +9911,7 @@
       detailsRow?.classList.toggle("cp-hidden", outcome?.value !== "other");
       if (outcome?.value === "other") details.focus();
     };
-    const outcome = createCclDropdown(outcomes, {
-      placeholder: "Choose what happened",
-      onChange: syncOutcome,
-      signal: ui.signal,
-    });
+    const outcome = createCclDropdown(outcomes, { placeholder: "Choose what happened", onChange: syncOutcome });
     const outcomeRow = ui.addField("Match outcome", outcome.root);
     outcomeRow.appendChild(hint);
     detailsRow = ui.addField("Details", details);
@@ -9913,6 +9934,146 @@
     syncOutcome("");
   }
 
+  const CCL_TIME_ADJUST_MAX_MINUTES = 60;
+
+  // Resolve a partly played match (Error with games): move the match time by up to an hour and get the
+  // results from BGA again, edit the results by hand, or report a problem (Match not finished).
+  function openCclIncompleteResolveModal(match) {
+    const ui = createCclModal("Resolve match");
+    ui.modal.classList.add("cp-ccl-results-modal");
+    ui.fields.appendChild(createCclMatchTitle(match));
+    const choices = [
+      { value: "time", label: "Adjust the match time" },
+      // Players edit the result by hand only in the editing window (24 hours after the match start).
+      ...(match.can_edit_result ? [{ value: "edit", label: "Edit the results manually" }] : []),
+      { value: "report", label: "Report a problem" },
+    ];
+    const panel = document.createElement("div");
+    panel.className = "cp-team-modal-fields";
+    let editor = null;
+    let details = null;
+    let timeInput = null;
+
+    const cancelButton = ui.addButton("Cancel", "cp-btn-secondary", ui.close);
+    const getResultsButton = ui.addButton("Get results", "cp-btn-primary", () => getResults());
+    const saveButton = ui.addButton("Save", "cp-btn-primary", () => {
+      if (!editor || editor.isBusy() || editor.validate()) return;
+      ui.submit(() => cclRequest(DUEL_GAMES_SAVE_URL(match.id), "POST", { games: editor.payload() }));
+    });
+    const sendButton = ui.addButton("Send", "cp-btn-primary", () => submitCclCase(ui, () => {
+      if (!details?.value.trim()) throw new Error("Describe the problem in Details.");
+      return cclRequest(`${CCL_MATCH_URL(match.id)}/cases`, "POST", { category: "incomplete", details: details.value.trim() });
+    }));
+    const closeButton = ui.addButton("Close", "cp-btn-primary", ui.close);
+    const showButtons = (visible) => {
+      [getResultsButton, saveButton, sendButton, closeButton].forEach((button) => {
+        button.classList.toggle("cp-hidden", !visible.includes(button));
+      });
+    };
+
+    const renderTime = () => {
+      const current = document.createElement("div");
+      current.className = "cp-time-modal-current";
+      current.textContent = `Current match time: ${formatProposalTimeUtc(match.time_utc)}`;
+      const hint = document.createElement("div");
+      hint.className = "cp-ccl-case-hint";
+      hint.textContent = "If the games were played earlier or later than the match time, move it by up to 1 hour. "
+        + "The results are then taken from BGA for the new time.";
+      panel.append(current, hint);
+      timeInput = createCclDatetimeInput(match.time_utc);
+      const startTs = Date.parse(String(match.time_utc || ""));
+      if (Number.isFinite(startTs)) {
+        const limit = CCL_TIME_ADJUST_MAX_MINUTES * 60 * 1000;
+        timeInput.min = toDatetimeLocalFromUtc(new Date(startTs - limit).toISOString());
+        timeInput.max = toDatetimeLocalFromUtc(new Date(startTs + limit).toISOString());
+      }
+      const timeRow = ui.addField("Corrected match time, UTC", timeInput, panel);
+      const localPreview = document.createElement("div");
+      localPreview.className = "cp-ccl-local-times";
+      timeRow.appendChild(localPreview);
+      const refreshPreview = () => {
+        const timeUtc = toUtcIsoFromDatetimeLocal(timeInput.value);
+        localPreview.innerHTML = timeUtc ? cclShortLocalTimeHtml(match, timeUtc) : "";
+      };
+      refreshPreview();
+      timeInput.addEventListener("input", refreshPreview, { signal: ui.signal });
+      timeInput.addEventListener("change", refreshPreview, { signal: ui.signal });
+    };
+
+    const renderEdit = () => {
+      if (match.result_edit_until) {
+        const note = document.createElement("div");
+        note.className = "cp-time-modal-current";
+        note.textContent = `Result editing is available until ${formatCclViewerTime(match, match.result_edit_until)}.`;
+        panel.appendChild(note);
+      }
+      editor = createCclGamesEditor(match);
+      panel.appendChild(editor.root);
+    };
+
+    const renderReport = () => {
+      ui.addField("Type", createCclReadonlyInput(CCL_CASE_TYPE_LABELS.problem), panel);
+      ui.addField("Category", createCclReadonlyInput(CCL_CASE_CATEGORY_LABELS.incomplete), panel);
+      details = createCclCaseTextarea();
+      ui.addField("Details", details, panel);
+      details.focus();
+    };
+
+    const show = (value) => {
+      panel.innerHTML = "";
+      editor = null;
+      details = null;
+      timeInput = null;
+      ui.setError("");
+      if (value === "time") renderTime();
+      if (value === "edit") renderEdit();
+      if (value === "report") renderReport();
+      showButtons({ time: [getResultsButton], edit: [saveButton], report: [sendButton] }[value] || []);
+    };
+
+    const choice = createCclDropdown(choices, { placeholder: "Choose what to do", onChange: show });
+    ui.addField("What do you want to do?", choice.root);
+    ui.fields.appendChild(panel);
+    show("");
+
+    // Moves the match time and gets the results; the server puts everything back when there is still no winner.
+    async function getResults() {
+      const timeUtc = toUtcIsoFromDatetimeLocal(timeInput?.value);
+      const minutes = Math.abs(Date.parse(timeUtc || "") - Date.parse(String(match.time_utc || ""))) / 60000;
+      if (!timeUtc) return ui.setError("Choose the corrected match time.");
+      if (!(minutes >= 1)) return ui.setError("Choose a time different from the current match time.");
+      if (minutes > CCL_TIME_ADJUST_MAX_MINUTES) return ui.setError("The match time can be moved by 1 hour at most.");
+      ui.setError("");
+      const status = document.createElement("div");
+      status.className = "cp-action-status";
+      const spinner = document.createElement("img");
+      spinner.src = "https://carcassonne.gg/gallery/loading-red.gif";
+      spinner.alt = "";
+      status.append(spinner, "Getting the match results from BGA...");
+      panel.appendChild(status);
+      const controls = [cancelButton, getResultsButton, choice.root.querySelector("button"), timeInput];
+      controls.forEach((control) => { control.disabled = true; });
+      try {
+        const result = await cclRequest(`${CCL_MATCH_URL(match.id)}/adjust-time`, "POST", { time_utc: timeUtc });
+        panel.innerHTML = "";
+        const message = document.createElement("div");
+        message.className = "cp-ccl-case-sent";
+        message.textContent = `The results were found: ${cclPlayerName(match.player_1)} ${result.match?.dw1 ?? 0}–${result.match?.dw2 ?? 0} `
+          + `${cclPlayerName(match.player_2)}. The match time is now ${formatProposalTimeUtc(result.match?.time_utc)}.`;
+        panel.appendChild(message);
+        choice.root.closest(".cp-edit-row")?.classList.add("cp-hidden");
+        cancelButton.classList.add("cp-hidden");
+        showButtons([closeButton]);
+        initCaptainPage();
+      } catch (requestError) {
+        status.remove();
+        ui.setError(requestError?.message || "Failed to get the match results.");
+      } finally {
+        controls.forEach((control) => { control.disabled = false; });
+      }
+    }
+  }
+
   function createCclMatchRow(match, data, options) {
     const wrap = document.createElement("div");
     wrap.className = "cp-ccl-match";
@@ -9931,12 +10092,15 @@
     const players = document.createElement("div");
     players.className = "cp-teams";
     const isDone = String(match.status || "").toLowerCase() === "done";
-    players.appendChild(createCclPlayerLine(match.player_1, isDone ? match.dw1 : null));
-    players.appendChild(createCclPlayerLine(match.player_2, isDone ? match.dw2 : null));
+    const isError = String(match.status || "").toLowerCase() === "error";
+    const hasPlayedGame = (match.games || []).some(isCclGamePlayed);
+    // A partly played match (Error with games) shows its partial score, e.g. 1-1.
+    const showScore = isDone || (isError && hasPlayedGame);
+    players.appendChild(createCclPlayerLine(match.player_1, showScore ? match.dw1 ?? 0 : null));
+    players.appendChild(createCclPlayerLine(match.player_2, showScore ? match.dw2 ?? 0 : null));
     const meta = document.createElement("div");
     meta.className = "cp-ccl-meta";
     const isPlayed = isCclResultEditableStatus(match.status);
-    const isError = String(match.status || "").toLowerCase() === "error";
     // Error is shown as a badge next to the actions.
     meta.textContent = isPlayed
       ? (isDone || isError ? "" : match.status)
@@ -9946,13 +10110,9 @@
         match.status !== "Planned" ? match.status : "",
       ].filter(Boolean).join(" · ");
     if (meta.textContent) players.appendChild(meta);
-    // A match in Error without any game is resolved (Resolve), not edited; admins still edit it.
-    const hasPlayedGame = (match.games || []).some((game) => (
-      [game.player_1_score, game.player_2_score, game.player_1_rank, game.player_2_rank].some(hasValue)
-      || String(game.status || "").trim().toLowerCase() === "no show"
-    ));
+    // Players resolve a match in Error (Resolve) instead of editing it; admins still edit it.
     const canEditResult = isPlayed && match.can_edit_result === true && (!!match.my_side || options.manage)
-      && (options.manage || !isError || hasPlayedGame);
+      && (options.manage || !isError);
     const editUntilTs = Date.parse(String(match.result_edit_until || ""));
     if (canEditResult && match.my_side && Number.isFinite(editUntilTs) && editUntilTs > Date.now()) {
       const note = document.createElement("div");
@@ -9974,7 +10134,11 @@
     const addAction = (text, className, onClick) => actions.appendChild(createAction(text, className, onClick));
     // The case the player may send now (case_scenario from the server, ccl-cases.js).
     const scenario = match.my_side ? match.case_scenario : null;
-    const reportProblem = { label: "Report a problem", onClick: () => openCclReportProblemModal(match, scenario) };
+    const reportProblem = {
+      label: "Report a problem",
+      className: "cp-dd-option-report",
+      onClick: () => openCclReportProblemModal(match, scenario),
+    };
     const isPlanned = String(match.status || "Planned").toLowerCase() === "planned";
     if (match.my_side && isPlanned) {
       const myId = (match.my_side === 1 ? match.player_1 : match.player_2)?.id;
@@ -9995,14 +10159,11 @@
     if (scenario === "not_played") {
       addAction("Resolve", "cp-btn-primary", () => openCclResolveModal(match));
     }
-    const editResultsButton = canEditResult
-      ? createAction("Edit results", "cp-btn-secondary", () => openCclResultsModal(match))
-      : null;
     if (scenario === "incomplete") {
-      // [Edit results][▾] → Report a problem; only the arrow once the editing window is over.
-      actions.appendChild(createCclSplitAction(editResultsButton, [reportProblem]));
-    } else if (editResultsButton) {
-      actions.appendChild(editResultsButton);
+      addAction("Resolve", "cp-btn-primary", () => openCclIncompleteResolveModal(match));
+    }
+    if (canEditResult) {
+      addAction("Edit results", "cp-btn-secondary", () => openCclResultsModal(match));
     }
     if (scenario === "result_dispute") {
       actions.appendChild(createCclSplitAction(null, [reportProblem]));

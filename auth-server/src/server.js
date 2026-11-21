@@ -8481,6 +8481,22 @@ registerCclCaseRoutes(app, {
   requireTrustedJsonRequest,
   getAuditActor,
   logAuditEvent,
+  // Resolve → Adjust the match time: the same BGA updater as /duels/:id/refetch-results.
+  async runDuelResultsUpdate(duelId) {
+    const authServerRoot = path.resolve(__dirname, "..");
+    const pythonBin = String(process.env.PYTHON_BIN || "python3").trim() || "python3";
+    try {
+      const { stdout, stderr } = await execFileAsync(
+        pythonBin,
+        [path.resolve(authServerRoot, "run_update_matches.py"), "--db-path", dbFullPath, "--duel-id", duelId],
+        { cwd: authServerRoot, env: process.env, timeout: 5 * 60 * 1000, maxBuffer: 1024 * 1024 * 10 }
+      );
+      logUpdaterOutput(`ccl-adjust-time:${duelId}`, [stdout, stderr].map((part) => String(part || "").trim()).filter(Boolean).join("\n"));
+    } catch (error) {
+      logUpdaterOutput(`ccl-adjust-time:${duelId}`, [error?.stdout, error?.stderr, error?.message].map((part) => String(part || "").trim()).filter(Boolean).join("\n"));
+      throw error;
+    }
+  },
 });
 
 registerTournamentCaseRoutes(app, {

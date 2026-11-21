@@ -53,7 +53,7 @@ async function createDatabase(t) {
   return db;
 }
 
-function createApi(db) {
+function createApi(db, { runDuelResultsUpdate = null } = {}) {
   const routes = new Map();
   const app = { post: (routePath, ...handlers) => routes.set(`POST ${routePath}`, handlers.at(-1)) };
   const audit = [];
@@ -67,6 +67,7 @@ function createApi(db) {
     },
     logger: { error() {} },
     now: () => NOW,
+    runDuelResultsUpdate,
   });
   const call = async (route, { user, id, body = {} }) => {
     const result = { status: 200, body: null };
@@ -88,6 +89,8 @@ function createApi(db) {
 
 const report = (api, id, body, user = USERS.olena) => api.call("POST /ccl/matches/:id/cases", { user, id, body });
 const resolve = (api, id, body, user = USERS.olena) => api.call("POST /ccl/matches/:id/resolve", { user, id, body });
+const adjust = (api, id, body, user = USERS.olena) => api.call("POST /ccl/matches/:id/adjust-time", { user, id, body });
+const run = (db, sql, params = []) => new Promise((resolve, reject) => db.run(sql, params, (error) => (error ? reject(error) : resolve())));
 
 test("the case a player may send depends on the match state", () => {
   const base = { player_1_id: "olena", player_2_id: "taras" };
@@ -202,4 +205,59 @@ test("Resolve is refused for other matches, actions and players", async (t) => {
   assert.equal((await resolve(api, "error-empty", { action: "no_show", no_show_player_id: "max" })).status, 400);
   assert.equal((await resolve(api, "error-empty", { action: "reschedule" }, USERS.stranger)).status, 403);
   assert.equal((await get(db, "SELECT status FROM duels WHERE id = 'error-empty'")).status, "Error");
+});
+
+test("Adjust the match time keeps the new time when BGA gives a winner", async (t) => {
+  const db = await createDatabase(t);
+  const calls = [];
+  const api = createApi(db, {
+    async runDuelResultsUpdate(duelId) {
+      calls.push(duelId);
+      const duel = await get(db, "SELECT time_utc FROM duels WHERE id = ?", [duelId]);
+      assert.equal(duel.time_utc, "2026-11-20T17:30:00.000Z");
+      await run(db, "UPDATE duels SET status = 'Done', dw1 = 2, dw2 = 1 WHERE id = ?", [duelId]);
+      await run(db, "INSERT INTO games (duel_id, player_1_score, player_1_rank) VALUES (?, 90, 1)", [duelId]);
+    },
+  });
+  const result = await adjust(api, "error-partial", { time_utc: "2026-11-20T17:30:00Z" });
+  assert.equal(result.status, 200, JSON.stringify(result.body));
+  assert.deepEqual(calls, ["error-partial"]);
+  assert.deepEqual(result.body.match, { id: "error-partial", time_utc: "2026-11-20T17:30:00.000Z", status: "Done", dw1: 2, dw2: 1 });
+  assert.equal((await all(db, "SELECT id FROM games WHERE duel_id = 'error-partial'")).length, 2);
+  assert.equal(api.audit.at(-1).event_type, "ccl.match.time_adjusted");
+});
+
+test("Adjust the match time puts the match and its games back when there is still no winner", async (t) => {
+  const db = await createDatabase(t);
+  await run(db, "UPDATE duels SET dw1 = 1, dw2 = 0 WHERE id = 'error-partial'");
+  const before = await all(db, "SELECT * FROM games WHERE duel_id = 'error-partial' ORDER BY id");
+  const api = createApi(db, {
+    async runDuelResultsUpdate(duelId) {
+      await run(db, "UPDATE duels SET status = 'Error', dw1 = 1, dw2 = 1, results_last_error = 'x' WHERE id = ?", [duelId]);
+      await run(db, "UPDATE games SET player_1_score = 5 WHERE duel_id = ?", [duelId]);
+      await run(db, "INSERT INTO games (duel_id, player_2_score, player_2_rank) VALUES (?, 80, 1)", [duelId]);
+    },
+  });
+  const result = await adjust(api, "error-partial", { time_utc: "2026-11-20T18:45:00Z" });
+  assert.equal(result.status, 409);
+  assert.equal(result.body.code, "still_incomplete");
+  const duel = await get(db, "SELECT * FROM duels WHERE id = 'error-partial'");
+  assert.deepEqual(
+    [duel.time_utc, duel.status, duel.dw1, duel.dw2, duel.results_last_error],
+    ["2026-11-20T18:00:00Z", "Error", 1, 0, null]
+  );
+  assert.deepEqual(await all(db, "SELECT * FROM games WHERE duel_id = 'error-partial' ORDER BY id"), before);
+});
+
+test("Adjust the match time accepts up to an hour, only for a partly played match", async (t) => {
+  const db = await createDatabase(t);
+  let called = false;
+  const api = createApi(db, { async runDuelResultsUpdate() { called = true; } });
+  assert.equal((await adjust(api, "error-partial", { time_utc: "2026-11-20T19:01:00Z" })).status, 400);
+  assert.equal((await adjust(api, "error-partial", { time_utc: "2026-11-20T18:00:00Z" })).status, 400);
+  assert.equal((await adjust(api, "error-partial", { time_utc: "soon" })).status, 400);
+  assert.equal((await adjust(api, "error-empty", { time_utc: "2026-11-20T17:30:00Z" })).status, 409);
+  assert.equal((await adjust(api, "error-partial", { time_utc: "2026-11-20T17:30:00Z" }, USERS.stranger)).status, 403);
+  assert.equal(called, false);
+  assert.equal((await adjust(createApi(db), "error-partial", { time_utc: "2026-11-20T17:30:00Z" })).status, 503);
 });

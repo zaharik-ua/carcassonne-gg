@@ -12,6 +12,8 @@ import {
 } from "./tournament-cases.js";
 
 export const CCL_RESOLVE_ACTIONS = new Set(["no_show", "reschedule"]);
+// Resolve of a partly played match: the match time may be moved by this much to find its games on BGA.
+export const CCL_TIME_ADJUST_MAX_MINUTES = 60;
 
 const text = (value) => String(value ?? "").trim();
 const hasValue = (value) => value !== null && value !== undefined && text(value) !== "";
@@ -157,6 +159,66 @@ async function playerName(db, playerId) {
   return text(row?.bga_nickname) || text(row?.name) || playerId;
 }
 
+// { value: ISO time } when `nextTimeUtc` moves the match time by 1..CCL_TIME_ADJUST_MAX_MINUTES minutes.
+export function validateCclTimeAdjustment(currentTimeUtc, nextTimeUtc) {
+  const current = Date.parse(text(currentTimeUtc));
+  const next = Date.parse(text(nextTimeUtc));
+  if (!Number.isFinite(next)) return { error: "Choose the corrected match time" };
+  if (!Number.isFinite(current)) return { error: "The match has no time to correct" };
+  const minutes = Math.abs(next - current) / 60000;
+  if (minutes < 1) return { error: "Choose a time different from the current match time" };
+  if (minutes > CCL_TIME_ADJUST_MAX_MINUTES) {
+    return { error: `The match time can be moved by ${CCL_TIME_ADJUST_MAX_MINUTES} minutes at most` };
+  }
+  return { value: new Date(next).toISOString() };
+}
+
+const DUEL_RESULT_FIELDS = ["time_utc", "dw1", "dw2", "status", "results_last_error", "results_checked_at", "updated_by", "updated_at"];
+
+async function snapshotDuelResult(db, duelId) {
+  const duel = await dbGet(db, `SELECT ${DUEL_RESULT_FIELDS.join(", ")} FROM duels WHERE id = ?`, [duelId]);
+  const games = await dbAll(db, "SELECT * FROM games WHERE duel_id = ?", [duelId]);
+  return { duel, games };
+}
+
+// Puts the duel and its games back as they were before a failed time adjustment: games the updater
+// added are removed (with their queued replays), changed or removed games get their saved values back.
+async function restoreDuelResult(db, duelId, snapshot) {
+  await inTransaction(db, async () => {
+    await dbRun(
+      db,
+      `UPDATE duels SET ${DUEL_RESULT_FIELDS.map((field) => `${field} = ?`).join(", ")} WHERE id = ?`,
+      [...DUEL_RESULT_FIELDS.map((field) => snapshot.duel?.[field] ?? null), duelId]
+    );
+    const keptIds = snapshot.games.map((game) => game.id);
+    const current = await dbAll(db, "SELECT id FROM games WHERE duel_id = ?", [duelId]);
+    const addedIds = current.map((game) => game.id).filter((id) => !keptIds.includes(id));
+    if (addedIds.length) {
+      const marks = addedIds.map(() => "?").join(", ");
+      await dbRun(db, `DELETE FROM game_replays WHERE game_id IN (${marks})`, addedIds).catch(() => {});
+      await dbRun(db, `DELETE FROM games WHERE id IN (${marks})`, addedIds);
+    }
+    for (const game of snapshot.games) {
+      const columns = Object.keys(game);
+      const exists = await dbGet(db, "SELECT id FROM games WHERE id = ?", [game.id]);
+      if (exists) {
+        const updated = columns.filter((column) => column !== "id");
+        await dbRun(
+          db,
+          `UPDATE games SET ${updated.map((column) => `${column} = ?`).join(", ")} WHERE id = ?`,
+          [...updated.map((column) => game[column]), game.id]
+        );
+      } else {
+        await dbRun(
+          db,
+          `INSERT INTO games (${columns.join(", ")}) VALUES (${columns.map(() => "?").join(", ")})`,
+          columns.map((column) => game[column])
+        );
+      }
+    }
+  });
+}
+
 export function registerCclCaseRoutes(app, {
   db,
   requireAuthenticated,
@@ -165,10 +227,13 @@ export function registerCclCaseRoutes(app, {
   logAuditEvent = null,
   logger = console,
   now = () => new Date(),
+  // Fetches the duel's games from BGA for its time_utc (run_update_matches.py --duel-id).
+  runDuelResultsUpdate = null,
 }) {
   if (!app || !db || typeof requireAuthenticated !== "function") {
     throw new Error("app, db and requireAuthenticated are required");
   }
+  const adjustingDuels = new Set();
 
   const audit = (req, entry) => {
     if (typeof logAuditEvent === "function") logAuditEvent({ ...getAuditActor(req.user), ...entry }, () => {});
@@ -261,6 +326,58 @@ export function registerCclCaseRoutes(app, {
         case: result.created ? formatSubmittedCase(result.created.case) : null,
         appended: !!result.created?.appended,
       });
+    })
+  );
+
+  // Resolve of a partly played match: move the match time by up to an hour and fetch the games from
+  // BGA again. A result without a winner puts the match and its games back as they were.
+  app.post(
+    "/ccl/matches/:id/adjust-time",
+    requireAuthenticated,
+    requireTrustedJsonRequest,
+    handle("Failed to get the match results", async (req, res) => {
+      if (typeof runDuelResultsUpdate !== "function") throw requestError(503, "Getting results is not available now");
+      const { match, playerId, scenario } = await loadCaseContext(db, req.user, req.params.id, now());
+      if (scenario !== "incomplete") throw requestError(409, "The match has changed. Reload the page and try again");
+      const adjustment = validateCclTimeAdjustment(match.time_utc, req.body?.time_utc);
+      if (adjustment.error) throw requestError(400, adjustment.error);
+      if (adjustingDuels.has(match.id)) throw requestError(409, "Results of this match are being checked. Try again in a minute");
+
+      adjustingDuels.add(match.id);
+      try {
+        const snapshot = await snapshotDuelResult(db, match.id);
+        const moved = await dbRun(
+          db,
+          "UPDATE duels SET time_utc = ?, updated_by = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND status = 'Error' AND deleted_at IS NULL",
+          [adjustment.value, playerId, match.id]
+        );
+        if (!Number(moved?.changes || 0)) throw requestError(409, "The match has changed. Reload the page and try again");
+        try {
+          await runDuelResultsUpdate(match.id);
+        } catch (error) {
+          logger.error?.(`Failed to get results of CCL match ${match.id}`, error);
+        }
+        const after = await dbGet(db, "SELECT time_utc, status, dw1, dw2 FROM duels WHERE id = ?", [match.id]);
+        if (text(after?.status).toLowerCase() !== "done") {
+          await restoreDuelResult(db, match.id, snapshot);
+          return res.status(409).json({
+            ok: false,
+            code: "still_incomplete",
+            message: "This match time does not give a correct result either. Nothing was changed.",
+          });
+        }
+        audit(req, {
+          event_type: "ccl.match.time_adjusted",
+          entity_type: "duel",
+          action: "update",
+          record_id: match.id,
+          changes: changedFields({ ...snapshot.duel }, after, ["time_utc", "status", "dw1", "dw2"]),
+          metadata: { tournament_id: match.tournament_id },
+        });
+        return res.json({ ok: true, match: { id: match.id, time_utc: after.time_utc, status: after.status, dw1: after.dw1, dw2: after.dw2 } });
+      } finally {
+        adjustingDuels.delete(match.id);
+      }
     })
   );
 }
