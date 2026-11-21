@@ -6,6 +6,7 @@ import {
   buildCaseLink,
   buildDashboard,
   buildDuelLink,
+  buildPlayerCaseLink,
   getPlanningStatus,
   getPlayerDuelAction,
   parseDaysBeforeDeadline,
@@ -34,7 +35,8 @@ async function createDatabase(t) {
     CREATE TABLE tournament_access_users (tournament_entity_type TEXT, tournament_id TEXT, user_id INTEGER, role TEXT);
     CREATE TABLE matches (id TEXT PRIMARY KEY, time_utc TEXT, deleted_at TEXT);
     CREATE TABLE tournament_cases (id INTEGER PRIMARY KEY, case_type TEXT, category TEXT, status TEXT, priority TEXT,
-      subject TEXT, submitted_by_player_id TEXT, responsible_user_id INTEGER, reported_player_id TEXT, match_id TEXT,
+      subject TEXT, submitted_by_user_id INTEGER, submitted_by_player_id TEXT, resolution TEXT, resolved_at TEXT,
+      responsible_user_id INTEGER, reported_player_id TEXT, match_id TEXT,
       duel_id TEXT, tournament_id TEXT, challenge_period_id TEXT, created_at TEXT, deleted_at TEXT);
     INSERT INTO tournament_cases (id, case_type, category, status, priority, subject, submitted_by_player_id,
       responsible_user_id, reported_player_id, duel_id, tournament_id, challenge_period_id, created_at, deleted_at) VALUES
@@ -43,6 +45,7 @@ async function createDatabase(t) {
       (3, 'complaint', 'no_show', 'open', 'normal', 'Challenge no-show', 'p3', NULL, 'p1', NULL, NULL, 'cp1', '2026-11-12 10:00:00', NULL),
       (4, 'request', NULL, 'resolved', 'high', 'Resolved', 'p1', NULL, NULL, NULL, 'WTCOC', NULL, '2026-11-01 10:00:00', NULL),
       (5, 'other', NULL, 'open', 'high', 'Deleted', 'p1', NULL, NULL, NULL, 'WTCOC', NULL, '2026-11-01 10:00:00', '2026-11-02');
+    UPDATE tournament_cases SET resolution = 'Fixed', resolved_at = '2026-11-03 10:00:00' WHERE id = 4;
     CREATE TABLE news (id INTEGER PRIMARY KEY, title TEXT, status TEXT, is_proposal INTEGER, tournament_id TEXT,
       created_by TEXT, created_at TEXT, deleted_at TEXT);
     CREATE TABLE duels (id TEXT PRIMARY KEY, tournament_id TEXT, match_id TEXT, challenge_period_id TEXT, group_id TEXT,
@@ -245,6 +248,26 @@ test("player sees their own active duels, actions first", async (t) => {
   );
   assert.equal(myDuels.action_count, 4);
   assert.equal(myDuels.items[0].opponent.name, "three");
+});
+
+test("player sees the cases they submitted in every tournament, active first", async (t) => {
+  const db = await createDatabase(t);
+  const dashboard = await buildDashboard(db, USERS.player, { now: NOW });
+  const myCases = dashboard.blocks.my_cases;
+  // Case 3 is about p1 but was filed by p3, case 5 is deleted.
+  assert.deepEqual(myCases.items.map((item) => [item.id, item.status]), [[1, "open"], [4, "resolved"]]);
+  assert.equal(myCases.count, 2);
+  assert.equal(myCases.active_count, 1);
+  assert.equal(myCases.items[0].reported_player.name, "two");
+  assert.equal(myCases.items[0].link, "/player-hub/tournaments?id=WTCOC");
+  assert.equal(myCases.items[1].resolution, "Fixed");
+  assert.equal(myCases.items[1].resolved_at, "2026-11-03T10:00:00.000Z");
+});
+
+test("player case links never open the admin edit mode", () => {
+  assert.equal(buildPlayerCaseLink({ tournament_id: "WTCOC", match_id: "M1" }), "/player-hub/tournaments?id=WTCOC");
+  assert.equal(buildPlayerCaseLink({ challenge_period_id: "cp1" }), "/player-hub/challenges");
+  assert.equal(buildPlayerCaseLink({}), null);
 });
 
 test("player without a profile and without admin rights gets no blocks", async (t) => {

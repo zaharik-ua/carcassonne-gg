@@ -54,22 +54,138 @@
     gap: 8px;
   }
 
-  .dash-filters label {
+  .dash-filter {
     display: grid;
     gap: 3px;
     font-size: 11px;
     color: var(--muted);
   }
 
-  .dash-filters select {
-    font: inherit;
-    font-size: 13px;
-    color: var(--text);
-    padding: 6px 8px;
-    border: 1px solid #cfd5de;
-    border-radius: 6px;
+  .dash-filter.tournament {
+    width: 220px;
+  }
+
+  .dash-filter.days {
+    width: 130px;
+  }
+
+  .cp-dd {
+    position: relative;
+    display: inline-flex;
+    flex-direction: column;
+    width: 100%;
+  }
+
+  .cp-dd-btn {
+    all: unset;
+    box-sizing: border-box;
+    width: 100%;
+    height: 30px;
+    border: 1px solid #c8ced8;
+    border-radius: 4px;
     background: #fff;
-    min-width: 140px;
+    color: #2f3947;
+    font-size: 14px;
+    padding: 4px 8px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    cursor: pointer;
+  }
+
+  .cp-dd-btn:hover,
+  .cp-dd-btn:focus-visible,
+  .cp-dd-btn.open {
+    border-color: #9ea7b3;
+  }
+
+  .cp-dd-btn-content {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .cp-dd-btn-content span {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .cp-dd-chevron {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: #6f7785;
+    font-size: 10px;
+    transition: transform 0.18s ease;
+  }
+
+  .cp-dd-btn.open .cp-dd-chevron {
+    transform: rotate(180deg);
+  }
+
+  .cp-dd-menu {
+    position: absolute;
+    right: 0;
+    top: calc(100% + 4px);
+    min-width: 100%;
+    width: max-content;
+    max-width: min(320px, calc(100vw - 32px));
+    max-height: 0;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    background: #fff;
+    border: 1px solid #d5dbe4;
+    border-radius: 4px;
+    box-shadow: 0 8px 18px rgba(15, 28, 48, 0.14);
+    opacity: 0;
+    pointer-events: none;
+    transform: translateY(4px);
+    transition: opacity 0.16s ease, transform 0.16s ease, max-height 0.16s ease;
+    z-index: 20;
+  }
+
+  .cp-dd-menu.open {
+    opacity: 1;
+    pointer-events: auto;
+    transform: translateY(0);
+    overflow-y: auto;
+    overflow-x: hidden;
+  }
+
+  .cp-dd-option {
+    all: unset;
+    box-sizing: border-box;
+    padding: 5px 8px;
+    border-top: 1px solid #edf1f6;
+    display: block;
+    flex-shrink: 0;
+    font-size: 13px;
+    color: #2f3947;
+    line-height: 1.2;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    cursor: pointer;
+  }
+
+  .cp-dd-option:first-child {
+    border-top: none;
+  }
+
+  .cp-dd-option:hover {
+    background: #f5f5f5;
+  }
+
+  .cp-dd-option.active {
+    background: #e4f0fb;
   }
 
   .dash-alert {
@@ -257,9 +373,14 @@
     }
 
     .dash-filters,
-    .dash-filters label,
-    .dash-filters select {
+    .dash-filter.tournament,
+    .dash-filter.days {
       width: 100%;
+    }
+
+    .cp-dd-menu {
+      left: 0;
+      right: auto;
     }
   }
 </style>
@@ -271,20 +392,14 @@
       <div class="dash-subtitle">What needs your attention right now.</div>
     </div>
     <div class="dash-filters" id="dashFilters" hidden>
-      <label>
+      <div class="dash-filter tournament">
         Tournament
-        <select id="dashTournament"></select>
-      </label>
-      <label>
+        <div id="dashTournament"></div>
+      </div>
+      <div class="dash-filter days">
         Deadline within
-        <select id="dashDays">
-          <option value="1">1 day</option>
-          <option value="3">3 days</option>
-          <option value="7">7 days</option>
-          <option value="14">14 days</option>
-          <option value="30">30 days</option>
-        </select>
-      </label>
+        <div id="dashDays"></div>
+      </div>
     </div>
   </div>
   <div id="dashContent" class="dash-alert">Loading...</div>
@@ -298,8 +413,76 @@
 
   const contentEl = document.getElementById("dashContent");
   const filtersEl = document.getElementById("dashFilters");
-  const tournamentSelect = document.getElementById("dashTournament");
-  const daysSelect = document.getElementById("dashDays");
+  const tournamentSlot = document.getElementById("dashTournament");
+  const daysSlot = document.getElementById("dashDays");
+  const DAY_OPTIONS = [1, 3, 7, 14, 30].map((days) => ({ value: String(days), label: `${days} day${days === 1 ? "" : "s"}` }));
+  const filterState = { tournamentId: "", days: "3" };
+  const dropdowns = [];
+
+  // Same dropdown as the other Player Hub pages (cp-dd).
+  function createDropdown(initialValue, options, onChange) {
+    let value = String(initialValue ?? "");
+    const root = el("div", "cp-dd");
+    const btn = el("button", "cp-dd-btn");
+    btn.type = "button";
+    const btnContent = el("span", "cp-dd-btn-content");
+    const chevron = el("span", "cp-dd-chevron", "▾");
+    btn.appendChild(btnContent);
+    btn.appendChild(chevron);
+    const menu = el("div", "cp-dd-menu");
+
+    const renderButton = () => {
+      const selected = options.find((option) => option.value === value) || options[0];
+      btnContent.innerHTML = "";
+      btnContent.appendChild(el("span", "", selected ? selected.label : ""));
+      btn.title = selected ? selected.label : "";
+    };
+    const close = () => {
+      menu.classList.remove("open");
+      menu.style.maxHeight = "0px";
+      btn.classList.remove("open");
+    };
+    const open = () => {
+      menu.classList.add("open");
+      menu.style.maxHeight = `${Math.min(menu.scrollHeight, 280)}px`;
+      btn.classList.add("open");
+    };
+
+    options.forEach((option) => {
+      const optionBtn = el("button", `cp-dd-option${option.value === value ? " active" : ""}`, option.label);
+      optionBtn.type = "button";
+      optionBtn.title = option.label;
+      optionBtn.dataset.value = option.value;
+      optionBtn.addEventListener("click", (event) => {
+        event.stopPropagation();
+        close();
+        if (option.value === value) return;
+        value = option.value;
+        menu.querySelectorAll(".cp-dd-option").forEach((node) => node.classList.toggle("active", node.dataset.value === value));
+        renderButton();
+        onChange(value);
+      });
+      menu.appendChild(optionBtn);
+    });
+    btn.addEventListener("click", (event) => {
+      event.stopPropagation();
+      const isOpen = menu.classList.contains("open");
+      dropdowns.forEach((dropdown) => dropdown.close());
+      if (!isOpen) open();
+    });
+
+    renderButton();
+    root.appendChild(btn);
+    root.appendChild(menu);
+    const api = { root, close };
+    dropdowns.push(api);
+    return api;
+  }
+
+  document.addEventListener("click", () => dropdowns.forEach((dropdown) => dropdown.close()));
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") dropdowns.forEach((dropdown) => dropdown.close());
+  });
 
   const PLANNING_STATUS = {
     deadline_passed: { label: "Deadline passed", tone: "attention" },
@@ -326,6 +509,7 @@
     { key: "news_drafts", title: "News proposals in Draft", tile: "News proposals", render: renderNewsDraft },
     { key: "new_users", title: "New users with a BGA profile", tile: "New users", render: renderNewUser, info: true },
     { key: "my_duels", title: "My matches", tile: "My matches: action needed", render: renderMyDuel, countKey: "action_count" },
+    { key: "my_cases", title: "My cases", tile: "My open cases", render: renderMyCase, countKey: "active_count" },
   ];
 
   function readUrlState() {
@@ -465,7 +649,7 @@
   const CASE_PRIORITY_TONE = { urgent: "attention", high: "attention", normal: "warn", low: "" };
   const CASE_LABELS = {
     complaint: "Complaint", problem: "Problem", request: "Request", other: "Other",
-    open: "Open", in_progress: "In progress", no_show: "No-show",
+    open: "Open", in_progress: "In progress", resolved: "Resolved", closed: "Closed", no_show: "No-show",
     urgent: "Urgent", high: "High", normal: "Normal", low: "Low",
   };
   const caseLabel = (value) => CASE_LABELS[value] || String(value || "").replace(/_/g, " ");
@@ -489,6 +673,31 @@
         badge({ label: caseLabel(item.priority), tone: CASE_PRIORITY_TONE[item.priority] ?? "" }),
         linkTo(item.link),
       ],
+    });
+  }
+
+  const MY_CASE_STATUS_TONE = { open: "warn", in_progress: "warn", resolved: "ok", closed: "" };
+
+  function renderMyCase(item) {
+    const active = item.status === "open" || item.status === "in_progress";
+    const lines = [
+      [caseLabel(item.type), item.category ? caseLabel(item.category) : "", item.tournament?.name].filter(Boolean).join(" · "),
+      item.reported_player?.name ? `About ${item.reported_player.name}` : "",
+      active
+        ? [
+          item.created_at ? `Submitted ${formatDate(item.created_at)} (${item.days_open ?? 0} d)` : "",
+          item.responsible ? `Handled by ${item.responsible}` : "Waiting for an admin",
+        ].filter(Boolean).join(" · ")
+        : [
+          item.created_at ? `Submitted ${formatDate(item.created_at)}` : "",
+          item.resolved_at ? `${caseLabel(item.status)} ${formatDate(item.resolved_at)}` : "",
+        ].filter(Boolean).join(" · "),
+      !active && item.resolution ? `Resolution: ${item.resolution}` : "",
+    ];
+    return row({
+      title: item.subject || `Case #${item.id}`,
+      lines,
+      side: [badge({ label: caseLabel(item.status), tone: MY_CASE_STATUS_TONE[item.status] ?? "" }), linkTo(item.link)],
     });
   }
 
@@ -541,6 +750,7 @@
   function blockMeta(block, config) {
     if (config.key === "new_users") return `${block.count} in the last ${block.days || 7} days`;
     if (config.key === "my_duels") return `${block.action_count} need action · ${block.count} active`;
+    if (config.key === "my_cases") return `${block.active_count} open · ${block.count} total`;
     return `${block.count}`;
   }
 
@@ -561,6 +771,9 @@
         "dash-section-note",
         data.filters?.tournament_id ? "Cases of the selected tournament." : "Cases of all tournaments, most urgent and oldest first."
       ));
+    }
+    if (config.key === "my_cases") {
+      section.appendChild(el("div", "dash-section-note", "Cases you submitted in all tournaments, open ones first."));
     }
     if (config.key === "unplanned_duels") {
       section.appendChild(el(
@@ -603,21 +816,25 @@
       return;
     }
     filtersEl.hidden = false;
-    tournamentSelect.innerHTML = "";
-    const all = el("option", "", "All my tournaments");
-    all.value = "";
-    tournamentSelect.appendChild(all);
-    (data.tournaments || []).forEach((tournament) => {
-      const option = el("option", "", tournament.name);
-      option.value = tournament.id;
-      tournamentSelect.appendChild(option);
-    });
-    tournamentSelect.value = data.filters?.tournament_id || "";
-    const days = String(data.filters?.days_before_deadline ?? 3);
-    if (![...daysSelect.options].some((option) => option.value === days)) {
-      daysSelect.appendChild(Object.assign(el("option", "", `${days} days`), { value: days }));
-    }
-    daysSelect.value = days;
+    filterState.tournamentId = data.filters?.tournament_id || "";
+    filterState.days = String(data.filters?.days_before_deadline ?? 3);
+    const tournamentOptions = [{ value: "", label: "All my tournaments" }]
+      .concat((data.tournaments || []).map((tournament) => ({ value: tournament.id, label: tournament.name })));
+    const dayOptions = DAY_OPTIONS.some((option) => option.value === filterState.days)
+      ? DAY_OPTIONS
+      : DAY_OPTIONS.concat({ value: filterState.days, label: `${filterState.days} days` });
+
+    dropdowns.length = 0;
+    tournamentSlot.innerHTML = "";
+    daysSlot.innerHTML = "";
+    tournamentSlot.appendChild(createDropdown(filterState.tournamentId, tournamentOptions, (value) => {
+      filterState.tournamentId = value;
+      onFilterChange();
+    }).root);
+    daysSlot.appendChild(createDropdown(filterState.days, dayOptions, (value) => {
+      filterState.days = value;
+      onFilterChange();
+    }).root);
   }
 
   function renderDashboard(data) {
@@ -659,14 +876,12 @@
   }
 
   function onFilterChange() {
-    writeUrlState({ tournamentId: tournamentSelect.value, days: daysSelect.value === "3" ? "" : daysSelect.value });
+    writeUrlState({ tournamentId: filterState.tournamentId, days: filterState.days === "3" ? "" : filterState.days });
     contentEl.className = "dash-alert";
     contentEl.textContent = "Loading...";
     load();
   }
 
-  tournamentSelect.addEventListener("change", onFilterChange);
-  daysSelect.addEventListener("change", onFilterChange);
   window.addEventListener("gg-auth-state-change", load);
 
   load();

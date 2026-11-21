@@ -4,7 +4,7 @@
 // - Tournament admins: only tournaments where the user has role = admin in tournament_access_users
 //   (global admins too): unplanned duels with a structured deadline (tournament_stages, CCL for now)
 //   and duels in Error.
-// - Players with a linked profile: their own active duels.
+// - Players with a linked profile: their own active duels and the cases they submitted (all tournaments).
 // Blocks only list records with a link; actions on them come later.
 
 export const DASHBOARD_BLOCK_LIMIT = 10;
@@ -363,6 +363,72 @@ export async function loadOpenCases(db, { nowIso, tournamentId = "" }) {
   };
 }
 
+const ALL_CASE_STATUSES = ["open", "in_progress", "resolved", "closed"];
+
+// Where a player opens the record their case is about (read-only views, no admin edit mode).
+export function buildPlayerCaseLink(row) {
+  if (text(row.challenge_period_id)) return "/player-hub/challenges";
+  const tournamentId = text(row.tournament_id);
+  if (!tournamentId) return null;
+  return `/player-hub/tournaments?${new URLSearchParams({ id: tournamentId }).toString()}`;
+}
+
+// Cases the player submitted, in every tournament: active ones first (most urgent, oldest),
+// then resolved and closed ones, newest first. Complaints filed about the player are not shown.
+export async function loadMyCases(db, { playerId, userId = null, nowIso }) {
+  if (!playerId && !userId) return { count: 0, active_count: 0, items: [] };
+  const rows = await dbAll(
+    db,
+    `
+      SELECT c.id, c.case_type, c.category, c.status, c.priority, c.subject, c.created_at,
+        c.resolution, c.resolved_at, c.tournament_id, c.match_id, c.duel_id, c.challenge_period_id,
+        c.reported_player_id, rp.bga_nickname AS reported_nickname, rp.name AS reported_name,
+        ru.name AS responsible_name,
+        t.name AS tournament_name, t.short_title AS tournament_short_title
+      FROM tournament_cases c
+      LEFT JOIN profiles rp ON rp.id = c.reported_player_id
+      LEFT JOIN users ru ON ru.id = c.responsible_user_id
+      LEFT JOIN tournaments t ON upper(trim(t.id)) = upper(trim(c.tournament_id))
+      WHERE c.deleted_at IS NULL
+        AND (c.submitted_by_player_id = ? OR (? IS NOT NULL AND c.submitted_by_user_id = ?))
+      ORDER BY CASE WHEN c.status IN (${sqlList(OPEN_CASE_STATUSES)}) THEN 0 ELSE 1 END,
+        CASE WHEN c.status IN (${sqlList(OPEN_CASE_STATUSES)})
+          THEN CASE c.priority ${CASE_PRIORITY_ORDER.map((value, index) => `WHEN '${value}' THEN ${index}`).join(" ")} ELSE 9 END
+          ELSE 0 END,
+        CASE WHEN c.status IN (${sqlList(OPEN_CASE_STATUSES)}) THEN julianday(c.created_at) ELSE -julianday(COALESCE(c.resolved_at, c.created_at)) END ASC,
+        c.id ASC
+    `,
+    [playerId || "", userId, userId]
+  );
+  const activeCount = rows.filter((row) => OPEN_CASE_STATUSES.includes(text(row.status))).length;
+  return {
+    count: rows.length,
+    active_count: activeCount,
+    items: rows.slice(0, DASHBOARD_BLOCK_LIMIT).map((row) => {
+      const createdAt = toIso(row.created_at);
+      const reportedId = text(row.reported_player_id);
+      return {
+        id: row.id,
+        type: text(row.case_type) || null,
+        category: text(row.category) || null,
+        status: ALL_CASE_STATUSES.includes(text(row.status)) ? text(row.status) : "open",
+        priority: text(row.priority) || "normal",
+        subject: text(row.subject),
+        reported_player: reportedId
+          ? { id: reportedId, name: text(row.reported_nickname) || text(row.reported_name) || reportedId }
+          : null,
+        responsible: text(row.responsible_name) || null,
+        resolution: text(row.resolution) || null,
+        resolved_at: toIso(row.resolved_at),
+        tournament: text(row.tournament_id) ? tournamentOf(row) : null,
+        created_at: createdAt,
+        days_open: daysBetween(createdAt, nowIso),
+        link: buildPlayerCaseLink(row),
+      };
+    }),
+  };
+}
+
 // What the player has to do about one of their duels.
 export function getPlayerDuelAction(row, playerId, nowIso) {
   if (text(row.status).toLowerCase() === "error") return "result_error";
@@ -447,6 +513,7 @@ export async function buildDashboard(db, user, { query = {}, now = new Date() } 
   }
   if (playerId) {
     blocks.my_duels = await loadMyDuels(db, { playerId, nowIso });
+    blocks.my_cases = await loadMyCases(db, { playerId, userId, nowIso });
   }
 
   return {
