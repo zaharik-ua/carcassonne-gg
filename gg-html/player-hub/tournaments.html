@@ -1984,6 +1984,7 @@
 
   .cp-ccl-actions {
     display: flex;
+    align-items: center;
     flex-wrap: wrap;
     justify-content: flex-end;
     gap: 6px;
@@ -2032,11 +2033,25 @@
     min-width: 0;
   }
 
+  .cp-dd-btn-content.cp-dd-placeholder {
+    color: #8c96a4;
+  }
+
+  .cp-ccl-actions .cp-status-badge {
+    margin-right: 0;
+  }
+
   .cp-ccl-case-hint {
-    margin-top: 4px;
-    font-size: 12px;
-    line-height: 1.4;
-    color: #667286;
+    margin-top: 6px;
+    padding: 9px 10px;
+    border: 1px solid #f3dc9a;
+    border-radius: 6px;
+    background: #fff8e1;
+    color: #5c4300;
+    font-size: 13px;
+    font-weight: 600;
+    line-height: 1.45;
+    white-space: pre-line;
   }
 
   .cp-ccl-case-hint:empty {
@@ -9657,13 +9672,6 @@
     conduct: "Rule violation or opponent's behaviour",
     general: "Other question for admins",
   };
-  // Types and categories a player may choose under Resolve → Other (MATCH_CASE_CHOICES on the server).
-  const CCL_MATCH_CASE_CHOICES = [
-    { case_type: "problem", categories: ["scheduling", "not_played", "incomplete", "result_dispute"] },
-    { case_type: "complaint", categories: ["conduct"] },
-    { case_type: "request", categories: ["general"] },
-    { case_type: "feedback", categories: [] },
-  ];
   let cclSplitMenusBound = false;
 
   function closeCclSplitMenus(except = null) {
@@ -9782,56 +9790,118 @@
   }
 
   // Resolve a match in Error without games: a no-show, an agreed reschedule, or another case.
+  // Our dropdown (cp-dd) without search: { value, label } options; onChange(value) after a pick.
+  // `signal` ends the outside-click listener together with the modal.
+  function createCclDropdown(options, { placeholder = "Choose", onChange = () => {}, signal } = {}) {
+    let value = "";
+    const root = document.createElement("div");
+    root.className = "cp-dd";
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "cp-dd-btn";
+    const buttonText = document.createElement("span");
+    buttonText.className = "cp-dd-btn-content";
+    const chevron = document.createElement("span");
+    chevron.className = "cp-dd-chevron";
+    chevron.textContent = "▾";
+    button.append(buttonText, chevron);
+    const menu = document.createElement("div");
+    menu.className = "cp-dd-menu";
+    const close = () => {
+      menu.classList.remove("open");
+      menu.style.maxHeight = "0px";
+      button.classList.remove("open");
+    };
+    const render = () => {
+      const selected = options.find((option) => option.value === value) || null;
+      buttonText.textContent = selected ? selected.label : placeholder;
+      buttonText.classList.toggle("cp-dd-placeholder", !selected);
+      menu.innerHTML = "";
+      options.forEach((option) => {
+        const item = document.createElement("button");
+        item.type = "button";
+        item.className = "cp-dd-option";
+        item.classList.toggle("active", option.value === value);
+        item.textContent = option.label;
+        item.addEventListener("click", (event) => {
+          event.stopPropagation();
+          close();
+          value = option.value;
+          render();
+          onChange(value);
+        });
+        menu.appendChild(item);
+      });
+    };
+    button.addEventListener("click", (event) => {
+      event.stopPropagation();
+      if (menu.classList.contains("open")) {
+        close();
+        return;
+      }
+      menu.classList.add("open");
+      menu.style.maxHeight = `${menu.scrollHeight}px`;
+      button.classList.add("open");
+    });
+    document.addEventListener("click", (event) => {
+      if (!root.contains(event.target)) close();
+    }, { signal });
+    render();
+    root.append(button, menu);
+    return { root, close, getValue: () => value };
+  }
+
+  // Resolve a match in Error without games: a no-show, an agreed reschedule, or another problem.
+  // Every case from here is Match problem / Match was not played (the server sets it).
   function openCclResolveModal(match) {
     const ui = createCclModal("Resolve match");
     ui.fields.appendChild(createCclMatchTitle(match));
-    const RESET_HINT = "The match time will be reset — agree on a new time with your opponent.";
     const outcomes = [
       ...[match.player_1, match.player_2].filter((player) => player?.id).map((player) => ({
         value: `no_show:${player.id}`,
         label: `Player ${cclPlayerName(player)} did not show up for the match`,
-        hint: `The admins will review the case. ${RESET_HINT}`,
+        hint: "The admins will review the case.\nThe match time will be reset. You can already agree on a new time with your opponent.",
         button: "Submit",
       })),
-      { value: "reschedule", label: "We agreed to reschedule the match", hint: RESET_HINT, button: "Confirm" },
+      {
+        value: "reschedule",
+        label: "We agreed to reschedule the match",
+        hint: "The match time will be reset — agree on a new time with your opponent.",
+        button: "Confirm",
+      },
       { value: "other", label: "Other", hint: "", button: "Submit" },
     ];
-    const outcomeSelect = document.createElement("select");
-    outcomeSelect.add(new Option("Choose what happened", ""));
-    outcomes.forEach((outcome) => outcomeSelect.add(new Option(outcome.label, outcome.value)));
-    const outcomeRow = ui.addField("Match outcome", outcomeSelect);
     const hint = document.createElement("div");
     hint.className = "cp-ccl-case-hint";
-    outcomeRow.appendChild(hint);
-
-    // Resolve → Other: type, category of that type, details.
-    const typeSelect = document.createElement("select");
-    CCL_MATCH_CASE_CHOICES.forEach((choice) => typeSelect.add(new Option(CCL_CASE_TYPE_LABELS[choice.case_type], choice.case_type)));
-    const categorySelect = document.createElement("select");
     const details = createCclCaseTextarea();
-    const otherRows = [
-      ui.addField("Type", typeSelect),
-      ui.addField("Category", categorySelect),
-      ui.addField("Details", details),
-    ];
-    const syncCategories = () => {
-      const choice = CCL_MATCH_CASE_CHOICES.find((entry) => entry.case_type === typeSelect.value);
-      categorySelect.innerHTML = "";
-      (choice?.categories || []).forEach((category) => categorySelect.add(new Option(CCL_CASE_CATEGORY_LABELS[category], category)));
-      otherRows[1].classList.toggle("cp-hidden", !choice?.categories.length || outcomeSelect.value !== "other");
+    let detailsRow = null;
+    let submitButton = null;
+    const syncOutcome = (value) => {
+      const outcome = outcomes.find((entry) => entry.value === value) || null;
+      hint.textContent = outcome?.hint || "";
+      if (submitButton) {
+        submitButton.textContent = outcome?.button || "Submit";
+        submitButton.disabled = !outcome;
+      }
+      detailsRow?.classList.toggle("cp-hidden", outcome?.value !== "other");
+      if (outcome?.value === "other") details.focus();
     };
+    const outcome = createCclDropdown(outcomes, {
+      placeholder: "Choose what happened",
+      onChange: syncOutcome,
+      signal: ui.signal,
+    });
+    const outcomeRow = ui.addField("Match outcome", outcome.root);
+    outcomeRow.appendChild(hint);
+    detailsRow = ui.addField("Details", details);
 
     ui.addButton("Cancel", "cp-btn-secondary", ui.close);
-    const submitButton = ui.addButton("Submit", "cp-btn-primary", () => {
-      const value = outcomeSelect.value;
+    submitButton = ui.addButton("Submit", "cp-btn-primary", () => {
+      const value = outcome.getValue();
       if (value === "other") {
         return submitCclCase(ui, () => {
           if (!details.value.trim()) throw new Error("Describe the problem in Details.");
-          return cclRequest(`${CCL_MATCH_URL(match.id)}/cases`, "POST", {
-            case_type: typeSelect.value,
-            category: categorySelect.value || null,
-            details: details.value.trim(),
-          });
+          return cclRequest(`${CCL_MATCH_URL(match.id)}/cases`, "POST", { category: "not_played", details: details.value.trim() });
         });
       }
       const [action, playerId] = value.split(":");
@@ -9840,18 +9910,7 @@
         no_show_player_id: playerId || null,
       }));
     });
-
-    const syncOutcome = () => {
-      const outcome = outcomes.find((entry) => entry.value === outcomeSelect.value) || null;
-      hint.textContent = outcome?.hint || "";
-      submitButton.textContent = outcome?.button || "Submit";
-      submitButton.disabled = !outcome;
-      otherRows.forEach((row) => row.classList.toggle("cp-hidden", outcome?.value !== "other"));
-      syncCategories();
-    };
-    typeSelect.addEventListener("change", syncCategories, { signal: ui.signal });
-    outcomeSelect.addEventListener("change", syncOutcome, { signal: ui.signal });
-    syncOutcome();
+    syncOutcome("");
   }
 
   function createCclMatchRow(match, data, options) {
@@ -9877,15 +9936,23 @@
     const meta = document.createElement("div");
     meta.className = "cp-ccl-meta";
     const isPlayed = isCclResultEditableStatus(match.status);
+    const isError = String(match.status || "").toLowerCase() === "error";
+    // Error is shown as a badge next to the actions.
     meta.textContent = isPlayed
-      ? (isDone ? "" : match.status)
+      ? (isDone || isError ? "" : match.status)
       : [
         match.duel_format,
         hasValue(match.deadline_utc) ? `play before ${formatCclDeadline(match)}` : "",
         match.status !== "Planned" ? match.status : "",
       ].filter(Boolean).join(" · ");
     if (meta.textContent) players.appendChild(meta);
-    const canEditResult = isPlayed && match.can_edit_result === true && (!!match.my_side || options.manage);
+    // A match in Error without any game is resolved (Resolve), not edited; admins still edit it.
+    const hasPlayedGame = (match.games || []).some((game) => (
+      [game.player_1_score, game.player_2_score, game.player_1_rank, game.player_2_rank].some(hasValue)
+      || String(game.status || "").trim().toLowerCase() === "no show"
+    ));
+    const canEditResult = isPlayed && match.can_edit_result === true && (!!match.my_side || options.manage)
+      && (options.manage || !isError || hasPlayedGame);
     const editUntilTs = Date.parse(String(match.result_edit_until || ""));
     if (canEditResult && match.my_side && Number.isFinite(editUntilTs) && editUntilTs > Date.now()) {
       const note = document.createElement("div");
@@ -9919,14 +9986,23 @@
       );
       actions.appendChild(scenario === "scheduling" ? createCclSplitAction(timeButton, [reportProblem]) : timeButton);
     }
+    if (isError) {
+      const badge = document.createElement("span");
+      badge.className = "cp-status-badge cp-status-badge-error";
+      badge.textContent = "Error";
+      actions.appendChild(badge);
+    }
     if (scenario === "not_played") {
       addAction("Resolve", "cp-btn-primary", () => openCclResolveModal(match));
     }
+    const editResultsButton = canEditResult
+      ? createAction("Edit results", "cp-btn-secondary", () => openCclResultsModal(match))
+      : null;
     if (scenario === "incomplete") {
-      addAction("Report a problem", "cp-btn-secondary", reportProblem.onClick);
-    }
-    if (canEditResult) {
-      addAction("Edit results", "cp-btn-secondary", () => openCclResultsModal(match));
+      // [Edit results][▾] → Report a problem; only the arrow once the editing window is over.
+      actions.appendChild(createCclSplitAction(editResultsButton, [reportProblem]));
+    } else if (editResultsButton) {
+      actions.appendChild(editResultsButton);
     }
     if (scenario === "result_dispute") {
       actions.appendChild(createCclSplitAction(null, [reportProblem]));

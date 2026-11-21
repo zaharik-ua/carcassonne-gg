@@ -153,7 +153,7 @@ test("a player's open case on a duel takes new details of the same category", as
   const second = await createOrAppendTournamentCase(db, { ...base, details: "Still no answer" });
   assert.equal(second.appended, true);
   assert.equal(second.case.id, first.case.id);
-  assert.equal(second.case.details, "No answer\n\nStill no answer");
+  assert.equal(second.case.details, "No answer\n--\nStill no answer");
 
   // Another category, or a closed case, starts a new case.
   const other = await createOrAppendTournamentCase(db, { ...base, category: "result_dispute", details: "Wrong" });

@@ -148,15 +148,17 @@ test("Report a problem is refused when the match state does not allow it", async
   assert.deepEqual(await all(db, "SELECT id FROM tournament_cases"), []);
 });
 
-test("Resolve → Other saves a case with the chosen type and keeps the match in Error", async (t) => {
+test("Resolve → Other saves a Match was not played case and keeps the match in Error", async (t) => {
   const db = await createDatabase(t);
   const api = createApi(db);
-  const sent = await report(api, "error-empty", { case_type: "complaint", category: "conduct", details: "Rude in chat" });
+  const sent = await report(api, "error-empty", { category: "not_played", details: "BGA was down" });
   assert.equal(sent.status, 201, JSON.stringify(sent.body));
-  assert.deepEqual([sent.body.case.case_type, sent.body.case.category], ["complaint", "conduct"]);
-  const feedback = await report(api, "error-empty", { case_type: "feedback", details: "BGA was down" });
-  assert.equal(feedback.body.case.category, null);
-  assert.equal((await report(api, "error-empty", { case_type: "complaint", category: "no_show", details: "x" })).status, 400);
+  assert.deepEqual([sent.body.case.case_type, sent.body.case.category], ["problem", "not_played"]);
+  // A type or category from the client does not change the case.
+  const again = await report(api, "error-empty", { case_type: "complaint", details: "More" });
+  assert.equal(again.body.case.id, sent.body.case.id);
+  assert.equal(again.body.case.case_type, "problem");
+  assert.equal((await report(api, "error-empty", { category: "conduct", details: "x" })).status, 409);
   assert.equal((await get(db, "SELECT status FROM duels WHERE id = 'error-empty'")).status, "Error");
 });
 

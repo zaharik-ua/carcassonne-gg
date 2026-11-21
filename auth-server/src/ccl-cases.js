@@ -5,11 +5,9 @@ import { CCL_MATCH_SOURCE_TYPE } from "./ccl-matches.js";
 import { loadCclTournament } from "./ccl-routes.js";
 import { getDuelSide } from "./duel-time-proposals.js";
 import {
-  MATCH_CASE_CHOICES,
   caseAuditEntry,
   createOrAppendTournamentCase,
   formatSubmittedCase,
-  normalizeCaseChoice,
   normalizeCaseDetails,
 } from "./tournament-cases.js";
 
@@ -187,7 +185,7 @@ export function registerCclCaseRoutes(app, {
   };
 
   // Report a problem (scenarios scheduling, incomplete, result_dispute) or Resolve → Other
-  // (any match case type and category) for a match in Error without games.
+  // for a match in Error without games; the case is always Match problem / the scenario.
   app.post(
     "/ccl/matches/:id/cases",
     requireAuthenticated,
@@ -198,17 +196,11 @@ export function registerCclCaseRoutes(app, {
       const created = await inTransaction(db, async () => {
         const { match, playerId, scenario } = await loadCaseContext(db, req.user, req.params.id, now());
         if (!scenario) throw requestError(409, "A problem cannot be reported for this match now");
-        let choice;
-        if (scenario === "not_played") {
-          choice = normalizeCaseChoice(req.body, MATCH_CASE_CHOICES);
-          if (choice.error) throw requestError(400, choice.error);
-        } else {
-          const category = text(req.body?.category).toLowerCase();
-          if (category && category !== scenario) throw requestError(409, "The match has changed. Reload the page and try again");
-          choice = { case_type: "problem", category: scenario };
-        }
+        const category = text(req.body?.category).toLowerCase();
+        if (category && category !== scenario) throw requestError(409, "The match has changed. Reload the page and try again");
         return createOrAppendTournamentCase(db, {
-          ...choice,
+          case_type: "problem",
+          category: scenario,
           details: details.value,
           submitted_by_user_id: actorUserId(req.user),
           submitted_by_player_id: playerId,

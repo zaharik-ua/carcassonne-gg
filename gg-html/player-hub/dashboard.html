@@ -313,6 +313,11 @@
     overflow-wrap: anywhere;
   }
 
+  /* Texts of repeated submissions of one case, one per line with -- between them. */
+  .dash-row-line.dash-case-details {
+    white-space: pre-line;
+  }
+
   .dash-row-error {
     font-size: 12px;
     color: var(--attention);
@@ -607,7 +612,11 @@
     const node = el("div", "dash-row");
     const main = el("div", "dash-row-main");
     main.appendChild(el("div", "dash-row-title", title));
-    lines.filter(Boolean).forEach((line) => main.appendChild(el("div", "dash-row-line", line)));
+    // A line is a string, or { text, className } for a line with its own style.
+    lines.filter((line) => (typeof line === "string" ? line : line?.text)).forEach((line) => {
+      if (typeof line === "string") main.appendChild(el("div", "dash-row-line", line));
+      else main.appendChild(el("div", `dash-row-line ${line.className || ""}`.trim(), line.text));
+    });
     if (errorLine) main.appendChild(el("div", "dash-row-error", errorLine));
     const sideEl = el("div", "dash-row-side");
     side.filter(Boolean).forEach((child) => sideEl.appendChild(child));
@@ -663,9 +672,14 @@
     return [caseLabel(item.type), item.category ? caseLabel(item.category) : ""].filter(Boolean).join(": ") || `Case #${item.id}`;
   }
 
+  // Each submission of the case (CASE_DETAILS_SEPARATOR on the server) on its own line, -- between them.
   function caseDetailsPreview(item) {
-    const details = String(item.details || "").replace(/\s+/g, " ").trim();
-    return details.length > CASE_DETAILS_PREVIEW ? `${details.slice(0, CASE_DETAILS_PREVIEW - 1)}…` : details;
+    const parts = String(item.details || "")
+      .split(/\n--\n/)
+      .map((part) => part.replace(/\s+/g, " ").trim())
+      .filter(Boolean)
+      .map((part) => (part.length > CASE_DETAILS_PREVIEW ? `${part.slice(0, CASE_DETAILS_PREVIEW - 1)}…` : part));
+    return { text: parts.join("\n--\n"), className: "dash-case-details" };
   }
 
   function renderCase(item) {

@@ -6,6 +6,8 @@ export const TOURNAMENT_CASE_STATUSES = new Set(["open", "in_progress", "resolve
 export const TOURNAMENT_CASE_PRIORITIES = new Set(["low", "normal", "high", "urgent"]);
 export const OPEN_TOURNAMENT_CASE_STATUSES = ["open", "in_progress"];
 export const CASE_DETAILS_MAX_LENGTH = 5000;
+// Between the texts of repeated submissions of one case; the dashboard shows them as separate parts.
+export const CASE_DETAILS_SEPARATOR = "\n--\n";
 
 // Categories of each type. A type without categories stores category = NULL.
 // complaint/no_show is the Rivals (Challenges) no-show report.
@@ -42,7 +44,7 @@ export const NON_MATCH_CASE_CHOICES = [
   { case_type: "feedback", category: null },
 ];
 
-// What a player may choose under Resolve → Other for a CCL match.
+// Case types and categories about a match (GET /tournament-cases/choices).
 export const MATCH_CASE_CHOICES = [
   ...TOURNAMENT_CASE_CATEGORIES.problem.map((category) => ({ case_type: "problem", category })),
   { case_type: "complaint", category: "conduct" },
@@ -223,7 +225,7 @@ export async function createOrAppendTournamentCase(db, fields) {
       [duelId, playerId, category, ...OPEN_TOURNAMENT_CASE_STATUSES]
     );
     if (existing) {
-      const joined = `${text(existing.details)}\n\n${fields.details}`.trim();
+      const joined = [text(existing.details), fields.details].filter(Boolean).join(CASE_DETAILS_SEPARATOR);
       await dbRun(
         db,
         "UPDATE tournament_cases SET details = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
