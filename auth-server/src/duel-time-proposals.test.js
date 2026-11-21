@@ -5,6 +5,7 @@ import {
   isDuelProposalSnapshotCurrent,
   planDuelTimeAcceptance,
   planDuelTimeProposal,
+  planDuelTimeProposalDeletion,
 } from "./duel-time-proposals.js";
 
 const NOW = Date.parse("2026-11-11T12:00:00Z");
@@ -58,6 +59,23 @@ test("rejects proposals from outsiders or for finished matches; allows past time
     actorPlayerId: "taras",
     nowMs: NOW,
   }).value, { time_utc: "2026-11-10T18:00:00.000Z", proposed_time_status: "accepted" });
+});
+
+test("the proposer deletes a pending proposal; the match keeps its time", () => {
+  const change = planned({
+    time_utc: "2026-11-20T18:00:00.000Z",
+    proposed_time_utc: "2026-11-22T18:00:00.000Z",
+    proposed_time_by_player_id: "olena",
+    proposed_time_status: "change_pending",
+  });
+  assert.deepEqual(planDuelTimeProposalDeletion({ duel: change, actorPlayerId: "olena" }).value, {
+    proposed_time_utc: null, proposed_time_by_player_id: null, proposed_time_status: "accepted",
+  });
+  assert.equal(planDuelTimeProposalDeletion({ duel: change, actorPlayerId: "taras" }).status, 403);
+  assert.equal(planDuelTimeProposalDeletion({ duel: change, actorPlayerId: "juan" }).status, 403);
+  const first = planned({ ...change, time_utc: null, proposed_time_status: "pending" });
+  assert.equal(planDuelTimeProposalDeletion({ duel: first, actorPlayerId: "olena" }).value.proposed_time_status, null);
+  assert.equal(planDuelTimeProposalDeletion({ duel: planned({ time_utc: change.time_utc, proposed_time_status: "accepted" }), actorPlayerId: "olena" }).status, 409);
 });
 
 test("detects a stale proposal snapshot", () => {

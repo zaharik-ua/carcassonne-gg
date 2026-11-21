@@ -301,6 +301,23 @@ test("players agree on a time; the match gets it on acceptance", async (t) => {
   // The round deadline does not block scheduling.
   const late = await propose(USERS.taras, "2026-12-05T18:00:00Z");
   assert.equal(late.status, 200, JSON.stringify(late.body));
+
+  // The proposer deletes the change proposal: the agreed time stays.
+  const remove = (user, snapshot) => api.call("DELETE /ccl/matches/:id/time-proposal", {
+    user, params: { id: match.id }, body: snapshot,
+  });
+  const lateSnapshot = {
+    expected_proposed_time_utc: "2026-12-05T18:00:00.000Z",
+    expected_proposed_time_by_player_id: "taras",
+    expected_proposed_time_status: "change_pending",
+  };
+  assert.equal((await remove(USERS.olena, lateSnapshot)).status, 403);
+  const removed = await remove(USERS.taras, lateSnapshot);
+  assert.equal(removed.status, 200, JSON.stringify(removed.body));
+  assert.equal(removed.body.match.time_utc, "2026-11-20T18:00:00.000Z");
+  assert.equal(removed.body.match.proposed_time_utc, null);
+  assert.equal(removed.body.match.proposed_time_status, "accepted");
+  assert.equal(api.audit.at(-1).event_type, "duel.time_proposal.deleted");
 });
 
 test("admins edit and delete matches; a direct time clears the proposal", async (t) => {

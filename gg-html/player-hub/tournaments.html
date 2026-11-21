@@ -3833,6 +3833,14 @@
     cancelButton.textContent = "Cancel";
     actions.appendChild(cancelButton);
 
+    const deleteProposalButton = isOwnProposal ? document.createElement("button") : null;
+    if (deleteProposalButton) {
+      deleteProposalButton.type = "button";
+      deleteProposalButton.className = "cp-btn cp-btn-danger";
+      deleteProposalButton.textContent = "Delete";
+      actions.insertBefore(deleteProposalButton, cancelButton);
+    }
+
     const counterButton = isIncomingProposal ? document.createElement("button") : null;
     if (counterButton) {
       counterButton.type = "button";
@@ -3860,7 +3868,7 @@
       modal.appendChild(counterProposal);
     }
 
-    const actionButtons = [cancelButton, counterButton, primaryButton, sendProposalButton].filter(Boolean);
+    const actionButtons = [deleteProposalButton, cancelButton, counterButton, primaryButton, sendProposalButton].filter(Boolean);
     const setSaving = (saving) => {
       actionButtons.forEach((button) => { button.disabled = !!saving; });
       timeInput.disabled = !!saving;
@@ -3950,7 +3958,37 @@
       }
     };
 
+    // Withdraws the own proposal; the match keeps its current time.
+    const deleteProposal = async () => {
+      setError("");
+      setSaving(true);
+      try {
+        const response = await fetch(
+          `${MATCHES_URL}/${encodeURIComponent(String(match?.id || ""))}/time-proposal`,
+          {
+            method: "DELETE",
+            credentials: "include",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(proposalSnapshot),
+          }
+        );
+        const result = await response.json().catch(() => ({}));
+        if (!response.ok || !result?.ok) {
+          setError(result?.message || "Failed to delete time proposal.");
+          return;
+        }
+        finishSuccess();
+      } catch (_error) {
+        setError("Failed to delete time proposal.");
+      } finally {
+        setSaving(false);
+      }
+    };
+
     cancelButton.addEventListener("click", close, { signal: controller.signal });
+    if (deleteProposalButton) {
+      deleteProposalButton.addEventListener("click", deleteProposal, { signal: controller.signal });
+    }
     if (counterButton) {
       counterButton.addEventListener("click", () => {
         setError("");
@@ -9166,6 +9204,12 @@
       ui.submit(() => cclRequest(`${CCL_MATCH_URL(match.id)}/time-proposal/accept`, "PATCH", snapshot));
     };
 
+    // Withdraws the own proposal; the match keeps its current time.
+    if (isOwn) {
+      ui.addButton("Delete", "cp-btn-danger", () => ui.submit(() => (
+        cclRequest(`${CCL_MATCH_URL(match.id)}/time-proposal`, "DELETE", snapshot)
+      )));
+    }
     ui.addButton("Cancel", "cp-btn-secondary", ui.close);
     ui.addButton(isIncoming ? "Send another time" : isOwn ? "Update proposal" : "Send proposal", isIncoming ? "cp-btn-secondary" : "cp-btn-primary", () => sendProposal());
     if (isIncoming) ui.addButton("Accept time", "cp-btn-primary", () => acceptProposal());
@@ -9915,6 +9959,8 @@
       const createsCase = !!outcome && outcome.value !== "reschedule";
       caseRows.forEach((row) => row.classList.toggle("cp-hidden", !createsCase));
       detailsRow?.classList.toggle("cp-hidden", !createsCase);
+      // The hint sits under Details when the outcome creates a case, otherwise under the outcome.
+      (createsCase ? detailsRow : outcomeRow)?.appendChild(hint);
       // A no-show fills Details with its text; the player may change it. Own text is kept.
       const nextPreset = outcome?.details || "";
       if (!details.value.trim() || details.value === presetDetails) details.value = nextPreset;
@@ -9923,7 +9969,6 @@
     };
     const outcome = createCclDropdown(outcomes, { placeholder: "Choose what happened", onChange: syncOutcome });
     const outcomeRow = ui.addField("Match outcome", outcome.root);
-    outcomeRow.appendChild(hint);
     caseRows = [
       ui.addField("Type", createCclReadonlyInput(CCL_CASE_TYPE_LABELS.problem)),
       ui.addField("Category", createCclReadonlyInput(CCL_CASE_CATEGORY_LABELS.not_played)),
@@ -9996,7 +10041,7 @@
       const hint = document.createElement("div");
       hint.className = "cp-ccl-case-hint";
       hint.textContent = "Move the agreed match time by up to 1 hour to get the results from BGA again.\n"
-        + "Played more than 1 hour off? Choose Report a problem instead.";
+        + "If you played more than 1 hour earlier or later, choose Report a problem.";
       panel.append(current, hint);
       timeInput = createCclDatetimeInput(match.time_utc);
       const startTs = Date.parse(String(match.time_utc || ""));
@@ -10060,7 +10105,7 @@
       const minutes = Math.abs(Date.parse(timeUtc || "") - Date.parse(String(match.time_utc || ""))) / 60000;
       if (!timeUtc) return ui.setError("Choose the corrected match time.");
       if (!(minutes >= 1)) return ui.setError("Choose a time different from the current match time.");
-      if (minutes > CCL_TIME_ADJUST_MAX_MINUTES) return ui.setError("The match time can be moved by 1 hour at most.");
+      if (minutes > CCL_TIME_ADJUST_MAX_MINUTES) return ui.setError("The match time can be moved by 1 hour at most. Otherwise, choose Report a problem and add the details.");
       ui.setError("");
       const status = document.createElement("div");
       status.className = "cp-action-status";

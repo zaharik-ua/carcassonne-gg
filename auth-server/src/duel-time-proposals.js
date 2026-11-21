@@ -80,6 +80,24 @@ export function planDuelTimeProposal({ duel, actorPlayerId, proposedTimeUtc }) {
   };
 }
 
+// The player who made the proposal withdraws it; the match keeps its current time.
+export function planDuelTimeProposalDeletion({ duel, actorPlayerId }) {
+  const side = getDuelSide(duel, actorPlayerId);
+  if (!side) return denied(403, "Only the players of this match can delete its time proposal");
+  if (!isPlannedDuel(duel)) return denied(409, "The time can be changed only for a planned match");
+  if (!isActiveDuelTimeProposal(duel)) return denied(409, "There is no pending time proposal for this match");
+  if (text(duel.proposed_time_by_player_id) !== text(actorPlayerId)) {
+    return denied(403, "Only the player who made this proposal can delete it");
+  }
+  return {
+    value: {
+      proposed_time_utc: null,
+      proposed_time_by_player_id: null,
+      proposed_time_status: normalizeUtc(duel?.time_utc) ? DUEL_TIME_PROPOSAL_STATUSES.ACCEPTED : null,
+    },
+  };
+}
+
 // Acceptance by the player who did not make the proposal.
 export function planDuelTimeAcceptance({ duel, actorPlayerId }) {
   const side = getDuelSide(duel, actorPlayerId);

@@ -16,6 +16,7 @@ import {
   isPlannedDuel,
   planDuelTimeAcceptance,
   planDuelTimeProposal,
+  planDuelTimeProposalDeletion,
 } from "./duel-time-proposals.js";
 import { calculateGgDuelRating, loadGgRatingContext } from "./gg-ratings.js";
 import { getCclResultEditAccess, isCclResultEditableStatus } from "./ccl-result-edit.js";
@@ -487,6 +488,30 @@ export function registerCclMatchRoutes(app, {
 
     audit(req, {
       event_type: result.event,
+      entity_type: "duel",
+      action: "update",
+      record_id: result.after.id,
+      changes: changedFields(result.before, result.after, PROPOSAL_FIELDS),
+      metadata: { tournament_id: result.after.tournament_id },
+    });
+    return res.json({ ok: true, match: await formatOne(db, result.after, result.slots, result.actor.playerId) });
+  }));
+
+  app.delete("/ccl/matches/:id/time-proposal", requireAuthenticated, handle("Failed to delete time proposal", async (req, res) => {
+    const payload = req.body || {};
+    const result = await inTransaction(db, async () => {
+      const { match, slots, actor } = await loadMatchContext(db, req.user, req.params.id);
+      if (!isDuelProposalSnapshotCurrent(match, payload)) {
+        throw requestError(409, "The time proposal has changed. Reload the match and try again");
+      }
+      const plan = planDuelTimeProposalDeletion({ duel: match, actorPlayerId: actor.playerId });
+      if (plan.error) throw requestError(plan.status, plan.error);
+      await updateMatch(db, match.id, plan.value, actor.playerId);
+      return { before: match, after: await loadMatch(db, match.id), slots, actor };
+    });
+
+    audit(req, {
+      event_type: "duel.time_proposal.deleted",
       entity_type: "duel",
       action: "update",
       record_id: result.after.id,

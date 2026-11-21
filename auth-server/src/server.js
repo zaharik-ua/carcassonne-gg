@@ -24913,6 +24913,78 @@ app.patch("/matches/:id/time-proposal/accept", requireAuthenticated, async (req,
   }
 });
 
+app.delete("/matches/:id/time-proposal", requireAuthenticated, async (req, res) => {
+  const matchId = String(req.params.id || "").trim();
+  const payload = req.body && typeof req.body === "object" ? req.body : {};
+  if (!matchId) {
+    return res.status(400).json({ ok: false, message: "Match id is required" });
+  }
+
+  let transactionOpen = false;
+  try {
+    await dbRunAsync("BEGIN IMMEDIATE TRANSACTION");
+    transactionOpen = true;
+    const { match, captainTeamId } = await loadMatchTimeProposalContext(matchId, req.user);
+    if (!matchTimeProposalSnapshotMatches(match, payload)) {
+      const error = new Error("The time proposal has changed. Reload the match and try again");
+      error.httpStatus = 409;
+      throw error;
+    }
+    const proposalStatus = String(match.proposed_time_status || "").trim().toLowerCase();
+    if (![MATCH_TIME_PROPOSAL_STATUSES.PENDING, MATCH_TIME_PROPOSAL_STATUSES.CHANGE_PENDING].includes(proposalStatus)) {
+      const error = new Error("There is no pending time proposal for this match");
+      error.httpStatus = 409;
+      throw error;
+    }
+    const proposedByTeamId = String(match.proposed_time_by_team_id || "").trim().toUpperCase();
+    if (proposedByTeamId !== captainTeamId) {
+      const error = new Error("Only the captain of the team that made this proposal can delete it");
+      error.httpStatus = 403;
+      throw error;
+    }
+    // The match keeps its current time; without one it has no proposal at all.
+    const nextProposalStatus = normalizeUtcTimestamp(match.time_utc) ? MATCH_TIME_PROPOSAL_STATUSES.ACCEPTED : null;
+    const actorPlayerId = normalizeNullableText(req.user?.player_id ?? req.user?.bga_id);
+
+    await dbRunAsync(
+      `
+        UPDATE matches
+        SET
+          proposed_time_utc = NULL,
+          proposed_time_by_team_id = NULL,
+          proposed_time_status = ?,
+          updated_by = ?,
+          updated_at = CURRENT_TIMESTAMP
+        WHERE id = ?
+          AND deleted_at IS NULL
+          AND lower(trim(COALESCE(status, ''))) = 'planned'
+      `,
+      [nextProposalStatus, actorPlayerId, matchId]
+    );
+    const updatedMatch = await dbGetAsync("SELECT * FROM matches WHERE id = ? AND deleted_at IS NULL LIMIT 1", [matchId]);
+    await dbRunAsync("COMMIT");
+    transactionOpen = false;
+
+    logAuditEvent({
+      ...getAuditActor(req.user),
+      event_type: "match.time_proposal.deleted",
+      entity_type: "match",
+      action: "update",
+      record_id: matchId,
+      changes: buildAuditChanges(match, updatedMatch, MATCH_AUDIT_FIELDS),
+      metadata: { captain_team_id: captainTeamId },
+    });
+    return res.json({ ok: true, match: updatedMatch });
+  } catch (error) {
+    if (transactionOpen) await dbRunAsync("ROLLBACK").catch(() => {});
+    if (error?.httpStatus) {
+      return res.status(error.httpStatus).json({ ok: false, message: error.message });
+    }
+    console.error("Failed to delete match time proposal", error);
+    return res.status(500).json({ ok: false, message: "Failed to delete match time proposal" });
+  }
+});
+
 app.delete("/matches/:id", (req, res) => {
   if (!req.user) {
     return res.status(401).json({ ok: false, message: "Unauthorized" });
