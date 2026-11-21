@@ -1,5 +1,6 @@
 // Player Hub dashboard: GET /dashboard returns the blocks the current user may see.
-// - Global admins (users.admin = 1): news proposals in Draft, new users with a linked BGA profile.
+// - Global admins (users.admin = 1): open cases of all tournaments, news proposals in Draft,
+//   new users with a linked BGA profile.
 // - Tournament admins: only tournaments where the user has role = admin in tournament_access_users
 //   (global admins too): unplanned duels with a structured deadline (tournament_stages, CCL for now)
 //   and duels in Error.
@@ -9,7 +10,7 @@
 export const DASHBOARD_BLOCK_LIMIT = 10;
 export const DEFAULT_DAYS_BEFORE_DEADLINE = 3;
 export const MAX_DAYS_BEFORE_DEADLINE = 60;
-export const NEW_USERS_DAYS = 30;
+export const NEW_USERS_DAYS = 7;
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const OPEN_DUEL_STATUSES = ["draft", "planned", "in progress", "requested new time"];
@@ -290,6 +291,78 @@ export async function loadNewUsers(db, { nowIso }) {
   };
 }
 
+const OPEN_CASE_STATUSES = ["open", "in_progress"];
+const CASE_PRIORITY_ORDER = ["urgent", "high", "normal", "low"];
+
+// Where an admin opens the record a case is about; cases have no page of their own yet.
+export function buildCaseLink(row) {
+  if (text(row.challenge_period_id)) return "/player-hub/challenges";
+  const tournamentId = text(row.tournament_id);
+  if (!tournamentId) return null;
+  const params = new URLSearchParams({ id: tournamentId });
+  const matchId = text(row.match_id) || text(row.duel_match_id);
+  if (matchId) {
+    params.set("edit", "1");
+    params.set("match_id", matchId);
+  }
+  return `/player-hub/tournaments?${params.toString()}`;
+}
+
+// Open and in-progress cases of every tournament (global admins), most urgent and oldest first.
+export async function loadOpenCases(db, { nowIso, tournamentId = "" }) {
+  const filterSql = tournamentId ? "AND upper(trim(COALESCE(c.tournament_id, ''))) = upper(trim(?))" : "";
+  const rows = await dbAll(
+    db,
+    `
+      SELECT c.id, c.case_type, c.category, c.status, c.priority, c.subject, c.created_at,
+        c.tournament_id, c.match_id, c.duel_id, c.challenge_period_id,
+        c.submitted_by_player_id, sp.bga_nickname AS submitted_nickname, sp.name AS submitted_name,
+        c.reported_player_id, rp.bga_nickname AS reported_nickname, rp.name AS reported_name,
+        ru.name AS responsible_name, d.match_id AS duel_match_id,
+        t.name AS tournament_name, t.short_title AS tournament_short_title
+      FROM tournament_cases c
+      LEFT JOIN profiles sp ON sp.id = c.submitted_by_player_id
+      LEFT JOIN profiles rp ON rp.id = c.reported_player_id
+      LEFT JOIN users ru ON ru.id = c.responsible_user_id
+      LEFT JOIN duels d ON d.id = c.duel_id
+      LEFT JOIN tournaments t ON upper(trim(t.id)) = upper(trim(c.tournament_id))
+      WHERE c.deleted_at IS NULL
+        AND c.status IN (${sqlList(OPEN_CASE_STATUSES)})
+        ${filterSql}
+      ORDER BY CASE c.priority ${CASE_PRIORITY_ORDER.map((value, index) => `WHEN '${value}' THEN ${index}`).join(" ")} ELSE 9 END,
+        julianday(c.created_at) ASC, c.id ASC
+    `,
+    tournamentId ? [tournamentId] : []
+  );
+  const person = (row, idField, prefix) => {
+    const id = text(row[idField]);
+    if (!id) return null;
+    return { id, name: text(row[`${prefix}_nickname`]) || text(row[`${prefix}_name`]) || id };
+  };
+  return {
+    count: rows.length,
+    items: rows.slice(0, DASHBOARD_BLOCK_LIMIT).map((row) => {
+      const createdAt = toIso(row.created_at);
+      return {
+        id: row.id,
+        type: text(row.case_type) || null,
+        category: text(row.category) || null,
+        status: text(row.status),
+        priority: text(row.priority) || "normal",
+        subject: text(row.subject),
+        submitted_by: person(row, "submitted_by_player_id", "submitted"),
+        reported_player: person(row, "reported_player_id", "reported"),
+        responsible: text(row.responsible_name) || null,
+        tournament: text(row.tournament_id) ? tournamentOf(row) : null,
+        duel_id: text(row.duel_id) || null,
+        created_at: createdAt,
+        days_open: daysBetween(createdAt, nowIso),
+        link: buildCaseLink(row),
+      };
+    }),
+  };
+}
+
 // What the player has to do about one of their duels.
 export function getPlayerDuelAction(row, playerId, nowIso) {
   if (text(row.status).toLowerCase() === "error") return "result_error";
@@ -364,6 +437,7 @@ export async function buildDashboard(db, user, { query = {}, now = new Date() } 
 
   const blocks = {};
   if (isGlobalAdmin) {
+    blocks.cases = await loadOpenCases(db, { nowIso, tournamentId: requestedTournamentId });
     blocks.news_drafts = await loadNewsDrafts(db, { nowIso });
     blocks.new_users = await loadNewUsers(db, { nowIso });
   }

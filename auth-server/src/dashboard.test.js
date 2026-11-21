@@ -3,6 +3,7 @@ import test from "node:test";
 import sqlite3 from "sqlite3";
 
 import {
+  buildCaseLink,
   buildDashboard,
   buildDuelLink,
   getPlanningStatus,
@@ -32,6 +33,16 @@ async function createDatabase(t) {
     CREATE TABLE tournaments (id TEXT PRIMARY KEY, name TEXT, short_title TEXT, is_test INTEGER DEFAULT 0);
     CREATE TABLE tournament_access_users (tournament_entity_type TEXT, tournament_id TEXT, user_id INTEGER, role TEXT);
     CREATE TABLE matches (id TEXT PRIMARY KEY, time_utc TEXT, deleted_at TEXT);
+    CREATE TABLE tournament_cases (id INTEGER PRIMARY KEY, case_type TEXT, category TEXT, status TEXT, priority TEXT,
+      subject TEXT, submitted_by_player_id TEXT, responsible_user_id INTEGER, reported_player_id TEXT, match_id TEXT,
+      duel_id TEXT, tournament_id TEXT, challenge_period_id TEXT, created_at TEXT, deleted_at TEXT);
+    INSERT INTO tournament_cases (id, case_type, category, status, priority, subject, submitted_by_player_id,
+      responsible_user_id, reported_player_id, duel_id, tournament_id, challenge_period_id, created_at, deleted_at) VALUES
+      (1, 'complaint', 'no_show', 'open', 'normal', 'No-show report: two vs one', 'p1', NULL, 'p2', 'error', 'WTCOC', NULL, '2026-11-10 10:00:00', NULL),
+      (2, 'problem', NULL, 'in_progress', 'urgent', 'Wrong result', 'p2', 1, NULL, NULL, 'OTHER', NULL, '2026-11-18 10:00:00', NULL),
+      (3, 'complaint', 'no_show', 'open', 'normal', 'Challenge no-show', 'p3', NULL, 'p1', NULL, NULL, 'cp1', '2026-11-12 10:00:00', NULL),
+      (4, 'request', NULL, 'resolved', 'high', 'Resolved', 'p1', NULL, NULL, NULL, 'WTCOC', NULL, '2026-11-01 10:00:00', NULL),
+      (5, 'other', NULL, 'open', 'high', 'Deleted', 'p1', NULL, NULL, NULL, 'WTCOC', NULL, '2026-11-01 10:00:00', '2026-11-02');
     CREATE TABLE news (id INTEGER PRIMARY KEY, title TEXT, status TEXT, is_proposal INTEGER, tournament_id TEXT,
       created_by TEXT, created_at TEXT, deleted_at TEXT);
     CREATE TABLE duels (id TEXT PRIMARY KEY, tournament_id TEXT, match_id TEXT, challenge_period_id TEXT, group_id TEXT,
@@ -45,7 +56,8 @@ async function createDatabase(t) {
       (2, 'TA', NULL, 0, '2026-11-01 10:00:00'),
       (3, 'Player One', 'p1', 0, '2026-11-15 10:00:00'),
       (4, 'No profile', NULL, 0, '2026-11-18 10:00:00'),
-      (5, 'Old', 'p2', 0, '2026-09-01 10:00:00');
+      (5, 'Old', 'p2', 0, '2026-09-01 10:00:00'),
+      (6, 'Two weeks ago', 'p3', 0, '2026-11-06 10:00:00');
     INSERT INTO profiles (id, bga_nickname, name, association, bga_elo, telegram) VALUES
       ('p-admin', 'admin', 'Admin', 'UA', 300, NULL),
       ('p1', 'one', 'Player One', 'UA', 250, '@one'),
@@ -141,9 +153,33 @@ test("global admin sees global blocks and only the tournaments they were added t
   assert.equal(dashboard.blocks.news_drafts.items[0].author.name, "one");
   assert.equal(dashboard.blocks.news_drafts.items[0].days_waiting, 10);
   assert.equal(dashboard.blocks.news_drafts.items[0].link, "/player-hub/news?edit=1&news_id=1");
-  // Users with a linked profile created in the last 30 days, newest first.
+  // Users with a linked profile created in the last 7 days, newest first.
   assert.deepEqual(dashboard.blocks.new_users.items.map((item) => item.bga_nickname), ["one"]);
+  assert.equal(dashboard.blocks.new_users.days, 7);
+  // Open cases of every tournament, not only the ones the admin was added to: most urgent, then oldest.
+  const cases = dashboard.blocks.cases;
+  assert.deepEqual(cases.items.map((item) => item.id), [2, 1, 3]);
+  assert.equal(cases.count, 3);
+  assert.equal(cases.items[0].responsible, "Admin");
+  assert.equal(cases.items[1].submitted_by.name, "one");
+  assert.equal(cases.items[1].reported_player.name, "two");
+  assert.equal(cases.items[1].days_open, 10);
+  assert.equal(cases.items[1].link, "/player-hub/tournaments?id=WTCOC&edit=1&match_id=M1");
+  assert.equal(cases.items[2].link, "/player-hub/challenges");
   assert.deepEqual(dashboard.blocks.error_duels.items, []);
+});
+
+test("global admin cases follow the tournament filter, even for tournaments they do not administer", async (t) => {
+  const db = await createDatabase(t);
+  const other = await buildDashboard(db, USERS.globalAdmin, { now: NOW, query: { tournament_id: "other" } });
+  assert.deepEqual(other.blocks.cases.items.map((item) => item.id), [2]);
+});
+
+test("case links", () => {
+  assert.equal(buildCaseLink({ tournament_id: "WTCOC", match_id: "M1" }), "/player-hub/tournaments?id=WTCOC&edit=1&match_id=M1");
+  assert.equal(buildCaseLink({ tournament_id: "CCL-2027" }), "/player-hub/tournaments?id=CCL-2027");
+  assert.equal(buildCaseLink({ challenge_period_id: "cp1", tournament_id: "RIVALS" }), "/player-hub/challenges");
+  assert.equal(buildCaseLink({}), null);
 });
 
 test("tournament admin: unplanned duels with a deadline and error duels of their tournaments", async (t) => {
@@ -151,6 +187,7 @@ test("tournament admin: unplanned duels with a deadline and error duels of their
   const dashboard = await buildDashboard(db, USERS.tournamentAdmin, { now: NOW });
   assert.deepEqual(dashboard.roles, { global_admin: false, tournament_admin: true, player: false });
   assert.equal(dashboard.blocks.news_drafts, undefined);
+  assert.equal(dashboard.blocks.cases, undefined);
   assert.equal(dashboard.blocks.my_duels, undefined);
   assert.deepEqual(dashboard.tournaments.map((item) => item.id).sort(), ["WTCOC", "ccl-2027"]);
 

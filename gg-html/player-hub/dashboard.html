@@ -322,6 +322,7 @@
   const BLOCKS = [
     { key: "unplanned_duels", title: "Unplanned matches", tile: "Unplanned matches", render: renderUnplannedDuel },
     { key: "error_duels", title: "Matches in Error", tile: "Errors", render: renderErrorDuel },
+    { key: "cases", title: "Open cases", tile: "Open cases", render: renderCase },
     { key: "news_drafts", title: "News proposals in Draft", tile: "News proposals", render: renderNewsDraft },
     { key: "new_users", title: "New users with a BGA profile", tile: "New users", render: renderNewUser, info: true },
     { key: "my_duels", title: "My matches", tile: "My matches: action needed", render: renderMyDuel, countKey: "action_count" },
@@ -461,6 +462,36 @@
     });
   }
 
+  const CASE_PRIORITY_TONE = { urgent: "attention", high: "attention", normal: "warn", low: "" };
+  const CASE_LABELS = {
+    complaint: "Complaint", problem: "Problem", request: "Request", other: "Other",
+    open: "Open", in_progress: "In progress", no_show: "No-show",
+    urgent: "Urgent", high: "High", normal: "Normal", low: "Low",
+  };
+  const caseLabel = (value) => CASE_LABELS[value] || String(value || "").replace(/_/g, " ");
+
+  function renderCase(item) {
+    const who = [
+      item.submitted_by?.name ? `From ${item.submitted_by.name}` : "",
+      item.reported_player?.name ? `about ${item.reported_player.name}` : "",
+    ].filter(Boolean).join(" ");
+    return row({
+      title: item.subject || `Case #${item.id}`,
+      lines: [
+        [caseLabel(item.type), item.category ? caseLabel(item.category) : "", item.tournament?.name].filter(Boolean).join(" · "),
+        who,
+        [
+          item.created_at ? `Opened ${formatDate(item.created_at)} (${item.days_open ?? 0} d)` : "",
+          `${caseLabel(item.status)}${item.responsible ? `, ${item.responsible}` : ", unassigned"}`,
+        ].filter(Boolean).join(" · "),
+      ],
+      side: [
+        badge({ label: caseLabel(item.priority), tone: CASE_PRIORITY_TONE[item.priority] ?? "" }),
+        linkTo(item.link),
+      ],
+    });
+  }
+
   function renderNewsDraft(item) {
     return row({
       title: item.title || `News #${item.id}`,
@@ -508,7 +539,7 @@
   }
 
   function blockMeta(block, config) {
-    if (config.key === "new_users") return `${block.count} in the last ${block.days || 30} days`;
+    if (config.key === "new_users") return `${block.count} in the last ${block.days || 7} days`;
     if (config.key === "my_duels") return `${block.action_count} need action · ${block.count} active`;
     return `${block.count}`;
   }
@@ -524,6 +555,13 @@
     head.appendChild(el("div", "dash-section-meta", count ? blockMeta(block, config) : "Nothing here"));
     section.appendChild(head);
 
+    if (config.key === "cases") {
+      section.appendChild(el(
+        "div",
+        "dash-section-note",
+        data.filters?.tournament_id ? "Cases of the selected tournament." : "Cases of all tournaments, most urgent and oldest first."
+      ));
+    }
     if (config.key === "unplanned_duels") {
       section.appendChild(el(
         "div",
