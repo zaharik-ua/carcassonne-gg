@@ -50,7 +50,8 @@ export function isCclGamePlayed(game) {
 }
 
 // Which case the player may send about the match now, or null:
-// - scheduling: planned match with both players and no agreed time (Report a problem next to the time button);
+// - scheduling: planned match with both players and no agreed time, or an agreed time with a pending
+//   change proposal (Report a problem next to the time button);
 // - not_played: Error and no game played (Resolve);
 // - incomplete: Error with at least one game played (Report a problem);
 // - result_dispute: Done and the players' result editing window is over (Report a problem).
@@ -58,7 +59,10 @@ export function getCclCaseScenario({ match, games = [], playerId, now = new Date
   if (!getDuelSide(match, playerId)) return null;
   if (!text(match?.player_1_id) || !text(match?.player_2_id)) return null;
   const status = text(match?.status || "Planned").toLowerCase();
-  if (status === "planned") return hasValue(match?.time_utc) ? null : "scheduling";
+  if (status === "planned") {
+    const changePending = text(match?.proposed_time_status).toLowerCase() === "change_pending";
+    return !hasValue(match?.time_utc) || changePending ? "scheduling" : null;
+  }
   if (status === "error") return (games || []).some(isCclGamePlayed) ? "incomplete" : "not_played";
   if (status === "done") {
     const access = getCclResultEditAccess({ duel: match, playerId, isAdmin: false, now });
@@ -296,10 +300,13 @@ export function registerCclCaseRoutes(app, {
           if (![text(match.player_1_id), text(match.player_2_id)].includes(noShowPlayerId)) {
             throw requestError(400, "Choose the player who did not show up");
           }
+          // The player's Details (prefilled in the modal), or the default no-show text.
+          const submitted = text(req.body?.details) ? normalizeCaseDetails(req.body.details) : null;
+          if (submitted?.error) throw requestError(400, submitted.error);
           created = await createOrAppendTournamentCase(db, {
             case_type: "problem",
             category: "not_played",
-            details: `Player ${await playerName(db, noShowPlayerId)} did not show up for the match.`,
+            details: submitted?.value || `Player ${await playerName(db, noShowPlayerId)} did not show up for the match.`,
             submitted_by_user_id: actorUserId(req.user),
             submitted_by_player_id: playerId,
             duel_id: match.id,

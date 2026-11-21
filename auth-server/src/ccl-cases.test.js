@@ -97,6 +97,8 @@ test("the case a player may send depends on the match state", () => {
   const scenario = (match, games = [], playerId = "olena") => getCclCaseScenario({ match: { ...base, ...match }, games, playerId, now: NOW });
   assert.equal(scenario({ status: "Planned" }), "scheduling");
   assert.equal(scenario({ status: "Planned", time_utc: "2026-11-25T18:00:00Z" }), null);
+  // An agreed time that a player asked to change.
+  assert.equal(scenario({ status: "Planned", time_utc: "2026-11-25T18:00:00Z", proposed_time_status: "change_pending" }), "scheduling");
   assert.equal(scenario({ status: "Error" }), "not_played");
   assert.equal(scenario({ status: "Error" }, [{ player_1_score: 0 }]), "incomplete");
   assert.equal(scenario({ status: "Error" }, [{ status: "No show" }]), "incomplete");
@@ -185,6 +187,19 @@ test("Resolve no-show saves a case and resets the match time", async (t) => {
 
   // The match is no longer in Error.
   assert.equal((await resolve(api, "error-empty", { action: "reschedule" })).status, 409);
+});
+
+test("Resolve no-show keeps the Details the player edited", async (t) => {
+  const db = await createDatabase(t);
+  const api = createApi(db);
+  const result = await resolve(api, "error-empty", {
+    action: "no_show", no_show_player_id: "taras", details: "Player taras did not show up. Waited 20 minutes.",
+  });
+  assert.equal(result.status, 200, JSON.stringify(result.body));
+  assert.equal(result.body.case.details, "Player taras did not show up. Waited 20 minutes.");
+  assert.equal((await resolve(createApi(await createDatabase(t)), "error-empty", {
+    action: "no_show", no_show_player_id: "taras", details: "x".repeat(5001),
+  })).status, 400);
 });
 
 test("Resolve reschedule resets the time without a case", async (t) => {

@@ -9885,6 +9885,7 @@
       ...[match.player_1, match.player_2].filter((player) => player?.id).map((player) => ({
         value: `no_show:${player.id}`,
         label: `Player ${cclPlayerName(player)} did not show up for the match`,
+        details: `Player ${cclPlayerName(player)} did not show up for the match.`,
         hint: "The admins will review the case.\nThe match time will be reset. You can already agree on a new time with your opponent.",
         button: "Submit",
       })),
@@ -9899,8 +9900,10 @@
     const hint = document.createElement("div");
     hint.className = "cp-ccl-case-hint";
     const details = createCclCaseTextarea();
+    let caseRows = [];
     let detailsRow = null;
     let submitButton = null;
+    let presetDetails = "";
     const syncOutcome = (value) => {
       const outcome = outcomes.find((entry) => entry.value === value) || null;
       hint.textContent = outcome?.hint || "";
@@ -9908,12 +9911,23 @@
         submitButton.textContent = outcome?.button || "Submit";
         submitButton.disabled = !outcome;
       }
-      detailsRow?.classList.toggle("cp-hidden", outcome?.value !== "other");
-      if (outcome?.value === "other") details.focus();
+      // A no-show and Other create a case: its read-only Type and Category are shown.
+      const createsCase = !!outcome && outcome.value !== "reschedule";
+      caseRows.forEach((row) => row.classList.toggle("cp-hidden", !createsCase));
+      detailsRow?.classList.toggle("cp-hidden", !createsCase);
+      // A no-show fills Details with its text; the player may change it. Own text is kept.
+      const nextPreset = outcome?.details || "";
+      if (!details.value.trim() || details.value === presetDetails) details.value = nextPreset;
+      presetDetails = nextPreset;
+      if (createsCase) details.focus();
     };
     const outcome = createCclDropdown(outcomes, { placeholder: "Choose what happened", onChange: syncOutcome });
     const outcomeRow = ui.addField("Match outcome", outcome.root);
     outcomeRow.appendChild(hint);
+    caseRows = [
+      ui.addField("Type", createCclReadonlyInput(CCL_CASE_TYPE_LABELS.problem)),
+      ui.addField("Category", createCclReadonlyInput(CCL_CASE_CATEGORY_LABELS.not_played)),
+    ];
     detailsRow = ui.addField("Details", details);
 
     ui.addButton("Cancel", "cp-btn-secondary", ui.close);
@@ -9926,10 +9940,14 @@
         });
       }
       const [action, playerId] = value.split(":");
-      return submitCclCase(ui, () => cclRequest(`${CCL_MATCH_URL(match.id)}/resolve`, "POST", {
-        action,
-        no_show_player_id: playerId || null,
-      }));
+      return submitCclCase(ui, () => {
+        if (action === "no_show" && !details.value.trim()) throw new Error("Describe the problem in Details.");
+        return cclRequest(`${CCL_MATCH_URL(match.id)}/resolve`, "POST", {
+          action,
+          no_show_player_id: playerId || null,
+          details: action === "no_show" ? details.value.trim() : null,
+        });
+      });
     });
     syncOutcome("");
   }
@@ -9977,8 +9995,8 @@
       current.textContent = `Current match time: ${formatProposalTimeUtc(match.time_utc)}`;
       const hint = document.createElement("div");
       hint.className = "cp-ccl-case-hint";
-      hint.textContent = "If the games were played earlier or later than the match time, move it by up to 1 hour. "
-        + "The results are then taken from BGA for the new time.";
+      hint.textContent = "Move the agreed match time by up to 1 hour to get the results from BGA again.\n"
+        + "Played more than 1 hour off? Choose Report a problem instead.";
       panel.append(current, hint);
       timeInput = createCclDatetimeInput(match.time_utc);
       const startTs = Date.parse(String(match.time_utc || ""));
