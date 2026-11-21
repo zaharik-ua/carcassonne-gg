@@ -478,7 +478,7 @@ export function registerCclMatchRoutes(app, {
         throw requestError(409, "The time proposal has changed. Reload the match and try again");
       }
       const plan = planDuelTimeProposal({
-        duel: match, actorPlayerId: actor.playerId, proposedTimeUtc: payload.proposed_time_utc, nowMs: now().getTime(),
+        duel: match, actorPlayerId: actor.playerId, proposedTimeUtc: payload.proposed_time_utc,
       });
       if (plan.error) throw requestError(plan.status, plan.error);
       await updateMatch(db, match.id, plan.value, actor.playerId);
@@ -503,7 +503,7 @@ export function registerCclMatchRoutes(app, {
       if (!isDuelProposalSnapshotCurrent(match, payload)) {
         throw requestError(409, "The time proposal has changed. Reload the match and review it again");
       }
-      const plan = planDuelTimeAcceptance({ duel: match, actorPlayerId: actor.playerId, nowMs: now().getTime() });
+      const plan = planDuelTimeAcceptance({ duel: match, actorPlayerId: actor.playerId });
       if (plan.error) throw requestError(plan.status, plan.error);
       await updateMatch(db, match.id, plan.value, actor.playerId);
       // Like a challenge duel, the rating is set when the two players agree on the time.

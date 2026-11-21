@@ -44,19 +44,20 @@ test("players propose, counter and accept a time", () => {
   assert.equal(change.value.proposed_time_status, "change_pending");
 });
 
-test("rejects proposals from outsiders, in the past or for finished matches", () => {
+test("rejects proposals from outsiders or for finished matches; allows past times", () => {
   const propose = (duel, actorPlayerId, proposedTimeUtc) => planDuelTimeProposal({ duel, actorPlayerId, proposedTimeUtc, nowMs: NOW });
   assert.equal(propose(planned(), "juan", "2026-11-20T18:00:00Z").status, 403);
-  assert.equal(propose(planned(), "olena", "2026-11-01T18:00:00Z").status, 400);
+  // A past time is allowed: the UI asks the player to confirm it.
+  assert.equal(propose(planned(), "olena", "2026-11-01T18:00:00Z").error, undefined);
   // The round deadline is a guideline: a time after it is accepted.
   assert.equal(propose(planned({ deadline_utc: "2026-11-15T23:59:00Z" }), "olena", "2026-11-20T18:00:00Z").error, undefined);
   assert.equal(propose(planned({ status: "Done" }), "olena", "2026-11-20T18:00:00Z").status, 409);
   assert.equal(planDuelTimeAcceptance({ duel: planned(), actorPlayerId: "taras", nowMs: NOW }).status, 409);
-  assert.equal(planDuelTimeAcceptance({
+  assert.deepEqual(planDuelTimeAcceptance({
     duel: planned({ proposed_time_utc: "2026-11-10T18:00:00Z", proposed_time_by_player_id: "olena", proposed_time_status: "pending" }),
     actorPlayerId: "taras",
     nowMs: NOW,
-  }).status, 409);
+  }).value, { time_utc: "2026-11-10T18:00:00.000Z", proposed_time_status: "accepted" });
 });
 
 test("detects a stale proposal snapshot", () => {

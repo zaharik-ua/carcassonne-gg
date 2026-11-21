@@ -9112,20 +9112,37 @@
       expected_proposed_time_by_player_id: match.proposed_time_by_player_id || null,
       expected_proposed_time_status: match.proposed_time_status || null,
     };
-    const sendProposal = () => ui.submit(async () => {
+    // A time in the past is allowed (e.g. a match already played) after the player confirms it.
+    const confirmPastTime = (timeUtc, confirmLabel, onConfirm) => {
+      if (Date.parse(timeUtc) > Date.now()) return false;
+      openMatchTimeLineupResetWarning({
+        message: `The match time ${formatProposalTimeUtc(timeUtc)} is in the past. Are you sure you want to continue?`,
+        confirmLabel,
+        onConfirm,
+      });
+      return true;
+    };
+    const sendProposal = (pastConfirmed = false) => {
+      ui.setError("");
       const proposedTimeUtc = toUtcIsoFromDatetimeLocal(timeInput.value);
-      if (!proposedTimeUtc) throw new Error("Choose a match time.");
-      if (Date.parse(proposedTimeUtc) <= Date.now()) throw new Error("Choose a match time in the future.");
-      await cclRequest(`${CCL_MATCH_URL(match.id)}/time-proposal`, "POST", { proposed_time_utc: proposedTimeUtc, ...snapshot });
-    });
+      if (!proposedTimeUtc) {
+        ui.setError("Choose a match time.");
+        return;
+      }
+      if (!pastConfirmed && confirmPastTime(proposedTimeUtc, "Yes, send", () => sendProposal(true))) return;
+      ui.submit(() => (
+        cclRequest(`${CCL_MATCH_URL(match.id)}/time-proposal`, "POST", { proposed_time_utc: proposedTimeUtc, ...snapshot })
+      ));
+    };
+    const acceptProposal = (pastConfirmed = false) => {
+      ui.setError("");
+      if (!pastConfirmed && confirmPastTime(match.proposed_time_utc, "Yes, accept", () => acceptProposal(true))) return;
+      ui.submit(() => cclRequest(`${CCL_MATCH_URL(match.id)}/time-proposal/accept`, "PATCH", snapshot));
+    };
 
     ui.addButton("Cancel", "cp-btn-secondary", ui.close);
-    ui.addButton(isIncoming ? "Send another time" : isOwn ? "Update proposal" : "Send proposal", isIncoming ? "cp-btn-secondary" : "cp-btn-primary", sendProposal);
-    if (isIncoming) {
-      ui.addButton("Accept time", "cp-btn-primary", () => ui.submit(() => (
-        cclRequest(`${CCL_MATCH_URL(match.id)}/time-proposal/accept`, "PATCH", snapshot)
-      )));
-    }
+    ui.addButton(isIncoming ? "Send another time" : isOwn ? "Update proposal" : "Send proposal", isIncoming ? "cp-btn-secondary" : "cp-btn-primary", () => sendProposal());
+    if (isIncoming) ui.addButton("Accept time", "cp-btn-primary", () => acceptProposal());
   }
 
   // Admins create a match, or edit one (`match` given).

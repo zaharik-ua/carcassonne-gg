@@ -51,14 +51,14 @@ function denied(status, error) {
 }
 
 // Proposal or counter-proposal by one of the two players. deadline_utc is only shown in the UI:
-// players may schedule the match after it.
-export function planDuelTimeProposal({ duel, actorPlayerId, proposedTimeUtc, nowMs }) {
+// players may schedule the match after it. A time in the past is allowed (e.g. recording a match
+// already played); the UI asks the player to confirm it.
+export function planDuelTimeProposal({ duel, actorPlayerId, proposedTimeUtc }) {
   const side = getDuelSide(duel, actorPlayerId);
   if (!side) return denied(403, "Only the players of this match can propose its time");
   if (!isPlannedDuel(duel)) return denied(409, "The time can be changed only for a planned match");
   const proposed = normalizeUtc(proposedTimeUtc);
   if (!proposed) return denied(400, "A valid proposed_time_utc is required");
-  if (Date.parse(proposed) <= nowMs) return denied(400, "Proposed match time must be in the future");
 
   const active = isActiveDuelTimeProposal(duel);
   const ownProposal = active && text(duel.proposed_time_by_player_id) === text(actorPlayerId);
@@ -81,7 +81,7 @@ export function planDuelTimeProposal({ duel, actorPlayerId, proposedTimeUtc, now
 }
 
 // Acceptance by the player who did not make the proposal.
-export function planDuelTimeAcceptance({ duel, actorPlayerId, nowMs }) {
+export function planDuelTimeAcceptance({ duel, actorPlayerId }) {
   const side = getDuelSide(duel, actorPlayerId);
   if (!side) return denied(403, "Only the players of this match can accept its time");
   if (!isPlannedDuel(duel)) return denied(409, "The time can be changed only for a planned match");
@@ -90,6 +90,5 @@ export function planDuelTimeAcceptance({ duel, actorPlayerId, nowMs }) {
     return denied(403, "Only the opponent can accept this proposal");
   }
   const proposed = normalizeUtc(duel.proposed_time_utc);
-  if (Date.parse(proposed) <= nowMs) return denied(409, "The proposed match time is no longer available");
   return { value: { time_utc: proposed, proposed_time_status: DUEL_TIME_PROPOSAL_STATUSES.ACCEPTED } };
 }
