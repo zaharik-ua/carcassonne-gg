@@ -60,6 +60,7 @@ import {
   shouldCloseChallengeRequestsForPlayerStatus,
 } from "./challenges.js";
 import { ensureTournamentCasesSchema, registerTournamentCaseRoutes } from "./tournament-cases.js";
+import { ensureEventsSchema, registerEventRoutes } from "./events.js";
 import { registerCclCaseRoutes } from "./ccl-cases.js";
 import { registerDuelGameBgaResultRoutes } from "./duel-game-bga-result.js";
 import { registerBgaPlayerAvatarRoutes } from "./bga-player-avatar.js";
@@ -8101,6 +8102,9 @@ function scheduleApplicationSchemas() {
   ensureStreamsSchema();
   ensureMobileMenuItemsSchema();
   ensureAuditTrailSchema();
+  ensureEventsSchema(db).catch((error) => {
+    console.error("Failed to ensure events schema", error);
+  });
   const tournamentCasesSchemaReady = ensureTournamentCasesSchema(db).catch((error) => {
     console.error("Failed to ensure tournament_cases schema", error);
     throw error;
@@ -8500,6 +8504,14 @@ registerCclCaseRoutes(app, {
 });
 
 registerTournamentCaseRoutes(app, {
+  db,
+  requireAuthenticated,
+  requireTrustedJsonRequest,
+  getAuditActor,
+  logAuditEvent,
+});
+
+registerEventRoutes(app, {
   db,
   requireAuthenticated,
   requireTrustedJsonRequest,

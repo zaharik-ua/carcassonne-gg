@@ -100,7 +100,6 @@
     color: #333;
   }
 
-  .ca-row select,
   .ca-row textarea {
     width: 100%;
     border: 1px solid #c8ced8;
@@ -112,10 +111,6 @@
     background: #fff;
   }
 
-  .ca-row select {
-    height: 32px;
-  }
-
   .ca-row textarea {
     min-height: 120px;
     resize: vertical;
@@ -123,10 +118,111 @@
     line-height: 1.4;
   }
 
-  .ca-row select:focus,
   .ca-row textarea:focus {
     outline: none;
     border-color: #9ea7b3;
+  }
+
+  /* Our dropdown, as cp-dd in Player Hub. */
+  .ca-dd {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+  }
+
+  .ca-dd-btn {
+    all: unset;
+    box-sizing: border-box;
+    width: 100%;
+    height: 32px;
+    border: 1px solid #c8ced8;
+    border-radius: 4px;
+    background: #fff;
+    color: #2f3947;
+    font-size: 14px;
+    padding: 4px 8px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    cursor: pointer;
+  }
+
+  .ca-dd-btn:hover,
+  .ca-dd-btn:focus-visible,
+  .ca-dd-btn.open {
+    border-color: #9ea7b3;
+  }
+
+  .ca-dd-btn-content {
+    min-width: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .ca-dd-chevron {
+    display: inline-flex;
+    color: #6f7785;
+    font-size: 10px;
+    transition: transform 0.18s ease;
+  }
+
+  .ca-dd-btn.open .ca-dd-chevron {
+    transform: rotate(180deg);
+  }
+
+  .ca-dd-menu {
+    position: absolute;
+    left: 0;
+    top: calc(100% + 4px);
+    width: 100%;
+    max-height: 0;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    background: #fff;
+    border: 1px solid #d5dbe4;
+    border-radius: 4px;
+    box-shadow: 0 8px 18px rgba(15, 28, 48, 0.14);
+    box-sizing: border-box;
+    opacity: 0;
+    pointer-events: none;
+    transform: translateY(4px);
+    transition: opacity 0.16s ease, transform 0.16s ease, max-height 0.16s ease;
+    z-index: 20;
+  }
+
+  .ca-dd-menu.open {
+    opacity: 1;
+    pointer-events: auto;
+    transform: translateY(0);
+    overflow-y: auto;
+  }
+
+  .ca-dd-option {
+    all: unset;
+    box-sizing: border-box;
+    padding: 6px 8px;
+    border-top: 1px solid #edf1f6;
+    font-size: 13px;
+    color: #2f3947;
+    line-height: 1.2;
+    cursor: pointer;
+  }
+
+  .ca-dd-option:first-child {
+    border-top: none;
+  }
+
+  .ca-dd-option:hover,
+  .ca-dd-option:focus-visible {
+    background: #f5f5f5;
+  }
+
+  .ca-dd-option.active {
+    background: #e4f0fb;
   }
 
   .ca-hint {
@@ -193,6 +289,7 @@
   const ME_URL = `${API_BASE}/auth/me`;
   const SIGN_IN_URL = "https://carcassonne.gg/player/?id=noprofile";
   const DASHBOARD_URL = "https://carcassonne.gg/player-hub/dashboard/";
+  const PLAYER_HUB_URL = `https://carcassonne.gg/player-hub/tournaments/?id=${encodeURIComponent(TOURNAMENT_ID)}`;
   const DETAILS_MAX_LENGTH = 5000;
   // NON_MATCH_CASE_CHOICES on the server; a type without categories hides the Category field.
   const CASE_TYPES = [
@@ -247,12 +344,91 @@
     show(card);
   }
 
+  // Our dropdown in place of a native select: { root, focusTarget, value(), setOptions(options) }.
+  const openDropdowns = new Set();
+  document.addEventListener("click", (event) => {
+    openDropdowns.forEach((dropdown) => {
+      if (!dropdown.root.contains(event.target)) dropdown.close();
+    });
+  });
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") openDropdowns.forEach((dropdown) => dropdown.close());
+  });
+
+  function createDropdown(onChange) {
+    const root = el("div", "ca-dd");
+    const button = el("button", "ca-dd-btn");
+    button.type = "button";
+    button.setAttribute("aria-haspopup", "listbox");
+    button.setAttribute("aria-expanded", "false");
+    const content = el("span", "ca-dd-btn-content");
+    button.append(content, el("span", "ca-dd-chevron", "▾"));
+    const menu = el("div", "ca-dd-menu");
+    menu.setAttribute("role", "listbox");
+    root.append(button, menu);
+
+    let options = [];
+    let current = "";
+    const dropdown = { root, focusTarget: button };
+
+    const renderMenu = () => {
+      menu.innerHTML = "";
+      options.forEach((option) => {
+        const item = el("button", "ca-dd-option", option.label);
+        item.type = "button";
+        item.setAttribute("role", "option");
+        item.classList.toggle("active", option.value === current);
+        item.addEventListener("click", (event) => {
+          event.stopPropagation();
+          dropdown.close();
+          button.focus();
+          if (option.value === current) return;
+          current = option.value;
+          content.textContent = option.label;
+          if (onChange) onChange(current);
+        });
+        menu.appendChild(item);
+      });
+    };
+
+    dropdown.close = () => {
+      menu.classList.remove("open");
+      menu.style.maxHeight = "0px";
+      button.classList.remove("open");
+      button.setAttribute("aria-expanded", "false");
+      openDropdowns.delete(dropdown);
+    };
+    dropdown.open = () => {
+      renderMenu();
+      menu.classList.add("open");
+      menu.style.maxHeight = `${menu.scrollHeight}px`;
+      button.classList.add("open");
+      button.setAttribute("aria-expanded", "true");
+      openDropdowns.add(dropdown);
+    };
+    dropdown.value = () => current;
+    dropdown.setOptions = (nextOptions) => {
+      options = nextOptions;
+      current = options[0]?.value || "";
+      content.textContent = options[0]?.label || "";
+      dropdown.close();
+    };
+
+    button.addEventListener("click", (event) => {
+      event.stopPropagation();
+      if (menu.classList.contains("open")) dropdown.close();
+      else dropdown.open();
+    });
+    return dropdown;
+  }
+
   function row(labelText, control) {
     const wrap = el("div", "ca-row");
     const label = el("label", "", labelText);
-    control.id = `ca-${labelText.toLowerCase()}`;
-    label.htmlFor = control.id;
-    wrap.append(label, control);
+    const target = control.focusTarget || control;
+    target.id = `ca-${labelText.toLowerCase()}`;
+    label.htmlFor = target.id;
+    wrap.append(label, control.root || control);
     return wrap;
   }
 
@@ -261,9 +437,9 @@
     const form = el("form");
     form.noValidate = true;
 
-    const typeSelect = el("select");
-    CASE_TYPES.forEach((type) => typeSelect.add(new Option(type.label, type.value)));
-    const categorySelect = el("select");
+    const typeSelect = createDropdown(() => syncCategories());
+    typeSelect.setOptions(CASE_TYPES);
+    const categorySelect = createDropdown();
     const categoryRow = row("Category", categorySelect);
     const details = el("textarea");
     details.maxLength = DETAILS_MAX_LENGTH;
@@ -274,13 +450,11 @@
     const submit = el("button", "ca-btn ca-btn-primary", "Send");
     submit.type = "submit";
 
-    const syncCategories = () => {
-      const type = CASE_TYPES.find((entry) => entry.value === typeSelect.value);
-      categorySelect.innerHTML = "";
-      (type?.categories || []).forEach((category) => categorySelect.add(new Option(category.label, category.value)));
+    function syncCategories() {
+      const type = CASE_TYPES.find((entry) => entry.value === typeSelect.value());
+      categorySelect.setOptions(type?.categories || []);
       categoryRow.hidden = !type?.categories.length;
-    };
-    typeSelect.addEventListener("change", syncCategories);
+    }
     syncCategories();
 
     cancel.addEventListener("click", () => {
@@ -302,7 +476,7 @@
           method: "POST",
           credentials: "include",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ case_type: typeSelect.value, category: categorySelect.value || null, details: text }),
+          body: JSON.stringify({ case_type: typeSelect.value(), category: categorySelect.value() || null, details: text }),
         });
         const result = await response.json().catch(() => ({}));
         if (response.status === 401) {
@@ -318,13 +492,15 @@
       }
     });
 
+    const hint = el("div", "ca-hint");
+    hint.append("For a problem with one of your matches, use Report a problem next to the match in ", topLink(PLAYER_HUB_URL, "Player Hub"), ".");
     const actions = el("div", "ca-actions");
     actions.append(cancel, submit);
     form.append(
       row("Type", typeSelect),
       categoryRow,
       row("Details", details),
-      el("div", "ca-hint", "For a problem with one of your matches, use Report a problem next to the match in Player Hub."),
+      hint,
       error,
       actions
     );

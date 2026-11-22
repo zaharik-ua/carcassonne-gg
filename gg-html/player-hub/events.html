@@ -1,0 +1,1388 @@
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+
+<style>
+  :root {
+    --text: #222;
+    --muted: #666;
+    --border: #e0e0e0;
+  }
+
+  body {
+    font-family: "Montserrat", sans-serif;
+  }
+
+  .captain-wrap {
+    display: grid;
+    gap: 10px;
+    margin: 0 8px 12px;
+  }
+
+  .captain-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 10px;
+  }
+
+  .captain-title {
+    font-size: 20px;
+    font-weight: 700;
+  }
+
+  .captain-sub {
+    font-size: 12px;
+    color: var(--muted);
+  }
+
+  .captain-alert {
+    background: #fff;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 12px;
+    font-size: 14px;
+  }
+
+  .captain-list {
+    background: #fff;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    overflow: hidden;
+  }
+
+  .captain-content-shell {
+    position: relative;
+    min-height: 72px;
+  }
+
+  .cp-section-title {
+    padding: 0 2px;
+    font-size: 14px;
+    font-weight: 600;
+    color: #222;
+  }
+
+  .cp-event-row {
+    display: flex;
+    align-items: center;
+    min-height: 44px;
+    border-top: 1px solid #ccc;
+    padding: 4px 8px;
+    box-sizing: border-box;
+  }
+
+  .cp-event-row:first-child {
+    border-top: none;
+  }
+
+  .cp-event-time {
+    width: 46px;
+    min-width: 46px;
+    text-align: center;
+    font-size: 12px;
+    line-height: 14px;
+    color: #333;
+    font-weight: 600;
+    white-space: pre-line;
+  }
+
+  .cp-divider-vertical {
+    width: 1px;
+    background-color: #dfdfdf;
+    margin: 0 6px;
+    align-self: stretch;
+    border-radius: 1px;
+  }
+
+  .cp-event-main {
+    flex: 1 1 auto;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 2px;
+  }
+
+  .cp-event-title-line {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+  }
+
+  .cp-event-icon {
+    width: 22px;
+    height: 22px;
+    object-fit: contain;
+    flex-shrink: 0;
+  }
+
+  .cp-event-title {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 14px;
+    color: #222;
+  }
+
+  .cp-event-badge {
+    flex-shrink: 0;
+    padding: 2px 6px;
+    border-radius: 2px;
+    background: #8b1e2d;
+    color: #fff;
+    font-size: 10px;
+    font-weight: 700;
+    line-height: 1.2;
+    text-transform: uppercase;
+  }
+
+  .cp-event-meta {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    min-width: 0;
+    font-size: 12px;
+    color: #667286;
+  }
+
+  .cp-event-meta img {
+    width: 14px;
+    height: 14px;
+    object-fit: contain;
+    flex-shrink: 0;
+  }
+
+  .cp-event-meta span {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .cp-event-right {
+    display: flex;
+    align-items: center;
+    flex-shrink: 0;
+  }
+
+  .cp-event-link {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    margin-left: 8px;
+    color: #5b6573;
+    text-decoration: none;
+    border-radius: 4px;
+    transition: color 0.16s ease, background-color 0.16s ease;
+  }
+
+  .cp-event-link:hover {
+    color: #1a73b7;
+    background: #eef5fb;
+  }
+
+  .cp-event-link i {
+    font-size: 12px;
+    line-height: 1;
+  }
+
+  .cp-edit-btn {
+    border: 1px solid #c8ced8;
+    background: #fff;
+    color: #2f3947;
+    border-radius: 4px;
+    padding: 4px 8px;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    line-height: 1;
+    margin-left: 10px;
+  }
+
+  .cp-edit-btn:hover {
+    border-color: #9ea7b3;
+  }
+
+  .cp-empty {
+    border: 1px dashed #c8ced8;
+    border-radius: 6px;
+    padding: 12px;
+    font-size: 13px;
+    color: #667286;
+    background: #fafbfc;
+  }
+
+  .cp-show-more {
+    all: unset;
+    box-sizing: border-box;
+    display: block;
+    width: 100%;
+    padding: 8px;
+    border-top: 1px solid #ccc;
+    text-align: center;
+    font-size: 12px;
+    font-weight: 600;
+    color: #1a73b7;
+    cursor: pointer;
+  }
+
+  .cp-show-more:hover {
+    background: #f5f8fb;
+  }
+
+  .cp-edit-form {
+    background: #fff;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 12px;
+    display: grid;
+    gap: 8px 12px;
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .cp-edit-row {
+    display: grid;
+    gap: 1px;
+    min-width: 0;
+  }
+
+  .cp-edit-row--full {
+    grid-column: 1 / -1;
+  }
+
+  .cp-edit-row label {
+    font-size: 12px;
+    font-weight: 600;
+    color: #333;
+  }
+
+  .cp-edit-row input:not([type="checkbox"]) {
+    width: 100%;
+    border: 1px solid #c8ced8;
+    border-radius: 4px;
+    height: 30px;
+    padding: 4px 8px;
+    font: inherit;
+    font-size: 14px;
+    box-sizing: border-box;
+  }
+
+  .cp-edit-row input:disabled {
+    background: #f3f4f6;
+    color: #444;
+    cursor: not-allowed;
+  }
+
+  .cp-edit-hint {
+    font-size: 11px;
+    color: #7a8494;
+  }
+
+  .cp-edit-row .cp-edit-checkbox {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    min-height: 30px;
+    color: #2f3947;
+    font-size: 13px;
+    font-weight: 400;
+    cursor: pointer;
+  }
+
+  .cp-edit-row .cp-edit-checkbox input[type="checkbox"] {
+    width: 16px;
+    height: 16px;
+    padding: 0;
+    margin: 0;
+    flex-shrink: 0;
+  }
+
+  .cp-edit-actions {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    grid-column: 1 / -1;
+  }
+
+  .cp-btn {
+    border: 1px solid #c8ced8;
+    border-radius: 4px;
+    padding: 4px 8px;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    line-height: 1;
+  }
+
+  .cp-btn-primary {
+    background: #1a73b7;
+    color: #fff;
+    border-color: #1a73b7;
+  }
+
+  .cp-btn-secondary {
+    background: #eef2f6;
+    color: #333;
+  }
+
+  .cp-btn-danger {
+    background: #fff3f3;
+    border-color: #e6b4b4;
+    color: #a12a2a;
+    margin-left: auto;
+  }
+
+  .cp-btn:disabled {
+    cursor: not-allowed;
+    opacity: 0.72;
+  }
+
+  .cp-edit-error {
+    color: #c62828;
+    font-size: 12px;
+    font-weight: 600;
+    grid-column: 1 / -1;
+  }
+
+  .cp-hidden {
+    display: none !important;
+  }
+
+  .cp-dd {
+    position: relative;
+    display: inline-flex;
+    flex-direction: column;
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  .cp-dd-btn {
+    all: unset;
+    box-sizing: border-box;
+    width: 100%;
+    min-width: 0;
+    height: 30px;
+    border: 1px solid #c8ced8;
+    border-radius: 4px;
+    background: #fff;
+    color: #2f3947;
+    font-size: 14px;
+    padding: 4px 8px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    cursor: pointer;
+  }
+
+  .cp-dd-btn:hover,
+  .cp-dd-btn:focus-visible,
+  .cp-dd-btn.open {
+    border-color: #9ea7b3;
+  }
+
+  .cp-dd.disabled .cp-dd-btn,
+  .cp-dd-btn:disabled {
+    background: #f3f4f6;
+    color: #8c96a4;
+    cursor: not-allowed;
+  }
+
+  .cp-dd-btn-content {
+    display: inline-flex;
+    align-items: center;
+    flex: 1 1 auto;
+    gap: 6px;
+    min-width: 0;
+    max-width: 100%;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .cp-dd-btn-content span {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .cp-dd-logo {
+    width: 18px;
+    height: 18px;
+    object-fit: contain;
+    flex-shrink: 0;
+  }
+
+  .cp-dd-chevron {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: #6f7785;
+    font-size: 10px;
+    transition: transform 0.18s ease;
+  }
+
+  .cp-dd-btn.open .cp-dd-chevron {
+    transform: rotate(180deg);
+  }
+
+  .cp-dd-menu {
+    position: absolute;
+    left: 0;
+    top: calc(100% + 4px);
+    width: 100%;
+    max-height: 0;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    background: #fff;
+    border: 1px solid #d5dbe4;
+    border-radius: 4px;
+    box-shadow: 0 8px 18px rgba(15, 28, 48, 0.14);
+    opacity: 0;
+    pointer-events: none;
+    transform: translateY(4px);
+    transition: opacity 0.16s ease, transform 0.16s ease, max-height 0.16s ease;
+    z-index: 20;
+  }
+
+  .cp-dd-menu.open {
+    opacity: 1;
+    pointer-events: auto;
+    transform: translateY(0);
+    overflow-y: auto;
+    overflow-x: hidden;
+  }
+
+  .cp-dd-search {
+    flex: 0 0 auto;
+    padding: 6px 8px;
+    border-bottom: 1px solid #edf1f6;
+    background: #fff;
+  }
+
+  .cp-dd-search input {
+    width: 100%;
+    height: 28px;
+    border: 1px solid #c8ced8;
+    border-radius: 4px;
+    padding: 4px 8px;
+    font: inherit;
+    font-size: 13px;
+    box-sizing: border-box;
+  }
+
+  .cp-dd-option {
+    all: unset;
+    box-sizing: border-box;
+    flex: 0 0 auto;
+    width: 100%;
+    min-width: 0;
+    padding: 5px 8px;
+    border-top: 1px solid #edf1f6;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 13px;
+    color: #2f3947;
+    line-height: 1.2;
+    white-space: nowrap;
+    overflow: hidden;
+    cursor: pointer;
+  }
+
+  .cp-dd-option:first-child {
+    border-top: none;
+  }
+
+  .cp-dd-option:hover {
+    background: #f5f5f5;
+  }
+
+  .cp-dd-option.active {
+    background: #e4f0fb;
+  }
+
+  .cp-dd-option-label {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .cp-dd-option-note {
+    flex-shrink: 0;
+    font-size: 11px;
+    color: #8b95a3;
+  }
+
+  .cp-dd-empty {
+    padding: 8px 10px;
+    font-size: 13px;
+    color: #6b7280;
+  }
+
+  .cp-modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(24, 31, 41, 0.42);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 16px;
+    z-index: 1000;
+  }
+
+  .cp-modal {
+    width: 100%;
+    max-width: 420px;
+    background: #fff;
+    border: 1px solid #d8dee8;
+    border-radius: 8px;
+    box-shadow: 0 16px 36px rgba(15, 28, 48, 0.22);
+    padding: 16px;
+    display: grid;
+    gap: 12px;
+  }
+
+  .cp-modal-title {
+    font-size: 16px;
+    font-weight: 700;
+    color: #222;
+  }
+
+  .cp-modal-text {
+    font-size: 14px;
+    line-height: 1.4;
+    color: #4b5563;
+  }
+
+  .cp-modal-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+  }
+
+  .cp-modal-actions .cp-btn-danger {
+    margin-left: 0;
+  }
+
+  @media (min-width: 700px) {
+    .cp-edit-form {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+  }
+
+  @media (max-width: 600px) {
+    .cp-edit-row input:not([type="checkbox"]),
+    .cp-dd-search input {
+      font-size: 16px !important;
+    }
+  }
+</style>
+
+<div class="captain-wrap">
+  <div class="captain-head">
+    <div class="captain-title"></div>
+    <div>
+      <span id="captainCount" class="captain-sub"></span>
+      <button id="captainAddButton" class="cp-edit-btn cp-hidden" type="button">Create</button>
+    </div>
+  </div>
+  <div class="captain-content-shell">
+    <div id="captainContent" class="captain-alert">Loading...</div>
+  </div>
+  <div id="captainHint" class="captain-sub"></div>
+</div>
+
+<script>
+(function () {
+  const AUTH_BASE = window.AUTH_BASE_URL || "https://api.carcassonne.gg";
+  const ME_URL = `${AUTH_BASE}/auth/me`;
+  const EVENTS_URL = `${AUTH_BASE}/events`;
+  const EVENT_OPTIONS_URL = `${AUTH_BASE}/events/options`;
+  const ICONS_URL = `${AUTH_BASE}/icons`;
+  const TITLE_MAX_LENGTH = 120;
+  const PAST_EVENTS_PAGE = 10;
+  const MONTHS_3 = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+  const contentEl = document.getElementById("captainContent");
+  const countEl = document.getElementById("captainCount");
+  const addButtonEl = document.getElementById("captainAddButton");
+  const hintEl = document.getElementById("captainHint");
+  const titleEl = document.querySelector(".captain-title");
+
+  const pageState = { mode: "list", eventId: "" };
+  let pastEventsVisible = PAST_EVENTS_PAGE;
+  let isInitializing = false;
+  let refreshQueued = false;
+
+  function toApiAbsoluteUrl(value) {
+    const raw = String(value || "").trim();
+    if (!raw) return "";
+    if (/^(https?:|data:|blob:)/i.test(raw)) return raw;
+    return `${AUTH_BASE}${raw.startsWith("/") ? "" : "/"}${raw}`;
+  }
+
+  function setPageHeading(text) {
+    if (titleEl) titleEl.textContent = String(text || "").trim() || "Events";
+  }
+
+  function renderMessage(text) {
+    contentEl.className = "captain-alert";
+    contentEl.innerHTML = "";
+    contentEl.textContent = text;
+    countEl.textContent = "";
+    hintEl.textContent = "";
+  }
+
+  function openList() {
+    pageState.mode = "list";
+    pageState.eventId = "";
+    initEventsPage();
+  }
+
+  function openCreate() {
+    pageState.mode = "create";
+    pageState.eventId = "";
+    initEventsPage();
+  }
+
+  function openEdit(eventId) {
+    pageState.mode = "edit";
+    pageState.eventId = String(eventId || "").trim();
+    initEventsPage();
+  }
+
+  function parseTime(value) {
+    const timestamp = Date.parse(String(value || "").trim());
+    return Number.isFinite(timestamp) ? timestamp : 0;
+  }
+
+  // Local time, like the main page shows it.
+  function formatEventTime(value) {
+    const timestamp = parseTime(value);
+    if (!timestamp) return "-";
+    const date = new Date(timestamp);
+    const dd = String(date.getDate()).padStart(2, "0");
+    const hh = String(date.getHours()).padStart(2, "0");
+    const mm = String(date.getMinutes()).padStart(2, "0");
+    const year = date.getFullYear() !== new Date().getFullYear() ? `\n${date.getFullYear()}` : "";
+    return `${dd} ${MONTHS_3[date.getMonth()]}${year}\n${hh}:${mm}`;
+  }
+
+  function toDatetimeLocalFromUtc(raw) {
+    const timestamp = parseTime(raw);
+    if (!timestamp) return "";
+    const d = new Date(timestamp);
+    const pad = (value) => String(value).padStart(2, "0");
+    return `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())}T${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())}`;
+  }
+
+  function getNextUtcHourDatetimeLocal() {
+    const d = new Date();
+    d.setUTCHours(d.getUTCHours() + 1, 0, 0, 0);
+    return toDatetimeLocalFromUtc(d.toISOString());
+  }
+
+  function toUtcIsoFromDatetimeLocal(raw) {
+    const match = String(raw || "").trim().match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/);
+    if (!match) return null;
+    const [, yyyy, mm, dd, hh, mi] = match.map(Number);
+    return new Date(Date.UTC(yyyy, mm - 1, dd, hh, mi, 0)).toISOString();
+  }
+
+  function getStartOfTodayLocal() {
+    const now = new Date();
+    return new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+  }
+
+  function getTournamentLabel(tournament) {
+    return String(tournament?.name || tournament?.short_title || tournament?.id || "").trim();
+  }
+
+  // Dropdowns -----------------------------------------------------------------
+
+  const dropdowns = [];
+  const closeAllDropdowns = () => dropdowns.forEach((dropdown) => dropdown.close());
+  document.addEventListener("click", closeAllDropdowns);
+
+  function createSingleSelect(initialValue, options, cfg = {}) {
+    const isSearchable = cfg.searchable !== false;
+    const maxMenuHeight = window.matchMedia("(max-width: 600px)").matches ? 220 : 280;
+    const normalizedOptions = (Array.isArray(options) ? options : [])
+      .map((opt) => ({
+        value: String(opt?.value ?? "").trim(),
+        label: String(opt?.label ?? opt?.value ?? "").trim(),
+        note: String(opt?.note || "").trim(),
+        logo: String(opt?.logo || "").trim(),
+      }))
+      .filter((opt) => opt.label);
+    let value = String(initialValue || "").trim();
+    if (!normalizedOptions.some((opt) => opt.value === value)) value = "";
+
+    const root = document.createElement("div");
+    root.className = "cp-dd";
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "cp-dd-btn";
+    const btnContent = document.createElement("span");
+    btnContent.className = "cp-dd-btn-content";
+    const chevron = document.createElement("span");
+    chevron.className = "cp-dd-chevron";
+    chevron.textContent = "▾";
+    btn.appendChild(btnContent);
+    btn.appendChild(chevron);
+    const menu = document.createElement("div");
+    menu.className = "cp-dd-menu";
+    const searchWrap = document.createElement("div");
+    searchWrap.className = "cp-dd-search";
+    const searchInput = document.createElement("input");
+    searchInput.type = "text";
+    searchInput.placeholder = "Type to filter...";
+    searchWrap.appendChild(searchInput);
+    if (isSearchable) menu.appendChild(searchWrap);
+
+    const appendLogo = (target, logo) => {
+      if (!logo) return;
+      const img = document.createElement("img");
+      img.className = "cp-dd-logo";
+      img.src = logo;
+      img.alt = "";
+      target.appendChild(img);
+    };
+
+    const renderButtonContent = () => {
+      btnContent.innerHTML = "";
+      const selected = normalizedOptions.find((opt) => opt.value === value) || null;
+      if (!selected) {
+        const placeholder = document.createElement("span");
+        placeholder.textContent = cfg.placeholderLabel || "Select";
+        placeholder.style.color = "#999";
+        btnContent.appendChild(placeholder);
+        return;
+      }
+      appendLogo(btnContent, selected.logo);
+      const label = document.createElement("span");
+      label.textContent = selected.label;
+      btnContent.appendChild(label);
+    };
+
+    const api = {
+      root,
+      getValue: () => value,
+      close: () => {
+        menu.classList.remove("open");
+        menu.style.maxHeight = "0px";
+        btn.classList.remove("open");
+      },
+      setDisabled: (disabled) => {
+        btn.disabled = disabled === true;
+        root.classList.toggle("disabled", disabled === true);
+        if (disabled) api.close();
+      },
+    };
+
+    const renderMenu = () => {
+      menu.querySelectorAll(".cp-dd-option,.cp-dd-empty").forEach((node) => node.remove());
+      const query = String(searchInput.value || "").trim().toLowerCase();
+      const visible = normalizedOptions.filter((opt) => (
+        !query || `${opt.label} ${opt.note} ${opt.value}`.toLowerCase().includes(query)
+      ));
+      if (!visible.length) {
+        const empty = document.createElement("div");
+        empty.className = "cp-dd-empty";
+        empty.textContent = "Nothing found.";
+        menu.appendChild(empty);
+        return;
+      }
+      visible.forEach((opt) => {
+        const optionBtn = document.createElement("button");
+        optionBtn.type = "button";
+        optionBtn.className = "cp-dd-option";
+        optionBtn.classList.toggle("active", opt.value === value);
+        appendLogo(optionBtn, opt.logo);
+        const optionLabel = document.createElement("span");
+        optionLabel.className = "cp-dd-option-label";
+        optionLabel.textContent = opt.label;
+        optionBtn.appendChild(optionLabel);
+        if (opt.note) {
+          const note = document.createElement("span");
+          note.className = "cp-dd-option-note";
+          note.textContent = opt.note;
+          optionBtn.appendChild(note);
+        }
+        optionBtn.addEventListener("click", (event) => {
+          event.stopPropagation();
+          value = opt.value;
+          renderButtonContent();
+          api.close();
+          if (typeof cfg.onChange === "function") cfg.onChange(value);
+        });
+        menu.appendChild(optionBtn);
+      });
+    };
+
+    btn.addEventListener("click", (event) => {
+      event.stopPropagation();
+      const isOpen = menu.classList.contains("open");
+      closeAllDropdowns();
+      if (isOpen) return;
+      searchInput.value = "";
+      renderMenu();
+      menu.classList.add("open");
+      menu.style.maxHeight = `${Math.min(menu.scrollHeight, maxMenuHeight)}px`;
+      btn.classList.add("open");
+      if (isSearchable && window.matchMedia("(min-width: 600px)").matches) {
+        searchInput.focus({ preventScroll: true });
+      }
+    });
+    menu.addEventListener("click", (event) => event.stopPropagation());
+    searchInput.addEventListener("keydown", (event) => event.stopPropagation());
+    searchInput.addEventListener("input", () => {
+      renderMenu();
+      menu.style.maxHeight = `${Math.min(menu.scrollHeight, maxMenuHeight)}px`;
+    });
+
+    renderButtonContent();
+    root.appendChild(btn);
+    root.appendChild(menu);
+    dropdowns.push(api);
+    return api;
+  }
+
+  // List ----------------------------------------------------------------------
+
+  function createEventRow(item) {
+    const row = document.createElement("div");
+    row.className = "cp-event-row";
+
+    const time = document.createElement("div");
+    time.className = "cp-event-time";
+    time.textContent = formatEventTime(item?.time_utc);
+    row.appendChild(time);
+
+    const divider = document.createElement("div");
+    divider.className = "cp-divider-vertical";
+    row.appendChild(divider);
+
+    const main = document.createElement("div");
+    main.className = "cp-event-main";
+    const titleLine = document.createElement("div");
+    titleLine.className = "cp-event-title-line";
+    const iconUrl = toApiAbsoluteUrl(item?.icon);
+    if (iconUrl) {
+      const icon = document.createElement("img");
+      icon.className = "cp-event-icon";
+      icon.src = iconUrl;
+      icon.alt = "";
+      titleLine.appendChild(icon);
+    }
+    const title = document.createElement("span");
+    title.className = "cp-event-title";
+    title.textContent = String(item?.title || "").trim();
+    title.title = title.textContent;
+    titleLine.appendChild(title);
+    if (item?.main_event === true || Number(item?.main_event) === 1) {
+      const badge = document.createElement("span");
+      badge.className = "cp-event-badge";
+      badge.textContent = "Main event";
+      titleLine.appendChild(badge);
+    }
+    main.appendChild(titleLine);
+
+    const meta = document.createElement("div");
+    meta.className = "cp-event-meta";
+    const tournamentName = String(item?.tournament_name || item?.tournament_short_title || item?.tournament_id || "").trim();
+    if (tournamentName) {
+      const logo = String(item?.tournament_logo || "").trim();
+      if (logo) {
+        const img = document.createElement("img");
+        img.src = logo;
+        img.alt = "";
+        meta.appendChild(img);
+      }
+      const name = document.createElement("span");
+      name.textContent = tournamentName;
+      meta.appendChild(name);
+    } else {
+      const name = document.createElement("span");
+      name.textContent = "Separate block";
+      meta.appendChild(name);
+    }
+    main.appendChild(meta);
+    row.appendChild(main);
+
+    const right = document.createElement("div");
+    right.className = "cp-event-right";
+    const link = String(item?.link || "").trim();
+    if (link) {
+      const anchor = document.createElement("a");
+      anchor.className = "cp-event-link";
+      anchor.href = link;
+      anchor.target = "_blank";
+      anchor.rel = "noopener noreferrer";
+      anchor.title = "Open link";
+      anchor.setAttribute("aria-label", "Open link");
+      const icon = document.createElement("i");
+      icon.className = "fa-solid fa-arrow-up-right-from-square";
+      anchor.appendChild(icon);
+      right.appendChild(anchor);
+    }
+    const editBtn = document.createElement("button");
+    editBtn.type = "button";
+    editBtn.className = "cp-edit-btn";
+    editBtn.textContent = "Edit";
+    editBtn.addEventListener("click", () => openEdit(item?.id));
+    right.appendChild(editBtn);
+    row.appendChild(right);
+    return row;
+  }
+
+  function renderEventsList(events) {
+    setPageHeading("Events");
+    contentEl.className = "";
+    contentEl.innerHTML = "";
+    contentEl.style.display = "grid";
+    contentEl.style.gap = "6px";
+    countEl.textContent = "";
+    hintEl.textContent = "Events appear on the main page next to the matches. Times are shown in your local time.";
+
+    const startOfToday = getStartOfTodayLocal();
+    const upcoming = events
+      .filter((item) => parseTime(item?.time_utc) >= startOfToday)
+      .sort((a, b) => parseTime(a?.time_utc) - parseTime(b?.time_utc));
+    const past = events
+      .filter((item) => parseTime(item?.time_utc) < startOfToday)
+      .sort((a, b) => parseTime(b?.time_utc) - parseTime(a?.time_utc));
+
+    const appendSection = (titleText, rows, emptyText, limit = Infinity) => {
+      const title = document.createElement("div");
+      title.className = "cp-section-title";
+      title.textContent = titleText;
+      contentEl.appendChild(title);
+      if (!rows.length) {
+        const empty = document.createElement("div");
+        empty.className = "cp-empty";
+        empty.textContent = emptyText;
+        contentEl.appendChild(empty);
+        return;
+      }
+      const list = document.createElement("div");
+      list.className = "captain-list";
+      rows.slice(0, limit).forEach((item) => list.appendChild(createEventRow(item)));
+      if (rows.length > limit) {
+        const more = document.createElement("button");
+        more.type = "button";
+        more.className = "cp-show-more";
+        more.textContent = `Show more (${rows.length - limit})`;
+        more.addEventListener("click", () => {
+          pastEventsVisible += PAST_EVENTS_PAGE;
+          renderEventsList(events);
+        });
+        list.appendChild(more);
+      }
+      contentEl.appendChild(list);
+    };
+
+    appendSection("Upcoming", upcoming, "No upcoming events. Use Create to add one.");
+    if (past.length) appendSection("Past", past, "", pastEventsVisible);
+  }
+
+  // Form ----------------------------------------------------------------------
+
+  function showDeleteConfirmDialog(onConfirm) {
+    const overlay = document.createElement("div");
+    overlay.className = "cp-modal-overlay";
+    const dialog = document.createElement("div");
+    dialog.className = "cp-modal";
+    dialog.setAttribute("role", "dialog");
+    dialog.setAttribute("aria-modal", "true");
+    const title = document.createElement("div");
+    title.className = "cp-modal-title";
+    title.textContent = "Delete event?";
+    const text = document.createElement("div");
+    text.className = "cp-modal-text";
+    text.textContent = "The event will be removed from the main page.";
+    const actions = document.createElement("div");
+    actions.className = "cp-modal-actions";
+    const cancelBtn = document.createElement("button");
+    cancelBtn.type = "button";
+    cancelBtn.className = "cp-btn cp-btn-secondary";
+    cancelBtn.textContent = "Cancel";
+    const confirmBtn = document.createElement("button");
+    confirmBtn.type = "button";
+    confirmBtn.className = "cp-btn cp-btn-danger";
+    confirmBtn.textContent = "Delete";
+    const closeModal = () => {
+      overlay.remove();
+      document.removeEventListener("keydown", onKeydown);
+    };
+    const onKeydown = (event) => {
+      if (event.key === "Escape") closeModal();
+    };
+    cancelBtn.addEventListener("click", closeModal);
+    overlay.addEventListener("click", (event) => {
+      if (event.target === overlay) closeModal();
+    });
+    document.addEventListener("keydown", onKeydown);
+    confirmBtn.addEventListener("click", async () => {
+      confirmBtn.disabled = true;
+      cancelBtn.disabled = true;
+      confirmBtn.textContent = "Deleting...";
+      const done = await onConfirm();
+      if (done) {
+        closeModal();
+        return;
+      }
+      confirmBtn.disabled = false;
+      cancelBtn.disabled = false;
+      confirmBtn.textContent = "Delete";
+    });
+    actions.appendChild(cancelBtn);
+    actions.appendChild(confirmBtn);
+    dialog.appendChild(title);
+    dialog.appendChild(text);
+    dialog.appendChild(actions);
+    overlay.appendChild(dialog);
+    document.body.appendChild(overlay);
+    cancelBtn.focus();
+  }
+
+  function renderEventForm(source, context, formMode) {
+    const isCreateMode = formMode === "create";
+    const item = source && typeof source === "object" ? source : {};
+    const { isAdmin, tournaments, icons } = context;
+    dropdowns.length = 0;
+    setPageHeading(isCreateMode ? "Create event" : "Edit event");
+    countEl.textContent = isCreateMode ? "" : `Editing event: ${String(item?.id || "")}`;
+    hintEl.textContent = "";
+    contentEl.className = "";
+    contentEl.innerHTML = "";
+    contentEl.style.display = "";
+    contentEl.style.gap = "";
+
+    const form = document.createElement("form");
+    form.className = "cp-edit-form";
+    form.noValidate = true;
+
+    const topActions = document.createElement("div");
+    topActions.className = "cp-edit-actions";
+    const saveBtn = document.createElement("button");
+    saveBtn.type = "submit";
+    saveBtn.className = "cp-btn cp-btn-primary";
+    saveBtn.textContent = "Save";
+    const cancelBtn = document.createElement("button");
+    cancelBtn.type = "button";
+    cancelBtn.className = "cp-btn cp-btn-secondary";
+    cancelBtn.textContent = "Cancel";
+    topActions.appendChild(saveBtn);
+    topActions.appendChild(cancelBtn);
+    let deleteBtn = null;
+    if (!isCreateMode) {
+      deleteBtn = document.createElement("button");
+      deleteBtn.type = "button";
+      deleteBtn.className = "cp-btn cp-btn-danger";
+      deleteBtn.textContent = "Delete";
+      topActions.appendChild(deleteBtn);
+    }
+    form.appendChild(topActions);
+
+    const errorEl = document.createElement("div");
+    errorEl.className = "cp-edit-error cp-hidden";
+    form.appendChild(errorEl);
+
+    const addRow = (labelText, control, options = {}) => {
+      const row = document.createElement("div");
+      row.className = `cp-edit-row${options.full ? " cp-edit-row--full" : ""}`;
+      const label = document.createElement("label");
+      label.textContent = labelText;
+      if (control.id) label.htmlFor = control.id;
+      row.appendChild(label);
+      row.appendChild(control);
+      if (options.hint) {
+        const hint = document.createElement("div");
+        hint.className = "cp-edit-hint";
+        hint.textContent = options.hint;
+        row.appendChild(hint);
+      }
+      form.appendChild(row);
+      return row;
+    };
+
+    const setError = (message) => {
+      const text = String(message || "").trim();
+      errorEl.textContent = text;
+      errorEl.classList.toggle("cp-hidden", !text);
+    };
+
+    const setSaving = (isSaving) => {
+      saveBtn.disabled = isSaving;
+      cancelBtn.disabled = isSaving;
+      if (deleteBtn) deleteBtn.disabled = isSaving;
+      saveBtn.textContent = isSaving ? "Saving..." : "Save";
+    };
+
+    const titleInput = document.createElement("input");
+    titleInput.type = "text";
+    titleInput.id = "eventTitle";
+    titleInput.maxLength = TITLE_MAX_LENGTH;
+    titleInput.autocomplete = "off";
+    titleInput.placeholder = "e.g. Playoff draw live stream";
+    titleInput.value = String(item?.title || "");
+    addRow("Event name", titleInput, { full: true });
+
+    const timeInput = document.createElement("input");
+    timeInput.type = "datetime-local";
+    timeInput.id = "eventTime";
+    timeInput.value = isCreateMode ? getNextUtcHourDatetimeLocal() : toDatetimeLocalFromUtc(item?.time_utc);
+    addRow("Date and time, UTC", timeInput);
+
+    const tournamentOptions = tournaments
+      .map((tournament) => ({
+        value: String(tournament?.id || "").trim(),
+        label: getTournamentLabel(tournament),
+        logo: String(tournament?.logo || "").trim(),
+      }))
+      .filter((option) => option.value && option.label);
+    const sourceTournamentId = String(item?.tournament_id || "").trim();
+    if (sourceTournamentId && !tournamentOptions.some((option) => option.value.toLowerCase() === sourceTournamentId.toLowerCase())) {
+      tournamentOptions.unshift({
+        value: sourceTournamentId,
+        label: String(item?.tournament_name || sourceTournamentId).trim(),
+        logo: String(item?.tournament_logo || "").trim(),
+      });
+    }
+    const matchedTournament = tournamentOptions.find((option) => option.value.toLowerCase() === sourceTournamentId.toLowerCase());
+    const initialTournamentId = matchedTournament
+      ? matchedTournament.value
+      : !isAdmin && tournamentOptions.length === 1 ? tournamentOptions[0].value : "";
+    const tournamentInput = createSingleSelect(
+      initialTournamentId,
+      (isAdmin ? [{ value: "", label: "Not selected" }] : []).concat(tournamentOptions),
+      { placeholderLabel: isAdmin ? "Not selected" : "Select tournament" }
+    );
+    addRow("Tournament", tournamentInput.root, {
+      hint: isAdmin
+        ? "Optional. With a tournament the event is shown in that tournament's block; without one, in a separate block."
+        : "The event is shown in this tournament's block on the main page.",
+    });
+
+    const linkInput = document.createElement("input");
+    linkInput.type = "url";
+    linkInput.id = "eventLink";
+    linkInput.autocomplete = "off";
+    linkInput.placeholder = "https://";
+    linkInput.value = String(item?.link || "");
+    addRow("Link", linkInput, { hint: "Optional. The event name links here." });
+
+    const iconOptions = [{ value: "", label: "Not selected" }].concat(icons
+      .map((icon) => ({
+        value: String(icon?.icon_link || "").trim(),
+        label: String(icon?.name || icon?.id || "").trim(),
+        note: String(icon?.category || "").trim(),
+        logo: toApiAbsoluteUrl(icon?.icon_link),
+      }))
+      .filter((option) => option.value && option.label));
+    const sourceIcon = String(item?.icon || "").trim();
+    if (sourceIcon && !iconOptions.some((option) => option.value === sourceIcon)) {
+      iconOptions.push({ value: sourceIcon, label: "Current icon", logo: toApiAbsoluteUrl(sourceIcon) });
+    }
+    const iconInput = createSingleSelect(sourceIcon, iconOptions, { placeholderLabel: "Not selected" });
+    addRow("Icon", iconInput.root, { hint: "Optional. Shown before the event name." });
+
+    // Only global admins mark main events.
+    let mainEventInput = null;
+    if (isAdmin) {
+      mainEventInput = document.createElement("input");
+      mainEventInput.type = "checkbox";
+      mainEventInput.checked = item?.main_event === true || Number(item?.main_event) === 1;
+      const mainEventControl = document.createElement("label");
+      mainEventControl.className = "cp-edit-checkbox";
+      mainEventControl.appendChild(mainEventInput);
+      mainEventControl.appendChild(document.createTextNode("Show as a large main event block"));
+      addRow("Main event", mainEventControl);
+    }
+
+    cancelBtn.addEventListener("click", openList);
+
+    if (deleteBtn) {
+      deleteBtn.addEventListener("click", () => {
+        setError("");
+        showDeleteConfirmDialog(async () => {
+          try {
+            const response = await fetch(`${EVENTS_URL}/${encodeURIComponent(String(item?.id || ""))}`, {
+              method: "DELETE",
+              credentials: "include",
+            });
+            const result = await response.json().catch(() => ({}));
+            if (!response.ok || !result?.ok) {
+              setError(result?.message || "Failed to delete event.");
+              return false;
+            }
+            openList();
+            return true;
+          } catch (_error) {
+            setError("Failed to delete event.");
+            return false;
+          }
+        });
+      });
+    }
+
+    form.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      setError("");
+      const title = String(titleInput.value || "").trim();
+      const timeUtc = toUtcIsoFromDatetimeLocal(timeInput.value);
+      const tournamentId = tournamentInput.getValue();
+      const link = String(linkInput.value || "").trim();
+      if (!title) {
+        setError("Event name is required.");
+        titleInput.focus();
+        return;
+      }
+      if (!timeUtc) {
+        setError("Date and time (UTC) are required.");
+        timeInput.focus();
+        return;
+      }
+      if (!isAdmin && !tournamentId) {
+        setError("Select a tournament.");
+        return;
+      }
+      if (link && !/^https?:\/\/\S+$/i.test(link)) {
+        setError("Link must start with http:// or https://.");
+        linkInput.focus();
+        return;
+      }
+
+      setSaving(true);
+      try {
+        const payload = {
+          title,
+          time_utc: timeUtc,
+          tournament_id: tournamentId || null,
+          link: link || null,
+          icon: iconInput.getValue() || null,
+        };
+        if (mainEventInput) payload.main_event = mainEventInput.checked;
+        const response = await fetch(isCreateMode ? EVENTS_URL : `${EVENTS_URL}/${encodeURIComponent(String(item?.id || ""))}`, {
+          method: isCreateMode ? "POST" : "PATCH",
+          credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+        const result = await response.json().catch(() => ({}));
+        if (!response.ok || !result?.ok) {
+          setError(result?.message || "Failed to save event.");
+          return;
+        }
+        openList();
+      } catch (_error) {
+        setError("Failed to save event.");
+      } finally {
+        setSaving(false);
+      }
+    });
+
+    contentEl.appendChild(form);
+    if (isCreateMode) titleInput.focus({ preventScroll: true });
+  }
+
+  // Page ----------------------------------------------------------------------
+
+  async function initEventsPage() {
+    if (isInitializing) {
+      refreshQueued = true;
+      return;
+    }
+    isInitializing = true;
+    try {
+      setPageHeading("Events");
+      addButtonEl.classList.add("cp-hidden");
+      addButtonEl.onclick = null;
+      renderMessage("Loading...");
+
+      let isAuthenticated = false;
+      try {
+        const meRes = await fetch(ME_URL, { method: "GET", credentials: "include" });
+        if (meRes.ok) {
+          const meData = await meRes.json().catch(() => ({}));
+          isAuthenticated = !!meData?.authenticated;
+        }
+      } catch (_error) {
+        // handled below
+      }
+      if (!isAuthenticated) {
+        renderMessage("Please sign in to view this page.");
+        return;
+      }
+
+      const [eventsRes, optionsRes, iconsRes] = await Promise.all([
+        fetch(EVENTS_URL, { method: "GET", credentials: "include" }),
+        fetch(EVENT_OPTIONS_URL, { method: "GET", credentials: "include" }),
+        pageState.mode === "list" ? Promise.resolve(null) : fetch(ICONS_URL, { method: "GET", credentials: "include" }),
+      ]);
+      if (eventsRes.status === 403) {
+        renderMessage("This section is available only to global admins and tournament admins.");
+        return;
+      }
+      if (!eventsRes.ok || !optionsRes.ok) {
+        renderMessage("Failed to load events.");
+        return;
+      }
+      const eventsData = await eventsRes.json().catch(() => ({}));
+      const optionsData = await optionsRes.json().catch(() => ({}));
+      const iconsData = iconsRes?.ok ? await iconsRes.json().catch(() => ({})) : {};
+      const events = Array.isArray(eventsData?.events) ? eventsData.events : [];
+      const context = {
+        isAdmin: optionsData?.is_admin === true,
+        tournaments: Array.isArray(optionsData?.tournaments) ? optionsData.tournaments : [],
+        icons: Array.isArray(iconsData?.icons) ? iconsData.icons : [],
+      };
+
+      if (pageState.mode === "create") {
+        renderEventForm(null, context, "create");
+        return;
+      }
+      if (pageState.mode === "edit") {
+        const eventToEdit = events.find((item) => String(item?.id || "") === pageState.eventId);
+        if (!eventToEdit) {
+          renderMessage(`Event not found: ${pageState.eventId}`);
+          return;
+        }
+        renderEventForm(eventToEdit, context, "edit");
+        return;
+      }
+
+      addButtonEl.classList.remove("cp-hidden");
+      addButtonEl.onclick = openCreate;
+      renderEventsList(events);
+    } catch (_error) {
+      renderMessage("Failed to load data.");
+    } finally {
+      isInitializing = false;
+      if (refreshQueued) {
+        refreshQueued = false;
+        initEventsPage();
+      }
+    }
+  }
+
+  window.addEventListener("gg-auth-state-change", () => initEventsPage());
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", initEventsPage);
+  } else {
+    initEventsPage();
+  }
+})();
+</script>

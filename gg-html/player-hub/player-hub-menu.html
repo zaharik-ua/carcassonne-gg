@@ -247,6 +247,12 @@
     },
     {
       type: "view",
+      view: "events",
+      label: "Events",
+      icon: "https://carcassonne.gg/gallery/calendar.png",
+    },
+    {
+      type: "view",
       view: "nationals",
       label: "Nationals",
       icon: "https://carcassonne.gg/gallery/nationals.png",
@@ -394,6 +400,7 @@
       || view === "in-person"
       || view === "streams"
       || view === "news"
+      || view === "events"
       || view === "nationals"
       || view === "challenges"
     ) return `view:${view}`;
@@ -631,6 +638,9 @@
         }
         if (item.view === "my-tournaments") {
           return hasTournamentAdminAccess || hasCclCaptainAccess;
+        }
+        if (item.view === "events") {
+          return hasTournamentAdminAccess;
         }
         if (item.view === "nationals") {
           return isAdminUser;

@@ -214,6 +214,13 @@
     },
     {
       type: "view",
+      view: "events",
+      label: "Events",
+      subtitle: "Add events to the main page schedule",
+      icon: "https://carcassonne.gg/gallery/calendar.png",
+    },
+    {
+      type: "view",
       view: "nationals",
       label: "Nationals",
       subtitle: "Manage your online national matches",
@@ -580,6 +587,9 @@
           }
           if (item.view === "my-tournaments") {
             return hasTournamentAdminAccess || hasCclCaptainAccess;
+          }
+          if (item.view === "events") {
+            return hasTournamentAdminAccess;
           }
           if (item.view === "nationals") {
             return isAdminUser;

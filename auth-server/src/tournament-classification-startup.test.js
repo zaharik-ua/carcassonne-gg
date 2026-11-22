@@ -64,7 +64,7 @@ test("real server runs before cleanup and after two restarts without recreating 
     });
     const payloads = new Map();
     for (const endpoint of ["/health", "/tournaments", "/categories", "/public/main-page-matches", "/public/team-official-matches",
-      "/public/team-official-matches/filters", "/public/friendly-matches", "/public/tournaments/GG-Rivals-S1"]) {
+      "/public/team-official-matches/filters", "/public/friendly-matches", "/public/tournaments/GG-Rivals-S1", "/public/events"]) {
       const response = await fetch(`http://127.0.0.1:${port}${endpoint}`);
       assert.equal(response.status, 200, `${endpoint}\n${await response.clone().text()}\n${logs}`);
       payloads.set(endpoint, await response.json());
