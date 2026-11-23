@@ -2782,6 +2782,13 @@
     flex: 0 0 auto;
   }
 
+  .cp-ccl-block-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    justify-content: flex-end;
+  }
+
   .cp-ccl-add-panel {
     display: grid;
     gap: 6px;
@@ -13511,12 +13518,73 @@
       addCell(row, actions);
     };
 
+    // All slots, filled or empty, with every field; the file goes to the browser downloads.
+    const downloadSlotsCsv = () => {
+      const quote = (value) => `"${String(value ?? "").replace(/"/g, '""')}"`;
+      const stageColumns = CCL_STAGES.flatMap((stage) => [
+        `${stage} qualified by`, `${stage} link`, `${stage} Elo`, `${stage} Elo source`, `${stage} seed`,
+      ]);
+      const rows = [[
+        "Slot ID", "Association", "Captains", "Stage", "Qualified by", "Qualified by link",
+        "Player ID", "BGA nickname", "Player name", "Login Email", "GG Elo", "League status",
+        ...stageColumns,
+      ]];
+      data.slots.slice()
+        .sort((left, right) => {
+          if (!left.association_id !== !right.association_id) return left.association_id ? -1 : 1;
+          return getAssociationName(left.association_id).localeCompare(getAssociationName(right.association_id))
+            || CCL_STAGES.indexOf(left.entry_stage) - CCL_STAGES.indexOf(right.entry_stage)
+            || getSlotPlayerLabel(left).localeCompare(getSlotPlayerLabel(right));
+        })
+        .forEach((slot) => {
+          const entry = getSlotEntry(slot, slot.entry_stage);
+          const player = slot.player || {};
+          rows.push([
+            slot.id,
+            slot.association_id ? getAssociationName(slot.association_id) : "",
+            slot.association_id ? getCaptainNames(key(slot.association_id)).join("; ") : "",
+            slot.entry_stage,
+            entry?.qualified_by_name || "",
+            entry?.qualified_by_link || "",
+            slot.player_id || "",
+            player.bga_nickname || "",
+            player.name || "",
+            player.login_email || "",
+            player.gg_elo ?? "",
+            slot.league_status || "",
+            ...CCL_STAGES.flatMap((stage) => {
+              const stageEntry = getSlotEntry(slot, stage);
+              if (!stageEntry) return ["", "", "", "", ""];
+              return [
+                stageEntry.qualified_by_name || "",
+                stageEntry.qualified_by_link || "",
+                stageEntry.elo_fixed && stageEntry.elo !== null && stageEntry.elo !== undefined ? Math.round(Number(stageEntry.elo)) : "",
+                stageEntry.elo_fixed ? stageEntry.elo_source || "" : "",
+                stageEntry.seed || "",
+              ];
+            }),
+          ]);
+        });
+      // The BOM lets Excel read the names as UTF-8.
+      const csv = `\ufeff${rows.map((row) => row.map(quote).join(",")).join("\r\n")}`;
+      const link = el("a");
+      link.href = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
+      link.download = `${tournamentId}-slots.csv`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      setTimeout(() => URL.revokeObjectURL(link.href), 1000);
+    };
+
     const renderSlots = () => {
       const toggle = createButton(addSlotOpen ? "Close" : "Add slot", () => {
         addSlotOpen = !addSlotOpen;
         render();
       }, addSlotOpen ? "secondary" : "primary");
-      const block = createBlock(`Slots (${data.slots.length})`, "", toggle);
+      const headActions = el("div", "cp-ccl-block-actions");
+      headActions.appendChild(createButton("Download CSV", downloadSlotsCsv, "secondary", !data.slots.length));
+      headActions.appendChild(toggle);
+      const block = createBlock(`Slots (${data.slots.length})`, "", headActions);
       if (addSlotOpen) block.appendChild(renderAddSlot());
       if (!data.slots.length) {
         block.appendChild(el("div", "cp-tournament-config-empty", "No slots yet. Use Add slot to create them."));

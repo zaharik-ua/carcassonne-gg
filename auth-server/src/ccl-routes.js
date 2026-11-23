@@ -126,6 +126,23 @@ async function loadProfileLoginEmail(db, playerId) {
   return text(row?.email);
 }
 
+// Login Emails of the given players, by player id (admins only: the slots CSV export needs them).
+async function loadProfileLoginEmails(db, playerIds) {
+  const ids = [...new Set(playerIds.map(text).filter(Boolean))];
+  if (!ids.length) return new Map();
+  const rows = await dbAll(
+    db,
+    `
+      SELECT trim(id) AS id, trim(COALESCE(email, '')) AS email
+      FROM profiles
+      WHERE trim(id) IN (${ids.map(() => "?").join(", ")})
+        AND deleted_at IS NULL
+    `,
+    ids
+  );
+  return new Map(rows.map((row) => [text(row.id), text(row.email)]));
+}
+
 // Profiles of the association (profiles.association holds its code or name) that have no Login Email.
 async function loadPlayersWithoutLoginEmail(db, associationId) {
   const association = await resolveCclAssociation(db, associationId);
@@ -427,6 +444,9 @@ export function registerCclRoutes(app, {
     if (!actor.isAdmin && !visibleSlots.length) throw requestError(403, "Forbidden");
 
     const drawnStages = await loadDrawnStages(db, tournament.id);
+    const loginEmails = actor.isAdmin
+      ? await loadProfileLoginEmails(db, visibleSlots.map((slot) => slot.player_id))
+      : null;
     const phases = Object.fromEntries(Object.keys(CCL_PHASES).map((phase) => {
       const status = getCclPhaseStatus({ slots: state.slots, entries: state.entries, phase });
       if (!actor.isAdmin) delete status.pots_blockers;
@@ -447,7 +467,11 @@ export function registerCclRoutes(app, {
         ? []
         : await loadPlayersWithoutLoginEmail(db, actor.captainAssociationId),
       phases,
-      slots: visibleSlots.map((slot) => formatSlot(slot, state)),
+      slots: visibleSlots.map((slot) => {
+        const formatted = formatSlot(slot, state);
+        if (loginEmails && formatted.player) formatted.player.login_email = loginEmails.get(text(slot.player_id)) || null;
+        return formatted;
+      }),
     });
   }));
 
