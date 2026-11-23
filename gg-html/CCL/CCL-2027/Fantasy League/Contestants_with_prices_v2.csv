@@ -1,0 +1,136 @@
+Record ID,country,currentPoints,elo,player,qualifyingGroup,seeded,stage,Price
+0,Argentina,,1600,Argentina main draw contestant 1,"","",Main,10
+1,Argentina,,1581,webbi,B,1,Q1,10
+2,Argentina,1,1575,bignacho610,Z,0,Q3,4
+3,Argentina,1,1513,JnNzr,Y,0,Q3,3.5
+4,Australia,,1604,King_Deded4d5,"","",Main,10
+5,Australia,,1455,robw335,A,0,Q1,4.5
+6,Australia,0,1537,Megot Noskill,Y,0,Q3,3.5
+7,Austria,,1489,el___duderino,I,1,Q2,8
+8,Belarus,,1553,Gladki_Alex,I,1,Q2,10
+9,Belarus,,1503,Korshuk Dima,F,1,Q2,8.5
+10,Belarus,0,1535,detraid,Z,0,Q3,3.5
+11,Belgium,,1704,CraftyRaf,"","",Main,16.5
+12,Belgium,,1500,mobidic,A,0,Q1,5.5
+13,Brazil,,1300,alcidesjr,"","",Main,3
+14,Brazil,,1657,Zedson,A,1,Q1,13
+15,Brazil,2,1588,KR_ Knight_ Realm,Y,1,Q3,7
+16,Canada,,1300,little arms,H,0,Q2,3
+17,Catalonia,,1604,Pronom feble,"","",Main,10
+18,Catalonia,,1594,defdean,C,1,Q1,10.5
+19,Chile,,1524,Townsend17,"","",Main,6.5
+20,Chile,,1628,Vainiria,A,1,Q1,11.5
+21,Chile,1,1637,Claudio Jorquera,X,1,Q3,5.5
+22,China,,1700,China main draw contestant 1,"","",Main,16.5
+23,China,,1650,China main draw contestant 2,"","",Main,13
+24,China,,1718,qazxswedc,B,1,Q1,16
+25,China,3,1735,203club,Y,1,Q3,12.5
+26,China,2,1506,hullqin-dongya,X,0,Q3,5
+27,Colombia,,1548,Ext4ur,B,1,Q1,8.5
+28,Colombia,3,1612,dremkad,Z,1,Q3,7.5
+29,Croatia,,1627,Bluste,"","",Main,11.5
+30,Croatia,,1503,amasiuncula,C,0,Q1,5.5
+31,Croatia,,1506,yuto171,D,0,Q1,5.5
+32,Croatia,1,1575,BuHa44,X,0,Q3,4
+33,Czech Republic,,1696,posij118,"","",Main,16
+34,Czech Republic,,1425,bormar,B,0,Q1,4
+35,Czech Republic,,1672,martypartyouje,D,1,Q1,13.5
+36,Denmark,,1507,Hubert1234,F,1,Q2,8.5
+37,Ecuador,,1450,Jotan,H,0,Q2,5
+38,Ecuador,,1478,JuankyEND,G,0,Q2,6
+39,Finland,,1688,Larpaattori,"","",Main,15.5
+40,Finland,,1695,Nallerheim,"","",Main,16
+41,Finland,,1493,Haikala,E,0,Q1,5.5
+42,France,,1629,viv-,"","",Main,11.5
+43,France,,1500,Blitz,B,0,Q1,5.5
+44,France,,1475,Boulym,C,0,Q1,5
+45,Germany,,1508,Karaboudjan,"","",Main,6
+46,Germany,,1451,Mermadin,B,0,Q1,4.5
+47,Germany,,1548,yzemaze,A,0,Q1,6.5
+48,Germany,2,1562,HappyTim7,Y,0,Q3,6
+49,Greece,,1613,dark_passenger84,"","",Main,10.5
+50,Greece,,1557,Ste-fa-na-kis,D,1,Q1,9
+51,Guatemala,,1407,Chini_GT,F,0,Q2,4.5
+52,Guatemala,,1395,Leykos,I,0,Q2,4
+53,Hong Kong,,1537,CTCTCTCTCT,"","",Main,7
+54,Hong Kong,,1586,Littlesmallsmall,E,1,Q1,10
+55,Hong Kong,0,1573,ernie012,X,0,Q3,4
+56,Hong Kong,0,1580,ET_08,Z,0,Q3,4.5
+57,Hungary,,1493,vizecske,"","",Main,5.5
+58,Hungary,,1439,coralos,E,0,Q1,4.5
+59,Iceland,,1380,bobondi,F,0,Q2,4
+60,India,,1300,harshad,G,0,Q2,3
+61,Indonesia,,1464,RDaeln,I,0,Q2,5.5
+62,Israel,,1495,RoeyCh,F,1,Q2,8
+63,Italy,,1614,barry10,"","",Main,10.5
+64,Italy,,1474,Angostur4,A,0,Q1,5
+65,Japan,,1700,Japan main draw contestant 1,"","",Main,16.5
+66,Japan,,1650,Japan main draw contestant 2,"","",Main,13
+67,Japan,,1508,marusingfire,E,0,Q1,5.5
+68,Japan,3,1676,f kenta,Y,1,Q3,10
+69,Japan,3,1697,Kithara,Z,1,Q3,10.5
+70,Kazakhstan,,1492,tovov,G,1,Q2,8
+71,Latvia,,1475,Norberts96,"","",Main,5
+72,Latvia,,1522,Robias,C,0,Q1,6
+73,Latvia,3,1755,Alexey_LV,X,1,Q3,13.5
+74,Lithuania,,1349,kreukle,"","",Main,3
+75,Lithuania,,1499,Xocas,B,0,Q1,5.5
+76,Malaysia,,1387,JXIV,G,0,Q2,4
+77,Malaysia,,1404,Logan Ghanesh,I,0,Q2,4.5
+78,Mexico,,1565,IMD5,"","",Main,8.5
+79,Mexico,,1375,vapula27,D,0,Q1,3.5
+80,Moldova,,1481,Rodaz,H,1,Q2,7.5
+81,Netherlands,,1465,JohnNoordwijk,F,0,Q2,5.5
+82,Netherlands,,1509,Loose-Goose,H,1,Q2,8.5
+83,Norway,,1505,hognej,F,1,Q2,8.5
+84,Norway,,1431,Mr Savastano,H,0,Q2,5
+85,Peru,,1507,-Nari-,I,1,Q2,8.5
+86,Peru,,1416,spakune,H,0,Q2,4.5
+87,Poland,,1721,mtuu,"","",Main,18
+88,Poland,,1504,DejmiaN97,D,0,Q1,5.5
+89,Poland,,1765,UY_Scuti,B,1,Q1,18.5
+90,Poland,3,1633,Krzysztof285,Z,1,Q3,8
+91,Poland,0,1545,pricci,Y,0,Q3,3.5
+92,Portugal,,1678,Glovir,"","",Main,14.5
+93,Portugal,,1595,JMargarido,C,1,Q1,10.5
+94,Portugal,,1698,Sportr,A,1,Q1,15
+95,RCP,,1623,71st,"","",Main,11
+96,RCP,,1618,Tarakanov28,"","",Main,11
+97,RCP,,1669,Mikhail-rus,A,1,Q1,13.5
+98,RCP,3,1632,DoNotWasteMyTime,X,1,Q3,8
+99,RCP,3,1867,Someone_you_know,Z,1,Q3,20
+100,Romania,,1599,Mars15,"","",Main,10
+101,Romania,,1612,g3rappa,E,1,Q1,11
+102,Romania,,1596,game__over,C,1,Q1,10.5
+103,Slovakia,,1518,Matej_11,I,1,Q2,9
+104,Slovenia,,1300,ALKOO,G,0,Q2,3
+105,South Korea,,1556,cherrypapa,H,1,Q2,10
+106,Spain,,1557,Temrak,"","",Main,8
+107,Spain,,1561,texe1,D,1,Q1,9
+108,Sweden,,1615,Helge_H,G,1,Q2,12.5
+109,Sweden,,1485,Modig fruktsamlare,H,1,Q2,8
+110,Switzerland,,1300,turturica,I,0,Q2,3
+111,Taiwan,,1561,penguin-EM,"","",Main,8
+112,Taiwan,,1626,chengfengtsai,D,1,Q1,11.5
+113,Taiwan,1,1692,HotlyHotly,Y,1,Q3,7
+114,Thailand,,1590,Pakshe,"","",Main,9.5
+115,Thailand,,1536,Natpeera-ch,C,0,Q1,6.5
+116,Thailand,0,1550,chawin053,X,0,Q3,4
+117,Turkey,,1504,steam4206,G,1,Q2,8.5
+118,Ukraine,,1717,adrear,"","",Main,17.5
+119,Ukraine,,1562,bazilyuk,"","",Main,8
+120,Ukraine,,1602,nazario77,"","",Main,10
+121,Ukraine,,1626,zaharik,"","",Main,11.5
+122,Ukraine,,1529,trinidadec,E,0,Q1,6
+123,United Kingdom,,1602,Lord Terrycloth,"","",Main,10
+124,United Kingdom,,1554,LazyBore,C,1,Q1,9
+125,United Kingdom,,1560,ted the notty bear,E,1,Q1,9
+126,United States,,1529,carky,"","",Main,7
+127,United States,,1591,crocodilefundy,E,1,Q1,10.5
+128,Uruguay,,1411,berna_uy,G,0,Q2,4.5
+129,Uruguay,,1420,Patablanca-uy,F,0,Q2,4.5
+130,Uruguay,3,1654,BDDL1,X,1,Q3,9
+131,Uruguay,0,1493,Lolinho19,Z,0,Q3,3
+132,Vietnam,,1605,portgard,"","",Main,10
+133,Vietnam,,1510,Wolf Ren,D,0,Q1,6
+134,Colombia,0,1600,Colombia main draw contestant 1,,,Main,7

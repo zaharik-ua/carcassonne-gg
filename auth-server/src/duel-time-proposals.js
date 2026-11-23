@@ -98,13 +98,16 @@ export function planDuelTimeProposalDeletion({ duel, actorPlayerId }) {
   };
 }
 
-// Acceptance by the player who did not make the proposal.
-export function planDuelTimeAcceptance({ duel, actorPlayerId }) {
-  const side = getDuelSide(duel, actorPlayerId);
-  if (!side) return denied(403, "Only the players of this match can accept its time");
+// Acceptance by the player who did not make the proposal, or by a global admin on that player's
+// behalf (`onBehalfOfOpponent`), e.g. when the opponent has no account on the site.
+export function planDuelTimeAcceptance({ duel, actorPlayerId, onBehalfOfOpponent = false }) {
+  if (!onBehalfOfOpponent) {
+    const side = getDuelSide(duel, actorPlayerId);
+    if (!side) return denied(403, "Only the players of this match can accept its time");
+  }
   if (!isPlannedDuel(duel)) return denied(409, "The time can be changed only for a planned match");
   if (!isActiveDuelTimeProposal(duel)) return denied(409, "There is no pending time proposal for this match");
-  if (text(duel.proposed_time_by_player_id) === text(actorPlayerId)) {
+  if (!onBehalfOfOpponent && text(duel.proposed_time_by_player_id) === text(actorPlayerId)) {
     return denied(403, "Only the opponent can accept this proposal");
   }
   const proposed = normalizeUtc(duel.proposed_time_utc);

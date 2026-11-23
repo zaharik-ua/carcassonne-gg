@@ -61,6 +61,18 @@ test("rejects proposals from outsiders or for finished matches; allows past time
   }).value, { time_utc: "2026-11-10T18:00:00.000Z", proposed_time_status: "accepted" });
 });
 
+test("a global admin accepts a proposal for the opponent", () => {
+  const proposed = planned({ proposed_time_utc: "2026-11-23T19:30:00Z", proposed_time_by_player_id: "olena", proposed_time_status: "pending" });
+  assert.equal(planDuelTimeAcceptance({ duel: proposed, actorPlayerId: null }).status, 403);
+  assert.deepEqual(planDuelTimeAcceptance({ duel: proposed, actorPlayerId: null, onBehalfOfOpponent: true }).value, {
+    time_utc: "2026-11-23T19:30:00.000Z", proposed_time_status: "accepted",
+  });
+  assert.equal(planDuelTimeAcceptance({ duel: planned(), actorPlayerId: null, onBehalfOfOpponent: true }).status, 409);
+  assert.equal(planDuelTimeAcceptance({
+    duel: { ...proposed, status: "Done" }, actorPlayerId: null, onBehalfOfOpponent: true,
+  }).status, 409);
+});
+
 test("the proposer deletes a pending proposal; the match keeps its time", () => {
   const change = planned({
     time_utc: "2026-11-20T18:00:00.000Z",

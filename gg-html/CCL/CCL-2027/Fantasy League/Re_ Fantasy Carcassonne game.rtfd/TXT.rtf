@@ -1,0 +1,172 @@
+{\rtf1\ansi\ansicpg1251\cocoartf2870
+\cocoatextscaling0\cocoaplatform0{\fonttbl\f0\fnil\fcharset0 HelveticaNeue;\f1\fswiss\fcharset0 Helvetica;\f2\fnil\fcharset0 Menlo-Regular;
+\f3\fswiss\fcharset0 Helvetica-Bold;\f4\fswiss\fcharset0 Arial-Black;}
+{\colortbl;\red255\green255\blue255;\red0\green0\blue0;\red0\green0\blue0;\red53\green134\blue255;
+\red133\green0\blue255;\red37\green0\blue255;\red69\green60\blue204;}
+{\*\expandedcolortbl;;\cssrgb\c0\c0\c0\cname textColor;\cssrgb\c0\c0\c0;\cssrgb\c25490\c61176\c100000;
+\cssrgb\c60000\c0\c100000;\cssrgb\c20000\c20000\c100000;\cssrgb\c34510\c33725\c83922;}
+{\*\listtable{\list\listtemplateid1\listhybrid{\listlevel\levelnfc23\levelnfcn23\leveljc0\leveljcn0\levelfollow0\levelstartat1\levelspace360\levelindent0{\*\levelmarker \{disc\}}{\leveltext\leveltemplateid1\'01\uc0\u8226 ;}{\levelnumbers;}\fi-360\li720\lin720 }{\listname ;}\listid1}
+{\list\listtemplateid2\listhybrid{\listlevel\levelnfc0\levelnfcn0\leveljc0\leveljcn0\levelfollow0\levelstartat1\levelspace360\levelindent0{\*\levelmarker \{decimal\}.}{\leveltext\leveltemplateid101\'02\'00.;}{\levelnumbers\'01;}\fi-360\li720\lin720 }{\listlevel\levelnfc23\levelnfcn23\leveljc0\leveljcn0\levelfollow0\levelstartat1\levelspace360\levelindent0{\*\levelmarker \{circle\}}{\leveltext\leveltemplateid102\'01\uc0\u9702 ;}{\levelnumbers;}\fi-360\li1440\lin1440 }{\listname ;}\listid2}}
+{\*\listoverridetable{\listoverride\listid1\listoverridecount0\ls1}{\listoverride\listid2\listoverridecount0\ls2}}
+\pard\tx560\tx1120\tx1680\tx2240\tx2800\tx3360\tx3920\tx4480\tx5040\tx5600\tx6160\tx6720\pardirnatural\partightenfactor0
+
+\f0\fs24 \cf2 \uc0\u1042 \u1110 \u1076  \u1082 \u1086 \u1075 \u1086 : Matt Hiely-Rayner <intelligentmetrix@gmail.com>\
+\uc0\u1058 \u1077 \u1084 \u1072 : Re: Fantasy Carcassonne game\
+\uc0\u1044 \u1072 \u1090 \u1072 : 23 \u1083 \u1080 \u1089 \u1090 \u1086 \u1087 \u1072 \u1076 \u1072  2026\u8239 \u1088 . \u1086  13:25:37 GMT+2\
+\uc0\u1050 \u1086 \u1084 \u1091 : carcassonne <carcassonne.gg@gmail.com>\
+\pard\tx560\tx1120\tx1680\tx2240\tx2800\tx3360\tx3920\tx4480\tx5040\tx5600\tx6160\tx6720\pardirnatural\partightenfactor0
+
+\f1 \cf2 \
+\pard\pardeftab720\partightenfactor0
+\cf3 \expnd0\expndtw0\kerning0
+\outl0\strokewidth0 \strokec3 Hi again\
+I think this is ready to go now. I changed it so that it needs to pick up the player handle (e.g. LazyBore) from {\field{\*\fldinst{HYPERLINK "http://carcassonne.gg/"}}{\fldrslt \cf4 \ul \ulc4 \strokec4 carcassonne.gg}}: the AI-generated\'a0instruction is that you need to\'a0set 
+\f2 window.Carcassonne_gg_handle
+\f1  to the logged-in user's BGA-matching player handle (such as 
+\f2 LazyBore
+\f1 ).\
+The html also has a means of transmitting results back to my {\field{\*\fldinst{HYPERLINK "https://docs.google.com/spreadsheets/d/1XohfjfKACierLjT1M9KaSQbpHyMACn3S6r1KNoV1msU/edit?usp=sharing"}}{\fldrslt \cf4 \ul \ulc4 \strokec4 google sheet}}, where a script receives the data and renders it into a new record in the table of submissions.\
+What do you think? Is this good to go? Do you think it could be done better?\
+Matt\
+\
+On Sun, 22 Nov 2026 at 20:58, Matt Hiely-Rayner <{\field{\*\fldinst{HYPERLINK "mailto:intelligentmetrix@gmail.com"}}{\fldrslt \cf4 \ul \ulc4 \strokec4 intelligentmetrix@gmail.com}}> wrote:\
+\pard\pardeftab720\partightenfactor0
+\cf3 Hi Sergey\
+Congratulations on the draw today - it was a very smooth operation despite self_evident giving you a scare!\
+I have been using AI to help me create an interface for teams to be submitted, and it is credible. I attach the last version,\'a0containing dummy\'a0data.\
+Once the last Q3 R1 match is complete tonight I will finalise prices and set a deadline for people to submit their teams. I think 23:59 on Friday 27 November (UTC) is the best point, to get in before the matches that take place next weekend. There will be some small advantage for people who wait to view results that take place in the week, but results recorded so far are already reflected in prices.\
+Is there any news about the main draw representatives from Japan, Argentina, Japan & Colombia? I have them selectable only as 'Japan main draw contestant 1' but if you know who they are going to be that would help.\
+The AI I am using prepared the following, after I suggested that people submitting a team should be logged into {\field{\*\fldinst{HYPERLINK "http://carcassonne.gg/"}}{\fldrslt \cf4 \ul \ulc4 \strokec4 carcassonne.gg}} and have their team associated with their username.\
+\pard\pardeftab720\sa280\partightenfactor0
+
+\fs26 \cf5 \strokec5 Notes for Handing This to Carcassonne.GG
+\f3\b\fs28 \cf3 \strokec3 \
+\pard\pardeftab720\sa240\partightenfactor0
+\ls1\ilvl0
+\fs24 \cf5 \strokec5 {\listtext	\'95	}Auth bridge:
+\f1\b0  Replace the prototype session tester with your site's real authenticated user object (e.g., setting 
+\f2 window.CARCASSONNE_GG_USER = currentUser.username
+\f1  in the template before rendering the widget, and rejecting/ignoring unauthenticated saves on the backend)\cf3 \strokec3 \uc0\u8232 \
+\pard\pardeftab720\partightenfactor0
+\cf3 \
+\pard\pardeftab720\partightenfactor0
+\cf3 I have been asking questions about how to access the data on each valid team, so that I can start adding points and creating a leaderboard etc. AI gave me this:\'a0\
+\pard\pardeftab720\sa280\partightenfactor0
+
+\f3\b\fs28 \cf5 \strokec5 2. How to Connect Carcassonne.GG to Your Scoring & Leaderboard\cf3 \strokec3 \
+\pard\pardeftab720\sa240\partightenfactor0
+
+\f1\b0\fs24 \cf5 \strokec5 Depending on how much backend work the Carcassonne.GG owner wants to take on, there are three practical ways to store and score teams after the deadline:\cf3 \strokec3 \
+\pard\pardeftab720\sa240\partightenfactor0
+\ls2\ilvl0
+\f3\b \cf5 \strokec5 {\listtext	1.	}Direct-to-Google-Sheet via Apps Script Web App (Low setup, stays close to your sheet):
+\f1\b0 \cf3 \strokec3 \
+\pard\pardeftab720\sa240\partightenfactor0
+\ls2\ilvl1\cf5 \strokec5 {\listtext	\uc0\u9702 	}The HTML widget sends a 
+\f2 POST
+\f1  payload (
+\f2 carcassonneGgUser
+\f1 , 
+\f2 teamName
+\f1 , 
+\f2 draft
+\f1 , 
+\f2 lastValid
+\f1 , 
+\f2 savedAt
+\f1 ) to a Google Apps Script web app URL.\cf3 \strokec3 \uc0\u8232 \
+\ls2\ilvl1\cf5 \strokec5 {\listtext	\uc0\u9702 	}Apps Script writes/updates a 
+\f2 Submissions
+\f1  tab in {\field{\*\fldinst{HYPERLINK "https://docs.google.com/spreadsheets/d/186ckY0m1MVMgaq5lOSJbS_0CkbXOZC7DGeal48xcQww/edit?gid=1761411285#gid=1761411285"}}{\fldrslt \cf4 \ul \ulc4 \strokec4 Fantasy CCL}}, and after 
+\f2 27/11/2026 23:59
+\f1  a 
+\f3\b Locked Teams
+\f1\b0  tab resolves each user's final roster and looks up each contestant's points from your results/scoring table.\cf3 \strokec3 \uc0\u8232 \
+\pard\pardeftab720\sa240\partightenfactor0
+\ls2\ilvl0
+\f3\b \cf5 \strokec5 {\listtext	2.	}Carcassonne.GG Database Table (Best if Carcassonne.GG hosts the leaderboard):
+\f1\b0 \cf3 \strokec3 \uc0\u8232 \
+\pard\pardeftab720\sa240\partightenfactor0
+\ls2\ilvl1\cf5 \strokec5 {\listtext	\uc0\u9702 	}The Carcassonne.GG owner stores submissions in their own database table keyed by 
+\f3\b Carcassonne.GG username
+\f1\b0  (and/or player ID), enforces the 
+\f2 27/11/2026 23:59
+\f1  cutoff server-side, and either renders team pages directly on Carcassonne.GG or exports a CSV/JSON snapshot to your sheet.\cf3 \strokec3 \uc0\u8232 \
+\pard\pardeftab720\partightenfactor0
+\cf3 I reject the 3rd option because it left the user needing to copy a generated json file and submit it through a google form. I want to go with option 1, unless you are able to make option 2 work.\'a0\
+So I am getting the AI to help develop this widget idea but if you have any ideas or comments in the meantime, please let me know.\
+Best wishes,\
+Matt\
+\
+On Thu, 19 Nov 2026 at 16:20, Matt Hiely-Rayner <{\field{\*\fldinst{HYPERLINK "mailto:intelligentmetrix@gmail.com"}}{\fldrslt \cf4 \ul \ulc4 \strokec4 intelligentmetrix@gmail.com}}> wrote:\
+Thanks Sergey!\
+The concept is currently just in a spreadsheet, with a mechanism for pricing, budget and scoring (using results from last year). I am an analyst rather than a developer so am not used to working with html and don't know the best way to develop an interface for users to select and edit their teams. Once the game starts, I intend to post a dashboard on tableau public and you could display that through a frame, but I need to solve the selection part first. Please let me know if you can think of any solutions for that.\
+\
+Access to the API would be very helpful, so that results can be read in without manual processes.\'a0\
+\
+Best wishes\'a0\
+Matt\
+\
+\pard\pardeftab720\partightenfactor0
+
+\f4\b\fs36 \cf6 \strokec6 Intelligent Metrix Ltd
+\fs24 \cf3 \strokec3 \
+\pard\pardeftab720\partightenfactor0
+{\field{\*\fldinst{HYPERLINK "https://guardian.intelligentmetrix.co.uk/"}}{\fldrslt 
+\f3 \cf4 \ul \ulc4 \strokec4 https://guardian.intelligentmetrix.co.uk}}
+\f1\b0 \
+\
+\pard\pardeftab720\partightenfactor0
+\cf3 On Tue, 17 Nov 2026, 12:37 carcassonne, <{\field{\*\fldinst{HYPERLINK "mailto:carcassonne.gg@gmail.com"}}{\fldrslt \cf4 \ul \ulc4 \strokec4 carcassonne.gg@gmail.com}}> wrote:\
+\pard\pardeftab720\sa240\partightenfactor0
+\cf3 Hi Matt,\uc0\u8232 That's a great idea! I'd be happy to make it happen right on {\field{\*\fldinst{HYPERLINK "http://carcassonne.gg/"}}{\fldrslt \cf4 \ul \ulc4 \strokec4 carcassonne.gg}}, as one of the tournament pages here: {\field{\*\fldinst{HYPERLINK "https://carcassonne.gg/ccl-2027/"}}{\fldrslt \cf4 \ul \ulc4 \strokec4 https://carcassonne.gg/ccl-2027/}}\uc0\u8232 The easiest way would be if you give me the HTML code, and I'll embed it on the site as an iframe. Or we can look at other options.\uc0\u8232 If you need access to the database through an API, I can help you with that.\
+Best regards,\uc0\u8232 Sergey\
+\pard\pardeftab720\partightenfactor0
+\cf3 \
+\pard\pardeftab720\partightenfactor0
+\cf7 \strokec7 16 \uc0\u1083 \u1080 \u1089 \u1090 . 2026\u8239 \u1088 . \u1086  11:01 Matt Hiely-Rayner <{\field{\*\fldinst{HYPERLINK "mailto:intelligentmetrix@gmail.com"}}{\fldrslt \cf4 \ul \ulc4 \strokec4 intelligentmetrix@gmail.com}}> \uc0\u1085 \u1072 \u1087 \u1080 \u1089 \u1072 \u1074 (\u1083 \u1072 ):\
+\
+Dear Zaharik and team\
+Hello, I am LazyBore from the UK team.\
+For this season's champion's league I would like to put together a little fantasy game. This would mean that carcassonne fans can select a small team (perhaps 5 qualifiers\'a0+ 5 from main draw) of contestants and score points according to performances in the tournament. I would need to set prices for each contestant and a budget for each fan's team.\
+I could do this separately but it would be better and easier if it was available through {\field{\*\fldinst{HYPERLINK "http://carcassonne.gg/"}}{\fldrslt \cf4 \ul \ulc4 \strokec4 carcassonne.gg}}.\'a0\
+If you are interested I could develop a prototype showing how the game would work.\
+There are still some questions over timing that I have not resolved, so any advice on how to make this work would be greatly appreciated.\
+Best wishes,\
+Matt Hiely-Rayner\
+\
+-- \
+\pard\pardeftab720\partightenfactor0
+
+\f4\b\fs36 \cf6 \strokec6 Intelligent Metrix Ltd
+\fs24 \cf7 \strokec7 \
+\pard\pardeftab720\partightenfactor0
+{\field{\*\fldinst{HYPERLINK "https://guardian.intelligentmetrix.co.uk/"}}{\fldrslt 
+\f3 \cf4 \ul \ulc4 \strokec4 https://guardian.intelligentmetrix.co.uk}}
+\f1\b0 \
+\pard\pardeftab720\partightenfactor0
+\cf3 \strokec3 \
+\
+\
+\pard\pardeftab720\partightenfactor0
+\cf3 -- \
+\pard\pardeftab720\partightenfactor0
+
+\f4\b\fs36 \cf6 \strokec6 Intelligent Metrix Ltd
+\fs24 \cf3 \strokec3 \
+\pard\pardeftab720\partightenfactor0
+{\field{\*\fldinst{HYPERLINK "https://guardian.intelligentmetrix.co.uk/"}}{\fldrslt 
+\f3 \cf4 \ul \ulc4 \strokec4 https://guardian.intelligentmetrix.co.uk}}
+\f1\b0 \
+\
+\
+-- \
+\pard\pardeftab720\partightenfactor0
+
+\f4\b\fs36 \cf6 \strokec6 Intelligent Metrix Ltd
+\fs24 \cf3 \strokec3 \
+\pard\pardeftab720\partightenfactor0
+{\field{\*\fldinst{HYPERLINK "https://guardian.intelligentmetrix.co.uk/"}}{\fldrslt 
+\f3 \cf4 \ul \ulc4 \strokec4 https://guardian.intelligentmetrix.co.uk}}
+\f1\b0 \
+}

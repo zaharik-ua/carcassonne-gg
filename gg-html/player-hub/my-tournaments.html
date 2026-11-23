@@ -14720,8 +14720,19 @@
           || isCclCaptainTournament(tournament)
         ));
       if (!isGlobalAdmin && !tournaments.length) {
+        const playerHint = document.createDocumentFragment();
+        const tournamentsLink = document.createElement("a");
+        tournamentsLink.href = "https://carcassonne.gg/player-hub/tournaments";
+        tournamentsLink.textContent = "Tournaments";
+        playerHint.append(
+          "If you take part in a tournament as a player, look for your matches in ",
+          tournamentsLink,
+          ".",
+        );
         renderStaticInfoSection("My Tournaments", [
-          "This section is still under development.",
+          "Here you can manage your tournaments.",
+          "You don't manage any tournaments yet.",
+          playerHint,
         ]);
         return;
       }

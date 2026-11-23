@@ -1,0 +1,93 @@
+LazyBore — 13:27
+hi Sergey, this is Matt
+zaharik.ua — 13:43
+Hi Matt
+LazyBore — 13:47
+hi there. Is the stuff I sent OK? both in terms of being a good game and being something you could put on carcassonne.gg?
+zaharik.ua — 13:47
+please review this https://claude.ai/artifact/D9yaCmZCHUqUcfgMiqHc87#bb950fca-16f8.m3narpyhtbc.2483
+Claude Docs
+CCL 2027 Fantasy League — MVP Requirements
+Sign in to Claude to continue.
+Claude Docs icon
+Тип файлу вкладення: acrobat
+CCL 2027 Fantasy League — MVP Requirements.pdf
+121.76 KB
+LazyBore — 13:54
+ok this sounds good. The split of Qualifying and main draw makes sense, though I like the dynamic whereby a player's team will perform well if they backed a qualifier from the start and continues to score for them through the main draw. That is lost a bit, if they have to reselect the qualifier (at a higher price) when they reach the main draw. We could say that any qualifiers you select stay in your team until they are eliminated, but you cannot select the same contestant in your main draw team.
+The last valid team was something I requested to avoid a scenario in which a player is editing their team at the deadline, when it was previously valid but temporarily in a non-valid state. I think you and claude are correct that is is more complicated than it needs to be
+zaharik.ua — 13:57
+If a qualifier automatically moves into the league team, that seriously limits the choices for the qualifying team. For example, right now it makes sense to pick Q2 players because they're cheap. But if they make it into the League, that becomes a problem for the fantasy player.
+LazyBore — 13:58
+Open questions: 1) I have the player list and qualifier pricing ready already; 2) no, otehr teams not shared until after the deadline (this needs work anyway) 3) I can get the rules written up today
+I would like it to be a bonus if you back a qualifier: an extra player who continues to score for you in the main phase, in addition to the 5 you select from the main draw.
+zaharik.ua — 14:00
+Another question: if a fantasy player picks a team and some of their contestants get eliminated, will they not be able to replace them?
+LazyBore — 14:00
+There are other ways to achieve this, and we could use pricing differently to motivate different strategies, but the principle is that if you predict something unlikely early, you get a large benefit
+LazyBore — 14:01
+no, that is the nature of this game, especially in qualifying. You might spend a lot of budget on someone who gets eliminated woith 2x 2-0 defeat, and scores you nothing
+in the main draw, everyone gets 5 games so there is less risk, but you still want to predict who will progress to the play-offs
+zaharik.ua — 14:01
+Ah, I see. Well, I think that's quite a big bonus. It means that those who picked the right qualifiers and have already scored more points than others also get an extra advantage on top. Then the others would have almost no chance.
+zaharik.ua — 14:03
+Fantasy leagues like this usually have a transfer system, e.g. after each round you can make at most one substitution. But it's not essential right now, we can think about it later.
+My main question for you: are we going with this approach for now?
+
+Team building until 30 Nov, results from 30 Nov. I recommend giving time until 30 Nov to build teams, and counting results only from 30 Nov. This gives every player an equal chance to build a team and start scoring at the same time.
+Late entry. Those who miss 29 Nov can build a team later. Only matches played after the team is saved count; matches already played do not.
+LazyBore — 14:04
+yes, especially if it is one of the 'big' players from Q3 who progresses. But I built a predictive model that estiamtes total points and the prices reflect this already. It's a big risk to spend 20 on "someone you know", because they are in a qualifying group with only 1 ticket to the main draw. If you spend that, you get a powerful bonus if he progresses
+i think substitutions next year, if the concept works and looks like it could be popular
+LazyBore — 14:08
+i am concerned by the tight deadline as well, but the problem that prices would need to be fixed today and value would be affected by games that take place at the weekend. I am OK with players getting a benefit from picking contestants who win on the weekdays, when they already know they have scored, but this benefit would become too much if we had all the R1 results known
+i have reflected scores so far in price, so for example Claudio Jorquera is cheaper than their elo would predict because they lost as a  seed
+I see Alexey and hullqin gongya are due to play on Wednesday. If hullqin wins that, people will want to amend Alexey out of their team as he is then over-priced for a low chance of progres. Because we cannot run the selection phase before scoring starts, I think Friday is the best option
+I like the idea of Late entry, but as you say it would have to exclude points already scored. This might be difficult to manage and we would need to decide if we are using a timestamp on submission, or a second deadline.
+zaharik.ua — 14:14
+What if we set the deadline for midday Monday, 30 Nov? No R2 matches will have been played yet, and most of the R1 matches should already be done.
+Then people could build their team in advance as a draft, with the option to update it once the R1 matches have been played.
+LazyBore — 14:15
+but all the prices would need to be altered to reflect the R1 games that took place at the weekend, and we can only open this up to players when the prices are fixed
+zaharik.ua — 14:16
+Yes, it's no problem to launch the league while the tournament is already underway 🙂
+LazyBore — 14:16
+it's certainly less than ideal!
+zaharik.ua — 14:18
+But if we set the deadline for Friday, late entry becomes difficult, because anyone who creates a team on Saturday or Sunday would have an advantage. And without late entry, we could lose a lot of people who want to take part.
+What if the qualifiers were a trial run, and the League was a separate competition with its own leaderboard, without combining the two?
+LazyBore — 14:19
+Maybe late deadline of the following Friday? the advantage of knowing who is already eliminated / likely to be eliminated may outweigh the disdavantage of missing the value from the earlier matches
+zaharik.ua — 14:21
+You mean the weekend results would count for those who create their team before the deadline?
+LazyBore — 14:21
+This sounds like a safe idea. I am less enthusiastic about it (because I like it when early predictions are rewarded) but I think you are right that it is more likely to be successful.
+zaharik.ua — 14:22
+If we call it a "trial version", that will definitely put any questions about "fairness" to rest. And for the League, we can also gather all the feedback from participants and make something closer to the final version.
+LazyBore — 14:24
+At present, my suggestion is that if you select a team before the end of 27 November, you score all the points a contestant gathers, even if the results were known before you selected the contestant. This is already reflected in prices for R1 matches in Q3. If we set a late deadline of 4 December, then the disadvantage for players entering at that point is that only matches played after that point count for their team.
+zaharik.ua — 14:25
+Will the matches played between today and Saturday be reflected in the prices? Or are we fixing the prices now?
+LazyBore — 14:26
+no, we have to fix prices now and players get an advantage by knowing results before Friday. But they are the minority.
+zaharik.ua — 14:26
+deal
+LazyBore — 14:27
+ok great. I am writing up the announcement and rules and I will share back to you to check.
+zaharik.ua — 14:28
+Please send me the player list and qualifier pricing you already have ready. I'll import them into the site's database and build a page for creating teams
+LazyBore — 14:29
+it's in the Contestants 2027 sheet here: https://docs.google.com/spreadsheets/d/1XohfjfKACierLjT1M9KaSQbpHyMACn3S6r1KNoV1msU/edit?usp=sharing
+or csv here
+Record ID,country,currentPoints,elo,player,qualifyingGroup,seeded,stage,Price
+0,Argentina,,1600,Argentina main draw contestant 1,"","",Main,10
+1,Argentina,,1581,webbi,B,1,Q1,10
+2,Argentina,1,1575,bignacho610,Z,0,Q3,4
+3,Argentina,1,1513,JnNzr,Y,0,Q3,3.5
+4,Australia,,1604,King_Deded4d5,"","",Main,10
+
+Contestants with prices v2.csv
+6 КБ
+i don't mind if you want to start from scratch, but did you see the html that I generated?
+zaharik.ua — 14:32
+Yes, I'll use your HTML as the basis

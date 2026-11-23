@@ -201,6 +201,8 @@
   const MY_TOURNAMENTS_URL = `${TOURNAMENTS_URL}?scope=my-tournaments`;
   const IN_PERSON_TOURNAMENTS_URL = `${AUTH_BASE}/in-person-tournaments/accessible`;
   const STREAMERS_URL = `${AUTH_BASE}/streamers`;
+  // Fantasy leagues the viewer administers (all of them for site admins).
+  const FANTASY_LEAGUES_URL = `${AUTH_BASE}/fantasy/leagues/managed`;
   // Shown first to every signed-in user; the server picks the blocks by role.
   const DASHBOARD_ITEM = {
     type: "view",
@@ -262,6 +264,12 @@
       view: "challenges",
       label: "Challenges",
       icon: "https://carcassonne.gg/gallery/challenges.png",
+    },
+    {
+      type: "view",
+      view: "fantasy",
+      label: "Fantasy",
+      icon: "https://carcassonne.gg/gallery/tournament.svg",
     },
   ];
 
@@ -403,6 +411,7 @@
       || view === "events"
       || view === "nationals"
       || view === "challenges"
+      || view === "fantasy"
     ) return `view:${view}`;
     return "";
   }
@@ -553,13 +562,15 @@
     let currentUserProfileId = "";
     let hasLinkedBgaId = false;
     let isStreamerUser = false;
+    let hasFantasyLeagues = false;
     try {
-      const [meRes, tournamentsRes, managedTournamentsRes, inPersonTournamentsRes, streamersRes] = await Promise.all([
+      const [meRes, tournamentsRes, managedTournamentsRes, inPersonTournamentsRes, streamersRes, fantasyRes] = await Promise.all([
         fetch(ME_URL, { method: "GET", credentials: "include" }),
         fetch(TOURNAMENTS_URL, { method: "GET", credentials: "include" }),
         fetch(MY_TOURNAMENTS_URL, { method: "GET", credentials: "include" }),
         fetch(IN_PERSON_TOURNAMENTS_URL, { method: "GET", credentials: "include" }),
         fetch(STREAMERS_URL, { method: "GET", credentials: "include" }),
+        fetch(FANTASY_LEAGUES_URL, { method: "GET", credentials: "include" }),
       ]);
       if (meRes.ok) {
         const meData = await meRes.json().catch(() => ({}));
@@ -588,6 +599,10 @@
       if (inPersonTournamentsRes.ok) {
         const data = await inPersonTournamentsRes.json().catch(() => ({}));
         inPersonTournaments = Array.isArray(data?.tournaments) ? data.tournaments : [];
+      }
+      if (fantasyRes.ok) {
+        const data = await fantasyRes.json().catch(() => ({}));
+        hasFantasyLeagues = Array.isArray(data?.leagues) && data.leagues.length > 0;
       }
       if (streamersRes.ok) {
         const streamersData = await streamersRes.json().catch(() => ({}));
@@ -644,6 +659,10 @@
         }
         if (item.view === "nationals") {
           return isAdminUser;
+        }
+        // Fantasy league admins need no linked BGA profile.
+        if (item.view === "fantasy") {
+          return hasFantasyLeagues;
         }
         if (!hasLinkedBgaId) return false;
         if (isAdminUser) return true;

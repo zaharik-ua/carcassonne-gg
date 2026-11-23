@@ -11,6 +11,7 @@
     "migrate:tournament-classification": "node src/migrate-tournament-classification.js",
     "cleanup:tournament-classification": "node src/cleanup-tournament-classification.js",
     "import:ccl-slots": "node src/import-ccl-slots.js",
+    "import:fantasy-prices": "node src/import-fantasy-prices.js",
     "test": "node --test src/*.test.js"
   },
   "dependencies": {

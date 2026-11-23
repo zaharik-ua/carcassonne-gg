@@ -772,6 +772,13 @@
     color: #52606d;
   }
 
+  .cp-time-proposal-footer {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 6px 10px;
+  }
+
   .cp-edit-btn {
     border: 1px solid #c8ced8;
     background: #fff;
@@ -10071,10 +10078,17 @@
     return line;
   }
 
-  function createCclProposalPanel(match) {
-    if (!isCclActiveProposal(match)) return null;
+  function cclProposalSides(match) {
     const proposer = match.player_1?.id === match.proposed_time_by_player_id ? match.player_1 : match.player_2;
     const awaiting = proposer === match.player_1 ? match.player_2 : match.player_1;
+    return { proposer, awaiting };
+  }
+
+  // `canAcceptForPlayer`: a global admin may accept the time for the awaiting player
+  // (e.g. that player cannot create an account on the site).
+  function createCclProposalPanel(match, { canAcceptForPlayer = false } = {}) {
+    if (!isCclActiveProposal(match)) return null;
+    const { proposer, awaiting } = cclProposalSides(match);
     const panel = document.createElement("div");
     panel.className = "cp-time-proposal-panel";
     panel.classList.toggle("is-incoming", !!match.my_side && awaiting?.id === (match.my_side === 1 ? match.player_1 : match.player_2)?.id);
@@ -10083,8 +10097,50 @@
     )}${esc(cclPlayerName(proposer))}</div>
       <div>${esc(formatProposalTimeUtc(match.proposed_time_utc))}</div>
       ${cclLocalTimeHtml(match, match.proposed_time_utc)}
-      <div class="cp-time-proposal-meta">Waiting for ${esc(cclPlayerName(awaiting))}</div>`;
+      <div class="cp-time-proposal-footer">
+        <span class="cp-time-proposal-meta">Waiting for ${esc(cclPlayerName(awaiting))}</span>
+      </div>`;
+    if (canAcceptForPlayer) {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "cp-edit-btn";
+      button.textContent = `Accept for ${cclPlayerName(awaiting)}`;
+      button.addEventListener("click", () => openCclAdminAcceptTimeModal(match));
+      panel.querySelector(".cp-time-proposal-footer").appendChild(button);
+    }
     return panel;
+  }
+
+  // Global admin: accepts the pending proposal on behalf of the player it waits for.
+  function openCclAdminAcceptTimeModal(match) {
+    const { proposer, awaiting } = cclProposalSides(match);
+    const ui = createCclModal("Accept match time for a player");
+    ui.fields.appendChild(createCclMatchTitle(match));
+    if (hasValue(match.time_utc)) {
+      const current = document.createElement("div");
+      current.className = "cp-time-modal-current";
+      current.textContent = `Current match time: ${formatProposalTimeUtc(match.time_utc)}`;
+      ui.fields.appendChild(current);
+    }
+    const proposed = document.createElement("div");
+    proposed.className = "cp-time-proposal-panel is-incoming cp-ccl-proposal-in-modal";
+    proposed.innerHTML = `<div class="cp-time-proposal-title">${esc(cclPlayerName(proposer))} proposes</div>
+      <div>${esc(formatProposalTimeUtc(match.proposed_time_utc))}</div>
+      ${cclLocalTimeHtml(match, match.proposed_time_utc)}`;
+    ui.fields.appendChild(proposed);
+    const note = document.createElement("div");
+    note.className = "cp-time-modal-current";
+    note.textContent = `You accept this time on behalf of ${cclPlayerName(awaiting)}. It becomes the match time.`;
+    ui.fields.appendChild(note);
+    ui.addButton("Cancel", "cp-btn-secondary", ui.close);
+    ui.addButton(`Accept for ${cclPlayerName(awaiting)}`, "cp-btn-primary", () => ui.submit(() => (
+      cclRequest(`${CCL_MATCH_URL(match.id)}/time-proposal/accept`, "PATCH", {
+        as_admin: true,
+        expected_proposed_time_utc: match.proposed_time_utc || null,
+        expected_proposed_time_by_player_id: match.proposed_time_by_player_id || null,
+        expected_proposed_time_status: match.proposed_time_status || null,
+      })
+    )));
   }
 
   // ---- CCL cases: a player reports a problem with a match (auth-server/src/ccl-cases.js) ----
@@ -10680,7 +10736,9 @@
 
     row.append(time, divider, players, actions);
     wrap.appendChild(row);
-    const proposal = createCclProposalPanel(match);
+    const proposal = createCclProposalPanel(match, {
+      canAcceptForPlayer: !!options.manage && data.can_accept_time_for_players === true && isPlanned,
+    });
     if (proposal) wrap.appendChild(proposal);
     return wrap;
   }

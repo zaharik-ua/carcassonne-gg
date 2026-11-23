@@ -1,0 +1,1065 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Fantasy CCL 2027 — Roster Builder v8</title>
+  <style>
+    :root {
+      --bg: #f4f6f9;
+      --card: #ffffff;
+      --ink: #16202a;
+      --muted: #5b6b7c;
+      --line: #dce3ec;
+      --accent: #1d4ed8;
+      --ok-bg: #ecfdf5;
+      --ok-ink: #065f46;
+      --warn-bg: #fffbeb;
+      --warn-ink: #92400e;
+      --bad-bg: #fef2f2;
+      --bad-ink: #991b1b;
+    }
+
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--ink);
+      line-height: 1.45;
+    }
+
+    header {
+      background: #0f172a;
+      color: #fff;
+      padding: 18px 24px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 16px;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    header h1 { margin: 0; font-size: 1.25rem; }
+    header p { margin: 4px 0 0; color: #cbd5e1; font-size: 0.9rem; }
+
+    .countdown-box {
+      background: #1e293b;
+      border: 1px solid #334155;
+      border-radius: 8px;
+      padding: 10px 14px;
+      min-width: 240px;
+    }
+
+    .countdown-label {
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      color: #94a3b8;
+    }
+
+    .countdown-clock {
+      font-size: 1.05rem;
+      font-weight: 700;
+      font-variant-numeric: tabular-nums;
+      color: #f8fafc;
+      margin-top: 2px;
+    }
+
+    .auth-banner {
+      max-width: 1280px;
+      margin: 16px auto 0;
+      padding: 12px 16px;
+      border-radius: 10px;
+      border: 1px solid var(--line);
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 0.9rem;
+    }
+
+    .auth-banner.logged-in { background: var(--ok-bg); color: var(--ok-ink); border-color: #a7f3d0; }
+    .auth-banner.logged-out { background: var(--bad-bg); color: var(--bad-ink); border-color: #fecaca; }
+
+    .dev-auth-controls {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: center;
+      font-size: 0.8rem;
+    }
+
+    .dev-auth-controls input {
+      padding: 5px 8px;
+      border-radius: 6px;
+      border: 1px solid #cbd5e1;
+      background: #fff;
+      color: var(--ink);
+    }
+
+    main {
+      max-width: 1280px;
+      margin: 16px auto 40px;
+      padding: 0 16px;
+      display: grid;
+      gap: 20px;
+    }
+
+    .identity-bar {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+      gap: 12px;
+      align-items: end;
+    }
+
+    .field label {
+      display: block;
+      font-size: 0.82rem;
+      font-weight: 600;
+      color: var(--muted);
+      margin-bottom: 4px;
+    }
+
+    .field input, .field select {
+      width: 100%;
+      padding: 8px 10px;
+      border-radius: 6px;
+      border: 1px solid var(--line);
+      font-size: 0.88rem;
+      background: #fff;
+    }
+
+    .division-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
+      gap: 20px;
+    }
+
+    .panel {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      padding: 16px;
+      box-shadow: 0 1px 2px rgba(0,0,0,0.04);
+    }
+
+    .panel-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 12px;
+    }
+
+    .panel-header h2 { margin: 0; font-size: 1.05rem; }
+
+    .badge {
+      padding: 3px 9px;
+      border-radius: 999px;
+      font-size: 0.78rem;
+      font-weight: 700;
+    }
+
+    .badge.valid { background: var(--ok-bg); color: var(--ok-ink); }
+    .badge.warn { background: var(--warn-bg); color: var(--warn-ink); }
+    .badge.invalid { background: var(--bad-bg); color: var(--bad-ink); }
+
+    .metrics {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 8px;
+      background: #f8fafc;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 10px;
+      margin-bottom: 12px;
+      font-size: 0.82rem;
+    }
+
+    .metrics strong { display: block; font-size: 0.98rem; font-variant-numeric: tabular-nums; }
+
+    .slot-row {
+      display: grid;
+      grid-template-columns: 28px 1fr 78px 34px;
+      gap: 8px;
+      align-items: center;
+      margin-bottom: 8px;
+    }
+
+    .slot-row select {
+      width: 100%;
+      padding: 6px 8px;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: #fff;
+      font-size: 0.86rem;
+    }
+
+    .price-pill {
+      text-align: right;
+      font-weight: 700;
+      font-variant-numeric: tabular-nums;
+      font-size: 0.88rem;
+    }
+
+    .filter-bar {
+      display: grid;
+      grid-template-columns: 1fr 150px 165px;
+      gap: 8px;
+      margin-bottom: 10px;
+    }
+
+    .filter-bar input, .filter-bar select {
+      padding: 6px 8px;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      font-size: 0.84rem;
+      background: #fff;
+    }
+
+    .pool-table-wrap {
+      max-height: 300px;
+      overflow-y: auto;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fff;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.83rem;
+    }
+
+    th, td {
+      padding: 7px 8px;
+      border-bottom: 1px solid #eef2f6;
+      text-align: left;
+      vertical-align: middle;
+    }
+
+    th {
+      position: sticky;
+      top: 0;
+      background: #f8fafc;
+      font-weight: 700;
+      color: var(--muted);
+      z-index: 1;
+    }
+
+    .num { text-align: right; font-variant-numeric: tabular-nums; }
+
+    button {
+      cursor: pointer;
+      border: 1px solid transparent;
+      border-radius: 6px;
+      padding: 7px 14px;
+      font-weight: 600;
+      background: var(--accent);
+      color: #fff;
+      font-size: 0.84rem;
+    }
+
+    button:disabled { opacity: 0.5; cursor: not-allowed; }
+    button.secondary { background: #e2e8f0; color: #0f172a; }
+    button.danger { background: #fee2e2; color: #991b1b; }
+    button.selected-btn { background: #065f46; color: #fff; }
+
+    .clear-btn {
+      padding: 4px 8px;
+      background: #f1f5f9;
+      color: #334155;
+      border: 1px solid var(--line);
+    }
+
+    .snapshot-box {
+      margin-top: 10px;
+      padding: 10px;
+      border-radius: 8px;
+      background: #f8fafc;
+      border: 1px dashed #cbd5e1;
+      font-size: 0.8rem;
+      color: var(--muted);
+    }
+
+    .action-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-top: 12px;
+      align-items: center;
+    }
+
+    .sync-status {
+      font-size: 0.82rem;
+      color: var(--muted);
+    }
+
+    .note { font-size: 0.84rem; color: var(--muted); margin-top: 8px; }
+    .sub-heading { font-size: 0.9rem; font-weight: 700; margin: 14px 0 6px; color: var(--ink); }
+  </style>
+</head>
+<body>
+  <header>
+    <div>
+      <h1>Fantasy CCL 2027 — Roster Builder</h1>
+      <p>Firm Lockout: 27/11/2026 at 23:59 · Budget Cap: 50.0 per division</p>
+    </div>
+    <div class="countdown-box">
+      <div class="countdown-label">Time Remaining Until Lockout</div>
+      <div class="countdown-clock" id="countdownClock">Calculating...</div>
+    </div>
+  </header>
+
+  <div id="authBanner" class="auth-banner logged-out">
+    <div id="authStatusText">
+      <strong>Carcassonne.GG Login Required:</strong> Users must be logged into carcassonne.gg to select or save a team.
+    </div>
+    <div class="dev-auth-controls">
+      <span>Prototype Handle Tester:</span>
+      <input id="simGgUserInput" type="text" value="LazyBore" placeholder="Carcassonne.GG handle" />
+      <button id="toggleAuthBtn" class="secondary" type="button">Simulate Login</button>
+    </div>
+  </div>
+
+  <main>
+    <section class="panel">
+      <div class="identity-bar">
+        <div class="field">
+          <label for="teamNameInput">Team Name (Required)</label>
+          <input id="teamNameInput" type="text" placeholder="Enter your team name" />
+        </div>
+        <div class="field">
+          <label>Carcassonne.GG Player Handle</label>
+          <input id="ggAccountDisplay" type="text" value="Not signed in" readonly />
+        </div>
+      </div>
+      <p class="note" id="gameConfigSummary"></p>
+    </section>
+
+    <div class="division-grid">
+      <!-- QUALIFYING DIVISION -->
+      <section class="panel" id="qualPanel">
+        <div class="panel-header">
+          <h2>Qualifying Draw Roster (Q1–Q3)</h2>
+          <span id="qualBadge" class="badge invalid">INCOMPLETE</span>
+        </div>
+        <div class="metrics">
+          <div><span>Slots</span><strong id="qualSlots">0 / 5</strong></div>
+          <div><span>Cost</span><strong id="qualCost">0.0 / 50.0</strong></div>
+          <div><span>Remaining</span><strong id="qualRem">50.0</strong></div>
+          <div><span>Current Pts</span><strong id="qualPts">0</strong></div>
+        </div>
+        <div id="qualSlotsContainer"></div>
+
+        <div class="sub-heading">Browse & Select Qualifying Contestants</div>
+        <div class="filter-bar">
+          <input id="qualSearch" type="text" placeholder="Search player or group..." />
+          <select id="qualCountryFilter"><option value="">All Nationalities</option></select>
+          <select id="qualSort">
+            <option value="price-desc" selected>Sort: Price (High → Low)</option>
+            <option value="price-asc">Sort: Price (Low → High)</option>
+            <option value="points-desc">Sort: Points (High → Low)</option>
+            <option value="points-asc">Sort: Points (Low → High)</option>
+            <option value="country-asc">Sort: Nationality (A–Z)</option>
+          </select>
+        </div>
+        <div class="pool-table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Player</th>
+                <th>Nationality</th>
+                <th class="num">Pts</th>
+                <th class="num">Price</th>
+                <th class="num">Action</th>
+              </tr>
+            </thead>
+            <tbody id="qualPoolBody"></tbody>
+          </table>
+        </div>
+
+        <div class="snapshot-box" id="qualSnapshot">Last valid team: None saved yet</div>
+      </section>
+
+      <!-- MAIN DRAW DIVISION -->
+      <section class="panel" id="mainPanel">
+        <div class="panel-header">
+          <h2>Main Draw Roster</h2>
+          <span id="mainBadge" class="badge invalid">INCOMPLETE</span>
+        </div>
+        <div class="metrics">
+          <div><span>Slots</span><strong id="mainSlots">0 / 5</strong></div>
+          <div><span>Cost</span><strong id="mainCost">0.0 / 50.0</strong></div>
+          <div><span>Remaining</span><strong id="mainRem">50.0</strong></div>
+          <div><span>Current Pts</span><strong id="mainPts">0</strong></div>
+        </div>
+        <div id="mainSlotsContainer"></div>
+
+        <div class="sub-heading">Browse & Select Main Draw Contestants</div>
+        <div class="filter-bar">
+          <input id="mainSearch" type="text" placeholder="Search player or country..." />
+          <select id="mainCountryFilter"><option value="">All Nationalities</option></select>
+          <select id="mainSort">
+            <option value="price-desc" selected>Sort: Price (High → Low)</option>
+            <option value="price-asc">Sort: Price (Low → High)</option>
+            <option value="points-desc">Sort: Points (High → Low)</option>
+            <option value="points-asc">Sort: Points (Low → High)</option>
+            <option value="country-asc">Sort: Nationality (A–Z)</option>
+          </select>
+        </div>
+        <div class="pool-table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Player</th>
+                <th>Nationality</th>
+                <th class="num">Pts</th>
+                <th class="num">Price</th>
+                <th class="num">Action</th>
+              </tr>
+            </thead>
+            <tbody id="mainPoolBody"></tbody>
+          </table>
+        </div>
+
+        <div class="snapshot-box" id="mainSnapshot">Last valid team: None saved yet</div>
+      </section>
+    </div>
+
+    <section class="panel">
+      <h2>Save Team</h2>
+      <p class="note">
+        Drafts can be saved even if incomplete or over budget. Any valid submission updates your Last Valid Team automatically, which is used at 27/11/2026 23:59 if your draft is invalid.
+      </p>
+      <div class="action-row">
+        <button id="saveTeamBtn" type="button">Save Team</button>
+        <button id="resetAllBtn" class="danger" type="button">Reset Saved Team</button>
+        <span id="syncStatus" class="sync-status"></span>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    const APPS_SCRIPT_WEB_APP_URL = "https://script.google.com/macros/s/AKfycbxfr8GZK2NHB3ILY2_F2Ji_8Mns-xjBhMS63Yjh5T-of4LSaELV52WDWXTVm_N2YdbV/exec";
+
+    const GAME_CONFIG = Object.freeze({
+      budgetCap: 50.0,
+      qualSlots: 5,
+      mainSlots: 5,
+      deadlineIso: "2026-11-27T23:59:00Z"
+    });
+
+    const STORAGE_KEY = "fantasy_ccl_2027_game_v8";
+
+    const ALL_CONTESTANTS = [
+      { id: 0, player: "Argentina main draw contestant 1", country: "Argentina", stage: "Main", elo: 1600, seeded: null, qualifyingGroup: null, price: 10.0, currentPoints: 0 },
+      { id: 1, player: "webbi", country: "Argentina", stage: "Q1", elo: 1581, seeded: true, qualifyingGroup: "B", price: 10.0, currentPoints: 0 },
+      { id: 2, player: "bignacho610", country: "Argentina", stage: "Q3", elo: 1575, seeded: false, qualifyingGroup: "Z", price: 4.0, currentPoints: 1 },
+      { id: 3, player: "JnNzr", country: "Argentina", stage: "Q3", elo: 1513, seeded: false, qualifyingGroup: "Y", price: 3.5, currentPoints: 1 },
+      { id: 4, player: "King_Deded4d5", country: "Australia", stage: "Main", elo: 1604, seeded: null, qualifyingGroup: null, price: 10.0, currentPoints: 0 },
+      { id: 5, player: "robw335", country: "Australia", stage: "Q1", elo: 1455, seeded: false, qualifyingGroup: "A", price: 4.5, currentPoints: 0 },
+      { id: 6, player: "Megot Noskill", country: "Australia", stage: "Q3", elo: 1537, seeded: false, qualifyingGroup: "Y", price: 3.5, currentPoints: 0 },
+      { id: 7, player: "el___duderino", country: "Austria", stage: "Q2", elo: 1489, seeded: true, qualifyingGroup: "I", price: 8.0, currentPoints: 0 },
+      { id: 8, player: "Gladki_Alex", country: "Belarus", stage: "Q2", elo: 1553, seeded: true, qualifyingGroup: "I", price: 10.0, currentPoints: 0 },
+      { id: 9, player: "Korshuk Dima", country: "Belarus", stage: "Q2", elo: 1503, seeded: true, qualifyingGroup: "F", price: 8.5, currentPoints: 0 },
+      { id: 10, player: "detraid", country: "Belarus", stage: "Q3", elo: 1535, seeded: false, qualifyingGroup: "Z", price: 3.5, currentPoints: 0 },
+      { id: 11, player: "CraftyRaf", country: "Belgium", stage: "Main", elo: 1704, seeded: null, qualifyingGroup: null, price: 16.5, currentPoints: 0 },
+      { id: 12, player: "mobidic", country: "Belgium", stage: "Q1", elo: 1500, seeded: false, qualifyingGroup: "A", price: 5.5, currentPoints: 0 },
+      { id: 13, player: "alcidesjr", country: "Brazil", stage: "Main", elo: 1300, seeded: null, qualifyingGroup: null, price: 3.0, currentPoints: 0 },
+      { id: 14, player: "Zedson", country: "Brazil", stage: "Q1", elo: 1657, seeded: true, qualifyingGroup: "A", price: 13.0, currentPoints: 0 },
+      { id: 15, player: "KR_ Knight_ Realm", country: "Brazil", stage: "Q3", elo: 1588, seeded: true, qualifyingGroup: "Y", price: 7.0, currentPoints: 2 },
+      { id: 16, player: "little arms", country: "Canada", stage: "Q2", elo: 1300, seeded: false, qualifyingGroup: "H", price: 3.0, currentPoints: 0 },
+      { id: 17, player: "Pronom feble", country: "Catalonia", stage: "Main", elo: 1604, seeded: null, qualifyingGroup: null, price: 10.0, currentPoints: 0 },
+      { id: 18, player: "defdean", country: "Catalonia", stage: "Q1", elo: 1594, seeded: true, qualifyingGroup: "C", price: 10.5, currentPoints: 0 },
+      { id: 19, player: "Townsend17", country: "Chile", stage: "Main", elo: 1524, seeded: null, qualifyingGroup: null, price: 6.5, currentPoints: 0 },
+      { id: 20, player: "Vainiria", country: "Chile", stage: "Q1", elo: 1628, seeded: true, qualifyingGroup: "A", price: 11.5, currentPoints: 0 },
+      { id: 21, player: "Claudio Jorquera", country: "Chile", stage: "Q3", elo: 1637, seeded: true, qualifyingGroup: "X", price: 5.5, currentPoints: 1 },
+      { id: 22, player: "China main draw contestant 1", country: "China", stage: "Main", elo: 1700, seeded: null, qualifyingGroup: null, price: 16.5, currentPoints: 0 },
+      { id: 23, player: "China main draw contestant 2", country: "China", stage: "Main", elo: 1650, seeded: null, qualifyingGroup: null, price: 13.0, currentPoints: 0 },
+      { id: 24, player: "qazxswedc", country: "China", stage: "Q1", elo: 1718, seeded: true, qualifyingGroup: "B", price: 16.0, currentPoints: 0 },
+      { id: 25, player: "203club", country: "China", stage: "Q3", elo: 1735, seeded: true, qualifyingGroup: "Y", price: 12.5, currentPoints: 3 },
+      { id: 26, player: "hullqin-dongya", country: "China", stage: "Q3", elo: 1506, seeded: false, qualifyingGroup: "X", price: 5.0, currentPoints: 2 },
+      { id: 27, player: "Ext4ur", country: "Colombia", stage: "Q1", elo: 1548, seeded: true, qualifyingGroup: "B", price: 8.5, currentPoints: 0 },
+      { id: 28, player: "dremkad", country: "Colombia", stage: "Q3", elo: 1612, seeded: true, qualifyingGroup: "Z", price: 7.5, currentPoints: 3 },
+      { id: 29, player: "Bluste", country: "Croatia", stage: "Main", elo: 1627, seeded: null, qualifyingGroup: null, price: 11.5, currentPoints: 0 },
+      { id: 30, player: "amasiuncula", country: "Croatia", stage: "Q1", elo: 1503, seeded: false, qualifyingGroup: "C", price: 5.5, currentPoints: 0 },
+      { id: 31, player: "yuto171", country: "Croatia", stage: "Q1", elo: 1506, seeded: false, qualifyingGroup: "D", price: 5.5, currentPoints: 0 },
+      { id: 32, player: "BuHa44", country: "Croatia", stage: "Q3", elo: 1575, seeded: false, qualifyingGroup: "X", price: 4.0, currentPoints: 1 },
+      { id: 33, player: "posij118", country: "Czech Republic", stage: "Main", elo: 1696, seeded: null, qualifyingGroup: null, price: 16.0, currentPoints: 0 },
+      { id: 34, player: "bormar", country: "Czech Republic", stage: "Q1", elo: 1425, seeded: false, qualifyingGroup: "B", price: 4.0, currentPoints: 0 },
+      { id: 35, player: "martypartyouje", country: "Czech Republic", stage: "Q1", elo: 1672, seeded: true, qualifyingGroup: "D", price: 13.5, currentPoints: 0 },
+      { id: 36, player: "Hubert1234", country: "Denmark", stage: "Q2", elo: 1507, seeded: true, qualifyingGroup: "F", price: 8.5, currentPoints: 0 },
+      { id: 37, player: "Jotan", country: "Ecuador", stage: "Q2", elo: 1450, seeded: false, qualifyingGroup: "H", price: 5.0, currentPoints: 0 },
+      { id: 38, player: "JuankyEND", country: "Ecuador", stage: "Q2", elo: 1478, seeded: false, qualifyingGroup: "G", price: 6.0, currentPoints: 0 },
+      { id: 39, player: "Larpaattori", country: "Finland", stage: "Main", elo: 1688, seeded: null, qualifyingGroup: null, price: 15.5, currentPoints: 0 },
+      { id: 40, player: "Nallerheim", country: "Finland", stage: "Main", elo: 1695, seeded: null, qualifyingGroup: null, price: 16.0, currentPoints: 0 },
+      { id: 41, player: "Haikala", country: "Finland", stage: "Q1", elo: 1493, seeded: false, qualifyingGroup: "E", price: 5.5, currentPoints: 0 },
+      { id: 42, player: "viv-", country: "France", stage: "Main", elo: 1629, seeded: null, qualifyingGroup: null, price: 11.5, currentPoints: 0 },
+      { id: 43, player: "Blitz", country: "France", stage: "Q1", elo: 1500, seeded: false, qualifyingGroup: "B", price: 5.5, currentPoints: 0 },
+      { id: 44, player: "Boulym", country: "France", stage: "Q1", elo: 1475, seeded: false, qualifyingGroup: "C", price: 5.0, currentPoints: 0 },
+      { id: 45, player: "Karaboudjan", country: "Germany", stage: "Main", elo: 1508, seeded: null, qualifyingGroup: null, price: 6.0, currentPoints: 0 },
+      { id: 46, player: "Mermadin", country: "Germany", stage: "Q1", elo: 1451, seeded: false, qualifyingGroup: "B", price: 4.5, currentPoints: 0 },
+      { id: 47, player: "yzemaze", country: "Germany", stage: "Q1", elo: 1548, seeded: false, qualifyingGroup: "A", price: 6.5, currentPoints: 0 },
+      { id: 48, player: "HappyTim7", country: "Germany", stage: "Q3", elo: 1562, seeded: false, qualifyingGroup: "Y", price: 6.0, currentPoints: 2 },
+      { id: 49, player: "dark_passenger84", country: "Greece", stage: "Main", elo: 1613, seeded: null, qualifyingGroup: null, price: 10.5, currentPoints: 0 },
+      { id: 50, player: "Ste-fa-na-kis", country: "Greece", stage: "Q1", elo: 1557, seeded: true, qualifyingGroup: "D", price: 9.0, currentPoints: 0 },
+      { id: 51, player: "Chini_GT", country: "Guatemala", stage: "Q2", elo: 1407, seeded: false, qualifyingGroup: "F", price: 4.5, currentPoints: 0 },
+      { id: 52, player: "Leykos", country: "Guatemala", stage: "Q2", elo: 1395, seeded: false, qualifyingGroup: "I", price: 4.0, currentPoints: 0 },
+      { id: 53, player: "CTCTCTCTCT", country: "Hong Kong", stage: "Main", elo: 1537, seeded: null, qualifyingGroup: null, price: 7.0, currentPoints: 0 },
+      { id: 54, player: "Littlesmallsmall", country: "Hong Kong", stage: "Q1", elo: 1586, seeded: true, qualifyingGroup: "E", price: 10.0, currentPoints: 0 },
+      { id: 55, player: "ernie012", country: "Hong Kong", stage: "Q3", elo: 1573, seeded: false, qualifyingGroup: "X", price: 4.0, currentPoints: 0 },
+      { id: 56, player: "ET_08", country: "Hong Kong", stage: "Q3", elo: 1580, seeded: false, qualifyingGroup: "Z", price: 4.5, currentPoints: 0 },
+      { id: 57, player: "vizecske", country: "Hungary", stage: "Main", elo: 1493, seeded: null, qualifyingGroup: null, price: 5.5, currentPoints: 0 },
+      { id: 58, player: "coralos", country: "Hungary", stage: "Q1", elo: 1439, seeded: false, qualifyingGroup: "E", price: 4.5, currentPoints: 0 },
+      { id: 59, player: "bobondi", country: "Iceland", stage: "Q2", elo: 1380, seeded: false, qualifyingGroup: "F", price: 4.0, currentPoints: 0 },
+      { id: 60, player: "harshad", country: "India", stage: "Q2", elo: 1300, seeded: false, qualifyingGroup: "G", price: 3.0, currentPoints: 0 },
+      { id: 61, player: "RDaeln", country: "Indonesia", stage: "Q2", elo: 1464, seeded: false, qualifyingGroup: "I", price: 5.5, currentPoints: 0 },
+      { id: 62, player: "RoeyCh", country: "Israel", stage: "Q2", elo: 1495, seeded: true, qualifyingGroup: "F", price: 8.0, currentPoints: 0 },
+      { id: 63, player: "barry10", country: "Italy", stage: "Main", elo: 1614, seeded: null, qualifyingGroup: null, price: 10.5, currentPoints: 0 },
+      { id: 64, player: "Angostur4", country: "Italy", stage: "Q1", elo: 1474, seeded: false, qualifyingGroup: "A", price: 5.0, currentPoints: 0 },
+      { id: 65, player: "Japan main draw contestant 1", country: "Japan", stage: "Main", elo: 1700, seeded: null, qualifyingGroup: null, price: 16.5, currentPoints: 0 },
+      { id: 66, player: "Japan main draw contestant 2", country: "Japan", stage: "Main", elo: 1650, seeded: null, qualifyingGroup: null, price: 13.0, currentPoints: 0 },
+      { id: 67, player: "marusingfire", country: "Japan", stage: "Q1", elo: 1508, seeded: false, qualifyingGroup: "E", price: 5.5, currentPoints: 0 },
+      { id: 68, player: "f kenta", country: "Japan", stage: "Q3", elo: 1676, seeded: true, qualifyingGroup: "Y", price: 10.0, currentPoints: 3 },
+      { id: 69, player: "Kithara", country: "Japan", stage: "Q3", elo: 1697, seeded: true, qualifyingGroup: "Z", price: 10.5, currentPoints: 3 },
+      { id: 70, player: "tovov", country: "Kazakhstan", stage: "Q2", elo: 1492, seeded: true, qualifyingGroup: "G", price: 8.0, currentPoints: 0 },
+      { id: 71, player: "Norberts96", country: "Latvia", stage: "Main", elo: 1475, seeded: null, qualifyingGroup: null, price: 5.0, currentPoints: 0 },
+      { id: 72, player: "Robias", country: "Latvia", stage: "Q1", elo: 1522, seeded: false, qualifyingGroup: "C", price: 6.0, currentPoints: 0 },
+      { id: 73, player: "Alexey_LV", country: "Latvia", stage: "Q3", elo: 1755, seeded: true, qualifyingGroup: "X", price: 13.5, currentPoints: 3 },
+      { id: 74, player: "kreukle", country: "Lithuania", stage: "Main", elo: 1349, seeded: null, qualifyingGroup: null, price: 3.0, currentPoints: 0 },
+      { id: 75, player: "Xocas", country: "Lithuania", stage: "Q1", elo: 1499, seeded: false, qualifyingGroup: "B", price: 5.5, currentPoints: 0 },
+      { id: 76, player: "JXIV", country: "Malaysia", stage: "Q2", elo: 1387, seeded: false, qualifyingGroup: "G", price: 4.0, currentPoints: 0 },
+      { id: 77, player: "Logan Ghanesh", country: "Malaysia", stage: "Q2", elo: 1404, seeded: false, qualifyingGroup: "I", price: 4.5, currentPoints: 0 },
+      { id: 78, player: "IMD5", country: "Mexico", stage: "Main", elo: 1565, seeded: null, qualifyingGroup: null, price: 8.5, currentPoints: 0 },
+      { id: 79, player: "vapula27", country: "Mexico", stage: "Q1", elo: 1375, seeded: false, qualifyingGroup: "D", price: 3.5, currentPoints: 0 },
+      { id: 80, player: "Rodaz", country: "Moldova", stage: "Q2", elo: 1481, seeded: true, qualifyingGroup: "H", price: 7.5, currentPoints: 0 },
+      { id: 81, player: "JohnNoordwijk", country: "Netherlands", stage: "Q2", elo: 1465, seeded: false, qualifyingGroup: "F", price: 5.5, currentPoints: 0 },
+      { id: 82, player: "Loose-Goose", country: "Netherlands", stage: "Q2", elo: 1509, seeded: true, qualifyingGroup: "H", price: 8.5, currentPoints: 0 },
+      { id: 83, player: "hognej", country: "Norway", stage: "Q2", elo: 1505, seeded: true, qualifyingGroup: "F", price: 8.5, currentPoints: 0 },
+      { id: 84, player: "Mr Savastano", country: "Norway", stage: "Q2", elo: 1431, seeded: false, qualifyingGroup: "H", price: 5.0, currentPoints: 0 },
+      { id: 85, player: "-Nari-", country: "Peru", stage: "Q2", elo: 1507, seeded: true, qualifyingGroup: "I", price: 8.5, currentPoints: 0 },
+      { id: 86, player: "spakune", country: "Peru", stage: "Q2", elo: 1416, seeded: false, qualifyingGroup: "H", price: 4.5, currentPoints: 0 },
+      { id: 87, player: "mtuu", country: "Poland", stage: "Main", elo: 1721, seeded: null, qualifyingGroup: null, price: 18.0, currentPoints: 0 },
+      { id: 88, player: "DejmiaN97", country: "Poland", stage: "Q1", elo: 1504, seeded: false, qualifyingGroup: "D", price: 5.5, currentPoints: 0 },
+      { id: 89, player: "UY_Scuti", country: "Poland", stage: "Q1", elo: 1765, seeded: true, qualifyingGroup: "B", price: 18.5, currentPoints: 0 },
+      { id: 90, player: "Krzysztof285", country: "Poland", stage: "Q3", elo: 1633, seeded: true, qualifyingGroup: "Z", price: 8.0, currentPoints: 3 },
+      { id: 91, player: "pricci", country: "Poland", stage: "Q3", elo: 1545, seeded: false, qualifyingGroup: "Y", price: 3.5, currentPoints: 0 },
+      { id: 92, player: "Glovir", country: "Portugal", stage: "Main", elo: 1678, seeded: null, qualifyingGroup: null, price: 14.5, currentPoints: 0 },
+      { id: 93, player: "JMargarido", country: "Portugal", stage: "Q1", elo: 1595, seeded: true, qualifyingGroup: "C", price: 10.5, currentPoints: 0 },
+      { id: 94, player: "Sportr", country: "Portugal", stage: "Q1", elo: 1698, seeded: true, qualifyingGroup: "A", price: 15.0, currentPoints: 0 },
+      { id: 95, player: "71st", country: "RCP", stage: "Main", elo: 1623, seeded: null, qualifyingGroup: null, price: 11.0, currentPoints: 0 },
+      { id: 96, player: "Tarakanov28", country: "RCP", stage: "Main", elo: 1618, seeded: null, qualifyingGroup: null, price: 11.0, currentPoints: 0 },
+      { id: 97, player: "Mikhail-rus", country: "RCP", stage: "Q1", elo: 1669, seeded: true, qualifyingGroup: "A", price: 13.5, currentPoints: 0 },
+      { id: 98, player: "DoNotWasteMyTime", country: "RCP", stage: "Q3", elo: 1632, seeded: true, qualifyingGroup: "X", price: 8.0, currentPoints: 3 },
+      { id: 99, player: "Someone_you_know", country: "RCP", stage: "Q3", elo: 1867, seeded: true, qualifyingGroup: "Z", price: 20.0, currentPoints: 3 },
+      { id: 100, player: "Mars15", country: "Romania", stage: "Main", elo: 1599, seeded: null, qualifyingGroup: null, price: 10.0, currentPoints: 0 },
+      { id: 101, player: "g3rappa", country: "Romania", stage: "Q1", elo: 1612, seeded: true, qualifyingGroup: "E", price: 11.0, currentPoints: 0 },
+      { id: 102, player: "game__over", country: "Romania", stage: "Q1", elo: 1596, seeded: true, qualifyingGroup: "C", price: 10.5, currentPoints: 0 },
+      { id: 103, player: "Matej_11", country: "Slovakia", stage: "Q2", elo: 1518, seeded: true, qualifyingGroup: "I", price: 9.0, currentPoints: 0 },
+      { id: 104, player: "ALKOO", country: "Slovenia", stage: "Q2", elo: 1300, seeded: false, qualifyingGroup: "G", price: 3.0, currentPoints: 0 },
+      { id: 105, player: "cherrypapa", country: "South Korea", stage: "Q2", elo: 1556, seeded: true, qualifyingGroup: "H", price: 10.0, currentPoints: 0 },
+      { id: 106, player: "Temrak", country: "Spain", stage: "Main", elo: 1557, seeded: null, qualifyingGroup: null, price: 8.0, currentPoints: 0 },
+      { id: 107, player: "texe1", country: "Spain", stage: "Q1", elo: 1561, seeded: true, qualifyingGroup: "D", price: 9.0, currentPoints: 0 },
+      { id: 108, player: "Helge_H", country: "Sweden", stage: "Q2", elo: 1615, seeded: true, qualifyingGroup: "G", price: 12.5, currentPoints: 0 },
+      { id: 109, player: "Modig fruktsamlare", country: "Sweden", stage: "Q2", elo: 1485, seeded: true, qualifyingGroup: "H", price: 8.0, currentPoints: 0 },
+      { id: 110, player: "turturica", country: "Switzerland", stage: "Q2", elo: 1300, seeded: false, qualifyingGroup: "I", price: 3.0, currentPoints: 0 },
+      { id: 111, player: "penguin-EM", country: "Taiwan", stage: "Main", elo: 1561, seeded: null, qualifyingGroup: null, price: 8.0, currentPoints: 0 },
+      { id: 112, player: "chengfengtsai", country: "Taiwan", stage: "Q1", elo: 1626, seeded: true, qualifyingGroup: "D", price: 11.5, currentPoints: 0 },
+      { id: 113, player: "HotlyHotly", country: "Taiwan", stage: "Q3", elo: 1692, seeded: true, qualifyingGroup: "Y", price: 7.0, currentPoints: 1 },
+      { id: 114, player: "Pakshe", country: "Thailand", stage: "Main", elo: 1590, seeded: null, qualifyingGroup: null, price: 9.5, currentPoints: 0 },
+      { id: 115, player: "Natpeera-ch", country: "Thailand", stage: "Q1", elo: 1536, seeded: false, qualifyingGroup: "C", price: 6.5, currentPoints: 0 },
+      { id: 116, player: "chawin053", country: "Thailand", stage: "Q3", elo: 1550, seeded: false, qualifyingGroup: "X", price: 4.0, currentPoints: 0 },
+      { id: 117, player: "steam4206", country: "Turkey", stage: "Q2", elo: 1504, seeded: true, qualifyingGroup: "G", price: 8.5, currentPoints: 0 },
+      { id: 118, player: "adrear", country: "Ukraine", stage: "Main", elo: 1717, seeded: null, qualifyingGroup: null, price: 17.5, currentPoints: 0 },
+      { id: 119, player: "bazilyuk", country: "Ukraine", stage: "Main", elo: 1562, seeded: null, qualifyingGroup: null, price: 8.0, currentPoints: 0 },
+      { id: 120, player: "nazario77", country: "Ukraine", stage: "Main", elo: 1602, seeded: null, qualifyingGroup: null, price: 10.0, currentPoints: 0 },
+      { id: 121, player: "zaharik", country: "Ukraine", stage: "Main", elo: 1626, seeded: null, qualifyingGroup: null, price: 11.5, currentPoints: 0 },
+      { id: 122, player: "trinidadec", country: "Ukraine", stage: "Q1", elo: 1529, seeded: false, qualifyingGroup: "E", price: 6.0, currentPoints: 0 },
+      { id: 123, player: "Lord Terrycloth", country: "United Kingdom", stage: "Main", elo: 1602, seeded: null, qualifyingGroup: null, price: 10.0, currentPoints: 0 },
+      { id: 124, player: "LazyBore", country: "United Kingdom", stage: "Q1", elo: 1554, seeded: true, qualifyingGroup: "C", price: 9.0, currentPoints: 0 },
+      { id: 125, player: "ted the notty bear", country: "United Kingdom", stage: "Q1", elo: 1560, seeded: true, qualifyingGroup: "E", price: 9.0, currentPoints: 0 },
+      { id: 126, player: "carky", country: "United States", stage: "Main", elo: 1529, seeded: null, qualifyingGroup: null, price: 7.0, currentPoints: 0 },
+      { id: 127, player: "crocodilefundy", country: "United States", stage: "Q1", elo: 1591, seeded: true, qualifyingGroup: "E", price: 10.5, currentPoints: 0 },
+      { id: 128, player: "berna_uy", country: "Uruguay", stage: "Q2", elo: 1411, seeded: false, qualifyingGroup: "G", price: 4.5, currentPoints: 0 },
+      { id: 129, player: "Patablanca-uy", country: "Uruguay", stage: "Q2", elo: 1420, seeded: false, qualifyingGroup: "F", price: 4.5, currentPoints: 0 },
+      { id: 130, player: "BDDL1", country: "Uruguay", stage: "Q3", elo: 1654, seeded: true, qualifyingGroup: "X", price: 9.0, currentPoints: 3 },
+      { id: 131, player: "Lolinho19", country: "Uruguay", stage: "Q3", elo: 1493, seeded: false, qualifyingGroup: "Z", price: 3.0, currentPoints: 0 },
+      { id: 132, player: "portgard", country: "Vietnam", stage: "Main", elo: 1605, seeded: null, qualifyingGroup: null, price: 10.0, currentPoints: 0 },
+      { id: 133, player: "Wolf Ren", country: "Vietnam", stage: "Q1", elo: 1510, seeded: false, qualifyingGroup: "D", price: 6.0, currentPoints: 0 },
+      { id: 134, player: "Colombia main draw contestant 1", country: "Colombia", stage: "Main", elo: 1600, seeded: null, qualifyingGroup: null, price: 7.0, currentPoints: 0 }
+    ];
+
+    const PLAYERS = {
+      qualifiers: ALL_CONTESTANTS.filter(c => c.stage !== "Main"),
+      main: ALL_CONTESTANTS.filter(c => c.stage === "Main")
+    };
+
+    const initialHostHandle = String(
+      window.Carcassonne_gg_handle ?? window.CARCASSONNE_GG_HANDLE ?? ""
+    ).trim();
+
+    let sessionAuth = {
+      loggedIn: Boolean(initialHostHandle),
+      handle: initialHostHandle
+    };
+
+    let state = loadState();
+
+    function defaultState() {
+      return {
+        teamName: "",
+        draft: {
+          qualifiers: Array(GAME_CONFIG.qualSlots).fill(""),
+          main: Array(GAME_CONFIG.mainSlots).fill("")
+        },
+        lastValid: { qualifiers: null, main: null }
+      };
+    }
+
+    function loadState() {
+      try {
+        const raw = localStorage.getItem(STORAGE_KEY);
+        if (!raw) return defaultState();
+        const parsed = JSON.parse(raw);
+        return {
+          ...defaultState(),
+          ...parsed,
+          draft: {
+            qualifiers: Array.from({ length: GAME_CONFIG.qualSlots }, (_, i) => parsed.draft?.qualifiers?.[i] ?? ""),
+            main: Array.from({ length: GAME_CONFIG.mainSlots }, (_, i) => parsed.draft?.main?.[i] ?? "")
+          },
+          lastValid: {
+            qualifiers: parsed.lastValid?.qualifiers || null,
+            main: parsed.lastValid?.main || null
+          }
+        };
+      } catch {
+        return defaultState();
+      }
+    }
+
+    function persistState() {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    }
+
+    function isPastDeadline() {
+      return Date.now() >= new Date(GAME_CONFIG.deadlineIso).getTime();
+    }
+
+    function canPlay() {
+      return sessionAuth.loggedIn && Boolean(sessionAuth.handle.trim()) && !isPastDeadline();
+    }
+
+    function getPlayer(div, id) {
+      if (id === "" || id === null || id === undefined) return null;
+      return PLAYERS[div].find(p => String(p.id) === String(id)) || null;
+    }
+
+    function evaluateDivision(div, ids, slotCount) {
+      const selected = ids.map(id => getPlayer(div, id)).filter(Boolean);
+      const totalCost = Number(selected.reduce((sum, p) => sum + p.price, 0).toFixed(1));
+      const totalPoints = selected.reduce((sum, p) => sum + (p.currentPoints || 0), 0);
+      const cleanIds = ids.filter(id => id !== "" && id !== null && id !== undefined).map(String);
+      const uniqueIds = new Set(cleanIds);
+      const hasDuplicates = uniqueIds.size !== selected.length;
+      const isFull = selected.length === slotCount;
+      const withinBudget = totalCost <= GAME_CONFIG.budgetCap + 1e-9;
+
+      let status = "VALID";
+      let reason = "Valid roster";
+      if (hasDuplicates) {
+        status = "INVALID";
+        reason = "Duplicate player";
+      } else if (!withinBudget) {
+        status = "INVALID";
+        reason = `Over ${GAME_CONFIG.budgetCap.toFixed(1)} budget`;
+      } else if (!isFull) {
+        status = "INCOMPLETE";
+        reason = `${slotCount - selected.length} slot(s) left`;
+      }
+
+      return {
+        ids: [...ids],
+        players: selected.map(p => ({
+          id: p.id,
+          name: p.player,
+          handle: p.player,
+          country: p.country,
+          stage: p.stage,
+          qualifyingGroup: p.qualifyingGroup,
+          price: p.price,
+          currentPoints: p.currentPoints || 0
+        })),
+        count: selected.length,
+        slotCount,
+        totalCost,
+        remaining: Number((GAME_CONFIG.budgetCap - totalCost).toFixed(1)),
+        totalPoints,
+        valid: status === "VALID",
+        status,
+        reason
+      };
+    }
+
+    function syncLastValidSnapshots() {
+      const qEval = evaluateDivision("qualifiers", state.draft.qualifiers, GAME_CONFIG.qualSlots);
+      const mEval = evaluateDivision("main", state.draft.main, GAME_CONFIG.mainSlots);
+
+      if (qEval.valid) {
+        state.lastValid.qualifiers = {
+          ...qEval,
+          teamName: state.teamName.trim(),
+          Carcassonne_gg_handle: sessionAuth.handle.trim(),
+          carcassonneGgUser: sessionAuth.handle.trim(),
+          capturedAt: new Date().toISOString()
+        };
+      }
+      if (mEval.valid) {
+        state.lastValid.main = {
+          ...mEval,
+          teamName: state.teamName.trim(),
+          Carcassonne_gg_handle: sessionAuth.handle.trim(),
+          carcassonneGgUser: sessionAuth.handle.trim(),
+          capturedAt: new Date().toISOString()
+        };
+      }
+      persistState();
+    }
+
+    function buildSubmissionPayload() {
+      const handle = sessionAuth.handle.trim();
+      const qDraft = evaluateDivision("qualifiers", state.draft.qualifiers, GAME_CONFIG.qualSlots);
+      const mDraft = evaluateDivision("main", state.draft.main, GAME_CONFIG.mainSlots);
+      return {
+        Carcassonne_gg_handle: handle,
+        carcassonneGgUser: handle,
+        teamName: state.teamName.trim() || "Untitled Team",
+        exportedAt: new Date().toISOString(),
+        deadline: GAME_CONFIG.deadlineIso,
+        config: GAME_CONFIG,
+        currentDraft: { qualifiers: qDraft, main: mDraft },
+        lastValidSnapshots: state.lastValid,
+        effectiveAtLockout: {
+          qualifiers: qDraft.valid ? qDraft : state.lastValid.qualifiers,
+          main: mDraft.valid ? mDraft : state.lastValid.main
+        }
+      };
+    }
+
+    async function syncPayloadToSheet(payload) {
+      const statusEl = document.getElementById("syncStatus");
+      if (!APPS_SCRIPT_WEB_APP_URL || APPS_SCRIPT_WEB_APP_URL.startsWith("YOUR_")) {
+        statusEl.textContent = "Saved locally (set APPS_SCRIPT_WEB_APP_URL to write to Google Sheet).";
+        return;
+      }
+      statusEl.textContent = "Saving team to Google Sheet...";
+      try {
+        await fetch(APPS_SCRIPT_WEB_APP_URL, {
+          method: "POST",
+          mode: "no-cors",
+          headers: { "Content-Type": "text/plain;charset=utf-8" },
+          body: JSON.stringify(payload)
+        });
+        statusEl.textContent = `Team saved at ${new Date().toLocaleTimeString()}.`;
+      } catch (err) {
+        statusEl.textContent = `Save failed: ${err.message}`;
+      }
+    }
+
+    function togglePlayerInDivision(div, playerId) {
+      if (!canPlay()) return;
+      const list = state.draft[div];
+      const existingIdx = list.findIndex(v => String(v) === String(playerId));
+
+      if (existingIdx !== -1) {
+        list[existingIdx] = "";
+      } else {
+        const emptyIdx = list.findIndex(v => v === "" || v === null || v === undefined);
+        if (emptyIdx !== -1) {
+          list[emptyIdx] = playerId;
+        } else {
+          list[list.length - 1] = playerId;
+        }
+      }
+      syncLastValidSnapshots();
+      renderAll();
+    }
+
+    function populateCountryFilter(div, selectId) {
+      const sel = document.getElementById(selectId);
+      const current = sel.value;
+      const countries = [...new Set(PLAYERS[div].map(p => p.country))].sort((a, b) => a.localeCompare(b));
+      sel.innerHTML = `<option value="">All Nationalities</option>` +
+        countries.map(c => `<option value="${c}">${c}</option>`).join("");
+      if (countries.includes(current)) sel.value = current;
+    }
+
+    function renderPoolTable(div, tbodyId, searchId, countryId, sortId) {
+      const q = document.getElementById(searchId).value.trim().toLowerCase();
+      const country = document.getElementById(countryId).value;
+      const sortBy = document.getElementById(sortId).value;
+      const tbody = document.getElementById(tbodyId);
+      const selectedSet = new Set(state.draft[div].filter(v => v !== "" && v !== null && v !== undefined).map(String));
+
+      const filtered = PLAYERS[div]
+        .filter(p => (
+          !q ||
+          p.player.toLowerCase().includes(q) ||
+          p.country.toLowerCase().includes(q) ||
+          String(p.qualifyingGroup || "").toLowerCase().includes(q) ||
+          String(p.stage || "").toLowerCase().includes(q)
+        ))
+        .filter(p => (!country || p.country === country))
+        .sort((a, b) => {
+          if (sortBy === "price-desc") return b.price - a.price || (b.currentPoints || 0) - (a.currentPoints || 0);
+          if (sortBy === "price-asc") return a.price - b.price || (b.currentPoints || 0) - (a.currentPoints || 0);
+          if (sortBy === "points-desc") return (b.currentPoints || 0) - (a.currentPoints || 0) || b.price - a.price;
+          if (sortBy === "points-asc") return (a.currentPoints || 0) - (b.currentPoints || 0) || a.price - b.price;
+          return a.country.localeCompare(b.country) || a.player.localeCompare(b.player);
+        });
+
+      tbody.innerHTML = "";
+      filtered.forEach(p => {
+        const isSelected = selectedSet.has(String(p.id));
+        const metaTag = p.qualifyingGroup ? ` (${p.stage}·${p.qualifyingGroup})` : "";
+        const tr = document.createElement("tr");
+
+        tr.innerHTML = `
+          <td><strong>${p.player}</strong><span style="color:#5b6b7c;font-size:0.76rem;">${metaTag}</span></td>
+          <td>${p.country}</td>
+          <td class="num">${p.currentPoints ?? 0}</td>
+          <td class="num">${p.price.toFixed(1)}</td>
+          <td class="num"></td>
+        `;
+
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.textContent = isSelected ? "Selected" : "Select";
+        btn.className = isSelected ? "selected-btn" : "secondary";
+        btn.disabled = !canPlay();
+        btn.addEventListener("click", () => togglePlayerInDivision(div, p.id));
+
+        tr.lastElementChild.appendChild(btn);
+        tbody.appendChild(tr);
+      });
+    }
+
+    function renderDivision(div, config) {
+      const container = document.getElementById(config.slotsContainerId);
+      container.innerHTML = "";
+
+      state.draft[div].forEach((selectedId, idx) => {
+        const row = document.createElement("div");
+        row.className = "slot-row";
+
+        const num = document.createElement("span");
+        num.textContent = `#${idx + 1}`;
+
+        const select = document.createElement("select");
+        const blankOpt = document.createElement("option");
+        blankOpt.value = "";
+        blankOpt.textContent = "— Select contestant —";
+        select.appendChild(blankOpt);
+
+        PLAYERS[div].forEach(p => {
+          const opt = document.createElement("option");
+          opt.value = String(p.id);
+          const grp = p.qualifyingGroup ? ` · ${p.stage}-${p.qualifyingGroup}` : "";
+          opt.textContent = `${p.player} · ${p.country}${grp} · ${p.currentPoints ?? 0} pts (${p.price.toFixed(1)})`;
+          if (String(p.id) === String(selectedId)) opt.selected = true;
+          select.appendChild(opt);
+        });
+
+        select.addEventListener("change", () => {
+          if (!canPlay()) return;
+          state.draft[div][idx] = select.value === "" ? "" : Number(select.value);
+          syncLastValidSnapshots();
+          renderAll();
+        });
+
+        const player = getPlayer(div, selectedId);
+        const priceEl = document.createElement("span");
+        priceEl.className = "price-pill";
+        priceEl.textContent = player ? player.price.toFixed(1) : "0.0";
+
+        const clearBtn = document.createElement("button");
+        clearBtn.type = "button";
+        clearBtn.className = "clear-btn";
+        clearBtn.textContent = "×";
+        clearBtn.addEventListener("click", () => {
+          if (!canPlay()) return;
+          state.draft[div][idx] = "";
+          syncLastValidSnapshots();
+          renderAll();
+        });
+
+        row.append(num, select, priceEl, clearBtn);
+        container.appendChild(row);
+      });
+
+      const ev = evaluateDivision(div, state.draft[div], config.slotCount);
+      const badge = document.getElementById(config.badgeId);
+      badge.textContent = `${ev.status} · ${ev.reason}`;
+      badge.className = "badge " + (ev.valid ? "valid" : ev.status === "INCOMPLETE" ? "warn" : "invalid");
+
+      document.getElementById(config.slotsId).textContent = `${ev.count} / ${config.slotCount}`;
+      document.getElementById(config.costId).textContent = `${ev.totalCost.toFixed(1)} / ${GAME_CONFIG.budgetCap.toFixed(1)}`;
+      document.getElementById(config.remId).textContent = ev.remaining.toFixed(1);
+      document.getElementById(config.ptsId).textContent = `${ev.totalPoints}`;
+
+      const snap = state.lastValid[div];
+      const snapEl = document.getElementById(config.snapId);
+      if (snap) {
+        snapEl.innerHTML = `<strong>Last Valid Team (${snap.totalCost.toFixed(1)} cost · ${snap.totalPoints} pts):</strong> ` +
+          snap.players.map(p => `${p.name} [${p.country}, ${p.price.toFixed(1)}]`).join(", ");
+      } else {
+        snapEl.textContent = "Last valid team: None saved yet";
+      }
+
+      renderPoolTable(div, config.poolBodyId, config.searchId, config.countryId, config.sortId);
+    }
+
+    function updateCountdown() {
+      const target = new Date(GAME_CONFIG.deadlineIso).getTime();
+      const diff = target - Date.now();
+      const el = document.getElementById("countdownClock");
+
+      if (diff <= 0) {
+        el.textContent = "00d 00h 00m 00s — LOCKED";
+        applyInteractionLocks();
+        return;
+      }
+
+      const totalSec = Math.floor(diff / 1000);
+      const days = Math.floor(totalSec / 86400);
+      const hours = Math.floor((totalSec % 86400) / 3600);
+      const mins = Math.floor((totalSec % 3600) / 60);
+      const secs = totalSec % 60;
+
+      el.textContent = `${String(days).padStart(2, "0")}d ${String(hours).padStart(2, "0")}h ${String(mins).padStart(2, "0")}m ${String(secs).padStart(2, "0")}s`;
+    }
+
+    function applyInteractionLocks() {
+      const editable = canPlay();
+      document.getElementById("teamNameInput").disabled = !editable;
+      document.getElementById("saveTeamBtn").disabled = !editable;
+      document.querySelectorAll("select, .clear-btn, #qualPoolBody button, #mainPoolBody button").forEach(ctrl => {
+        if (ctrl.id === "qualCountryFilter" || ctrl.id === "qualSort" || ctrl.id === "mainCountryFilter" || ctrl.id === "mainSort") {
+          ctrl.disabled = false;
+        } else {
+          ctrl.disabled = !editable;
+        }
+      });
+    }
+
+    function renderAuthBanner() {
+      const banner = document.getElementById("authBanner");
+      const text = document.getElementById("authStatusText");
+      const accountDisplay = document.getElementById("ggAccountDisplay");
+      const toggleBtn = document.getElementById("toggleAuthBtn");
+
+      if (sessionAuth.loggedIn && sessionAuth.handle.trim()) {
+        banner.className = "auth-banner logged-in";
+        text.innerHTML = `<strong>Carcassonne.GG Account Connected:</strong> Signed in as <strong>${sessionAuth.handle.trim()}</strong>.`;
+        accountDisplay.value = sessionAuth.handle.trim();
+        toggleBtn.textContent = "Simulate Logout";
+      } else {
+        banner.className = "auth-banner logged-out";
+        text.innerHTML = `<strong>Carcassonne.GG Login Required:</strong> Users must be logged into carcassonne.gg to select or save a team.`;
+        accountDisplay.value = "Not signed in";
+        toggleBtn.textContent = "Simulate Login";
+      }
+    }
+
+    function renderAll() {
+      document.getElementById("gameConfigSummary").textContent =
+        `Game Rules: ${GAME_CONFIG.qualSlots} Qualifying slots + ${GAME_CONFIG.mainSlots} Main Draw slots · Budget ${GAME_CONFIG.budgetCap.toFixed(1)} each · Firm Lockout 27/11/2026 23:59.`;
+      document.getElementById("teamNameInput").value = state.teamName || "";
+
+      renderAuthBanner();
+      renderDivision("qualifiers", {
+        slotCount: GAME_CONFIG.qualSlots,
+        slotsContainerId: "qualSlotsContainer",
+        badgeId: "qualBadge",
+        slotsId: "qualSlots",
+        costId: "qualCost",
+        remId: "qualRem",
+        ptsId: "qualPts",
+        snapId: "qualSnapshot",
+        poolBodyId: "qualPoolBody",
+        searchId: "qualSearch",
+        countryId: "qualCountryFilter",
+        sortId: "qualSort"
+      });
+      renderDivision("main", {
+        slotCount: GAME_CONFIG.mainSlots,
+        slotsContainerId: "mainSlotsContainer",
+        badgeId: "mainBadge",
+        slotsId: "mainSlots",
+        costId: "mainCost",
+        remId: "mainRem",
+        ptsId: "mainPts",
+        snapId: "mainSnapshot",
+        poolBodyId: "mainPoolBody",
+        searchId: "mainSearch",
+        countryId: "mainCountryFilter",
+        sortId: "mainSort"
+      });
+      applyInteractionLocks();
+    }
+
+    ["qualSearch", "qualCountryFilter", "qualSort", "mainSearch", "mainCountryFilter", "mainSort"].forEach(id => {
+      document.getElementById(id).addEventListener("input", renderAll);
+      document.getElementById(id).addEventListener("change", renderAll);
+    });
+
+    document.getElementById("toggleAuthBtn").addEventListener("click", () => {
+      const typedHandle = document.getElementById("simGgUserInput").value.trim() || "LazyBore";
+      sessionAuth = sessionAuth.loggedIn
+        ? { loggedIn: false, handle: "" }
+        : { loggedIn: true, handle: typedHandle };
+      renderAll();
+    });
+
+    document.getElementById("simGgUserInput").addEventListener("input", (e) => {
+      if (sessionAuth.loggedIn) {
+        sessionAuth.handle = e.target.value;
+        renderAll();
+      }
+    });
+
+    document.getElementById("teamNameInput").addEventListener("input", (e) => {
+      state.teamName = e.target.value;
+      persistState();
+    });
+
+    document.getElementById("saveTeamBtn").addEventListener("click", async () => {
+      if (!canPlay()) {
+        alert("Please log into Carcassonne.GG before the deadline (27/11/2026 23:59) to save.");
+        return;
+      }
+      syncLastValidSnapshots();
+      renderAll();
+      const payload = buildSubmissionPayload();
+      await syncPayloadToSheet(payload);
+    });
+
+    document.getElementById("resetAllBtn").addEventListener("click", () => {
+      if (!sessionAuth.loggedIn || isPastDeadline()) return;
+      localStorage.removeItem(STORAGE_KEY);
+      state = defaultState();
+      renderAll();
+      document.getElementById("syncStatus").textContent = "Local team reset.";
+    });
+
+    populateCountryFilter("qualifiers", "qualCountryFilter");
+    populateCountryFilter("main", "mainCountryFilter");
+    updateCountdown();
+    setInterval(updateCountdown, 1000);
+    renderAll();
+  </script>
+</body>
+</html>

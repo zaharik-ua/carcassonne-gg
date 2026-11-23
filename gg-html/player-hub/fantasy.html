@@ -1,0 +1,367 @@
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+<!-- Player Hub → Fantasy: leagues the viewer administers (fantasy.js). League admins see teams and the CSV;
+     site admins also change league settings and league admins. -->
+<style>
+  .fl-wrap {
+    --text: #222;
+    --muted: #5b6b7c;
+    --border: #e0e0e0;
+    --primary: #15375c;
+    --bad: #991b1b;
+    --ok: #065f46;
+    display: grid;
+    gap: 12px;
+    margin: 0 8px 12px;
+    font-family: "Montserrat", sans-serif;
+    color: var(--text);
+    font-size: 14px;
+    line-height: 1.45;
+  }
+
+  .fl-wrap * { box-sizing: border-box; }
+  .fl-title { font-size: 20px; font-weight: 700; }
+
+  .fl-card {
+    display: grid;
+    gap: 12px;
+    background: #fff;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 12px;
+  }
+
+  .fl-card-head { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px; align-items: baseline; }
+  .fl-card-title { font-size: 16px; font-weight: 700; }
+  .fl-muted { color: var(--muted); font-size: 12px; }
+  .fl-section-title { font-weight: 700; font-size: 14px; margin-bottom: 6px; }
+  .fl-status { font-size: 12px; font-weight: 700; padding: 2px 8px; border-radius: 999px; background: #e0ebf7; color: var(--primary); }
+
+  .fl-facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 6px 12px; }
+  .fl-facts div span { display: block; font-size: 12px; color: var(--muted); }
+
+  .fl-form { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 8px; align-items: end; }
+  .fl-form label { display: block; font-size: 12px; font-weight: 600; color: var(--muted); margin-bottom: 4px; }
+
+  .fl-input {
+    width: 100%;
+    height: 32px;
+    padding: 0 8px;
+    border: 1px solid #c8ced8;
+    border-radius: 4px;
+    font: inherit;
+    font-size: 13px;
+  }
+
+  .fl-btn {
+    height: 32px;
+    padding: 0 12px;
+    border: 1px solid var(--primary);
+    border-radius: 4px;
+    background: var(--primary);
+    color: #fff;
+    font: inherit;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+
+  .fl-btn.light { background: #fff; color: var(--primary); }
+  .fl-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+  .fl-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  .fl-message { font-size: 13px; }
+  .fl-message.bad { color: var(--bad); }
+  .fl-message.ok { color: var(--ok); }
+
+  .fl-table-wrap { overflow-x: auto; }
+  .fl-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  .fl-table th, .fl-table td { padding: 6px 8px; border-bottom: 1px solid #eef2f6; text-align: left; vertical-align: top; }
+  .fl-table th { color: var(--muted); font-weight: 600; background: #f5f7fa; }
+  .fl-table .num { text-align: right; font-variant-numeric: tabular-nums; }
+</style>
+
+<div class="fl-wrap" id="fantasyLeagues">
+  <div class="fl-title">Fantasy</div>
+  <div class="fl-card">Loading…</div>
+</div>
+
+<script>
+(function () {
+  const AUTH_BASE = window.AUTH_BASE_URL || "https://api.carcassonne.gg";
+  const MANAGED_URL = `${AUTH_BASE}/fantasy/leagues/managed`;
+  const leagueUrl = (id, suffix = "") => `${AUTH_BASE}/fantasy/${encodeURIComponent(id)}${suffix}`;
+  const root = document.getElementById("fantasyLeagues");
+  const STATUS_LABELS = { upcoming: "Not open yet", open: "Open", late: "Late entry", closed: "Closed" };
+  const STATE_LABELS = { complete: "Complete", draft: "Draft", locked: "Locked", committed: "Committed", not_entered: "Not entered" };
+
+  function el(tag, className, textContent) {
+    const node = document.createElement(tag);
+    if (className) node.className = className;
+    if (textContent !== undefined && textContent !== null) node.textContent = textContent;
+    return node;
+  }
+
+  async function request(url, options = {}) {
+    const init = { ...options, credentials: "include" };
+    if (typeof init.body === "string") init.headers = { "Content-Type": "application/json", ...(init.headers || {}) };
+    const response = await fetch(url, init);
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok || result?.ok === false) {
+      const error = new Error(result?.message || `Request failed (${response.status})`);
+      error.status = response.status;
+      throw error;
+    }
+    return result;
+  }
+
+  const formatUtc = (iso) => {
+    const date = new Date(iso);
+    if (Number.isNaN(date.getTime())) return iso || "—";
+    return `${date.toISOString().slice(0, 16).replace("T", " ")} UTC`;
+  };
+
+  function message(node, kind, text) {
+    node.className = `fl-message ${kind}`;
+    node.textContent = text;
+  }
+
+  function renderFacts(league) {
+    const facts = el("div", "fl-facts");
+    [
+      ["Tournament", league.tournament_id],
+      ["Stages", league.stages.join(", ")],
+      ["Team size", league.team_size],
+      ["Budget", league.budget],
+      ["Opens", formatUtc(league.opens_at)],
+      ["Main deadline", formatUtc(league.main_deadline)],
+      ["Late deadline", formatUtc(league.late_deadline)],
+    ].forEach(([label, value]) => {
+      const box = el("div");
+      box.append(el("span", "", label), el("strong", "", String(value)));
+      facts.appendChild(box);
+    });
+    return facts;
+  }
+
+  // Site admins only: name, budget and dates (stages and team size stay as created).
+  function renderSettings(league, onSaved) {
+    const box = el("div");
+    box.appendChild(el("div", "fl-section-title", "Settings"));
+    const form = el("form", "fl-form");
+    const fields = [
+      ["name", "Name", league.name],
+      ["budget", "Budget", String(league.budget)],
+      ["opens_at", "Opens (UTC, ISO)", league.opens_at],
+      ["main_deadline", "Main deadline (UTC, ISO)", league.main_deadline],
+      ["late_deadline", "Late deadline (UTC, ISO)", league.late_deadline],
+    ];
+    const inputs = {};
+    fields.forEach(([key, label, value]) => {
+      const wrap = el("div");
+      const labelNode = el("label", "", label);
+      const input = el("input", "fl-input");
+      input.value = value;
+      input.name = key;
+      inputs[key] = input;
+      wrap.append(labelNode, input);
+      form.appendChild(wrap);
+    });
+    const save = el("button", "fl-btn", "Save settings");
+    save.type = "submit";
+    form.appendChild(save);
+    const status = el("div", "fl-message");
+    form.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const body = {};
+      fields.forEach(([key, , value]) => {
+        if (inputs[key].value.trim() !== String(value)) body[key] = key === "budget" ? Number(inputs[key].value) : inputs[key].value.trim();
+      });
+      if (!Object.keys(body).length) {
+        message(status, "bad", "Nothing changed.");
+        return;
+      }
+      if ((body.opens_at || body.main_deadline || body.late_deadline)
+        && !window.confirm("Changing the dates opens or closes team building for everyone. Save?")) return;
+      save.disabled = true;
+      try {
+        const result = await request(leagueUrl(league.id), { method: "PATCH", body: JSON.stringify(body) });
+        onSaved(result.league);
+      } catch (error) {
+        message(status, "bad", error.message);
+        save.disabled = false;
+      }
+    });
+    box.append(form, status);
+    return box;
+  }
+
+  function downloadCsv(league, teams) {
+    const quote = (value) => `"${String(value ?? "").replace(/"/g, '""')}"`;
+    const rows = [[
+      "team_id", "team_name", "user_id", "owner", "bga_nickname", "entry_type", "status", "saved_at", "locked_at",
+      "scoring_from", "record_id", "player", "stage", "price_at_pick",
+    ]];
+    teams.forEach((team) => {
+      const base = [
+        team.team_id, team.team_name, team.user_id, team.owner, team.bga_nickname, team.entry_type, team.state,
+        team.saved_at, team.locked_at, team.scoring_from,
+      ];
+      (team.players.length ? team.players : [null]).forEach((player) => {
+        rows.push([...base, player?.record_id, player?.player, player?.stage, player?.price_at_pick]);
+      });
+    });
+    // The BOM lets Excel read the names as UTF-8.
+    const csv = `﻿${rows.map((row) => row.map(quote).join(",")).join("\r\n")}`;
+    const link = el("a");
+    link.href = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
+    link.download = `${league.id}-fantasy-teams.csv`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    setTimeout(() => URL.revokeObjectURL(link.href), 1000);
+  }
+
+  function renderTeams(league) {
+    const box = el("div");
+    box.appendChild(el("div", "fl-section-title", "Teams"));
+    const body = el("div", "", "Loading teams…");
+    box.appendChild(body);
+    request(leagueUrl(league.id, "/teams")).then((data) => {
+      body.innerHTML = "";
+      const counts = data.counts || {};
+      const row = el("div", "fl-row");
+      row.appendChild(el("span", "", `Teams: ${counts.total || 0} · complete: ${counts.complete || 0} · drafts: ${counts.drafts || 0}`
+        + ` · late: ${counts.late || 0} · committed: ${counts.committed || 0}`));
+      const download = el("button", "fl-btn light", "Download CSV");
+      download.type = "button";
+      download.disabled = !data.teams.length;
+      download.addEventListener("click", () => downloadCsv(league, data.teams));
+      row.appendChild(download);
+      body.appendChild(row);
+      if (!data.teams.length) return;
+      const wrap = el("div", "fl-table-wrap");
+      const table = el("table", "fl-table");
+      const headRow = el("tr");
+      [["Team", ""], ["Owner", ""], ["Status", ""], ["Players", ""], ["Cost", "num"], ["Saved", ""]]
+        .forEach(([label, className]) => headRow.appendChild(el("th", className, label)));
+      const thead = el("thead");
+      thead.appendChild(headRow);
+      const tbody = el("tbody");
+      data.teams.forEach((team) => {
+        const tr = el("tr");
+        tr.append(
+          el("td", "", team.team_name),
+          el("td", "", team.owner || `user ${team.user_id}`),
+          el("td", "", `${STATE_LABELS[team.state] || team.state}${team.entry_type === "late" ? " (late)" : ""}`),
+          el("td", "", team.players.map((player) => player.player || player.slot_id).join(", ") || "—"),
+          el("td", "num", team.cost.toFixed(1)),
+          el("td", "", formatUtc(team.saved_at))
+        );
+        tbody.appendChild(tr);
+      });
+      table.append(thead, tbody);
+      wrap.appendChild(table);
+      body.appendChild(wrap);
+    }).catch((error) => {
+      body.innerHTML = "";
+      body.appendChild(el("div", "fl-message bad", error.message));
+    });
+    return box;
+  }
+
+  // Site admins only: league admins, added by the email of their site account.
+  function renderAdmins(league) {
+    const box = el("div");
+    box.appendChild(el("div", "fl-section-title", "League admins"));
+    box.appendChild(el("div", "fl-muted", "They see the teams and the CSV of this league only. The person must have signed in to carcassonne.gg once."));
+    const list = el("div");
+    const status = el("div", "fl-message");
+    const load = () => request(leagueUrl(league.id, "/admins")).then((data) => {
+      list.innerHTML = "";
+      if (!data.admins.length) list.appendChild(el("div", "fl-muted", "No league admins yet."));
+      data.admins.forEach((admin) => {
+        const row = el("div", "fl-row");
+        row.appendChild(el("span", "", [admin.name, admin.email, admin.bga_nickname ? `BGA: ${admin.bga_nickname}` : ""].filter(Boolean).join(" · ")));
+        const remove = el("button", "fl-btn light", "Remove");
+        remove.type = "button";
+        remove.addEventListener("click", async () => {
+          if (!window.confirm(`Remove ${admin.email || admin.name} from the league admins?`)) return;
+          try {
+            await request(leagueUrl(league.id, `/admins/${encodeURIComponent(admin.user_id)}`), { method: "DELETE" });
+            load();
+          } catch (error) {
+            message(status, "bad", error.message);
+          }
+        });
+        row.appendChild(remove);
+        list.appendChild(row);
+      });
+    }).catch((error) => message(status, "bad", error.message));
+    const form = el("form", "fl-row");
+    const email = el("input", "fl-input");
+    email.type = "email";
+    email.placeholder = "Email of the site account";
+    email.style.maxWidth = "320px";
+    const add = el("button", "fl-btn", "Add admin");
+    add.type = "submit";
+    form.append(email, add);
+    form.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      if (!email.value.trim()) return;
+      add.disabled = true;
+      try {
+        const result = await request(leagueUrl(league.id, "/admins"), { method: "POST", body: JSON.stringify({ email: email.value.trim() }) });
+        message(status, "ok", result.added ? "Admin added." : "Already an admin.");
+        email.value = "";
+        load();
+      } catch (error) {
+        message(status, "bad", error.message);
+      } finally {
+        add.disabled = false;
+      }
+    });
+    box.append(list, form, status);
+    load();
+    return box;
+  }
+
+  function renderLeague(league, canManageSettings) {
+    const card = el("div", "fl-card");
+    const draw = (current) => {
+      card.innerHTML = "";
+      const head = el("div", "fl-card-head");
+      const titles = el("div");
+      titles.append(el("div", "fl-card-title", current.name), el("div", "fl-muted", current.id));
+      head.append(titles, el("span", "fl-status", STATUS_LABELS[current.status] || current.status));
+      card.append(head, renderFacts(current));
+      if (canManageSettings) card.appendChild(renderSettings(current, draw));
+      card.appendChild(renderTeams(current));
+      if (canManageSettings) card.appendChild(renderAdmins(current));
+    };
+    draw(league);
+    return card;
+  }
+
+  function showMessage(text) {
+    root.innerHTML = "";
+    root.append(el("div", "fl-title", "Fantasy"), el("div", "fl-card", text));
+  }
+
+  function load() {
+    request(MANAGED_URL).then((data) => {
+      if (!data.leagues.length) {
+        showMessage("You don't manage any Fantasy leagues.");
+        return;
+      }
+      root.innerHTML = "";
+      root.appendChild(el("div", "fl-title", "Fantasy"));
+      data.leagues.forEach((league) => root.appendChild(renderLeague(league, data.can_manage_settings)));
+    }).catch((error) => {
+      showMessage(error.status === 401 ? "Sign in to manage Fantasy leagues." : error.message);
+    });
+  }
+
+  window.addEventListener("gg-auth-state-change", load);
+  load();
+})();
+</script>

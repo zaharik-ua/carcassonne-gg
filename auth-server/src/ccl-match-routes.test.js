@@ -301,6 +301,8 @@ test("players agree on a time; the match gets it on acceptance", async (t) => {
   assert.equal(rated.gg_rating, Math.round(rated.gg_rating_full));
   assert.equal(api.audit.at(-1).event_type, "duel.time_proposal.accepted");
 
+  // The round deadline does not block scheduling.  assert.equal(api.audit.at(-1).event_type, "duel.time_proposal.accepted");
+
   // The round deadline does not block scheduling.
   const late = await propose(USERS.taras, "2026-12-05T18:00:00Z");
   assert.equal(late.status, 200, JSON.stringify(late.body));
@@ -321,6 +323,39 @@ test("players agree on a time; the match gets it on acceptance", async (t) => {
   assert.equal(removed.body.match.proposed_time_utc, null);
   assert.equal(removed.body.match.proposed_time_status, "accepted");
   assert.equal(api.audit.at(-1).event_type, "duel.time_proposal.deleted");
+});
+
+test("a global admin accepts a time proposal for the opponent; a tournament admin cannot", async (t) => {
+  const db = await createDatabase(t);
+  const api = createApi(db);
+  const match = await createMatch(api);
+  const accept = (user, body = {}) => api.call("PATCH /ccl/matches/:id/time-proposal/accept", {
+    user, params: { id: match.id }, body,
+  });
+  const proposed = await api.call("POST /ccl/matches/:id/time-proposal", {
+    user: USERS.olena, params: { id: match.id }, body: { proposed_time_utc: "2026-11-23T19:30:00Z" },
+  });
+  assert.equal(proposed.status, 200, JSON.stringify(proposed.body));
+
+  assert.equal((await accept(USERS.tournamentAdmin, { as_admin: true })).status, 403);
+  assert.equal((await accept(USERS.taras, { as_admin: true })).status, 403);
+  // Without as_admin the global admin is not a player of the match.
+  assert.equal((await accept(USERS.admin)).status, 403);
+  const byAdmin = await accept(USERS.admin, {
+    as_admin: true,
+    expected_proposed_time_utc: "2026-11-23T19:30:00.000Z",
+    expected_proposed_time_by_player_id: "olena",
+    expected_proposed_time_status: "pending",
+  });
+  assert.equal(byAdmin.status, 200, JSON.stringify(byAdmin.body));
+  assert.equal(byAdmin.body.match.time_utc, "2026-11-23T19:30:00.000Z");
+  assert.equal(byAdmin.body.match.proposed_time_status, "accepted");
+  assert.equal(api.audit.at(-1).event_type, "duel.time_proposal.accepted");
+  assert.equal(api.audit.at(-1).metadata.accepted_by_admin, true);
+  assert.equal((await accept(USERS.admin, { as_admin: true })).status, 409);
+
+  assert.equal((await listMatches(api, USERS.admin)).body.can_accept_time_for_players, true);
+  assert.equal((await listMatches(api, USERS.tournamentAdmin)).body.can_accept_time_for_players, false);
 });
 
 test("admins edit and delete matches; a direct time clears the proposal", async (t) => {

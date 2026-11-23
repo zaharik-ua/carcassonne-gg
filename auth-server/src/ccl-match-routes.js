@@ -21,7 +21,7 @@ import {
 import { calculateGgDuelRating, loadGgRatingContext } from "./gg-ratings.js";
 import { getCclResultEditAccess, isCclResultEditableStatus } from "./ccl-result-edit.js";
 import { getCclCaseScenario, restoreDuelResult, snapshotDuelResult } from "./ccl-cases.js";
-import { hasTournamentAdminAccess } from "./tournament-admin-access.js";
+import { canManageTournamentAccessUsers, hasTournamentAdminAccess } from "./tournament-admin-access.js";
 
 // A CCL match is one duels row; stage, round and proposal live in the generic duels columns.
 const MATCH_SELECT_SQL = `
@@ -136,11 +136,13 @@ async function refreshMatchGgRating(db, duelId) {
 }
 
 // Tournament admin, or a player who holds a filled slot of the tournament.
+// A global admin (users.admin) is a tournament admin everywhere and may also act for a player.
 async function resolveActor(db, user, tournament, slots) {
   const playerId = actorPlayerId(user);
   const isAdmin = await hasTournamentAdminAccess(db, user, tournament.id);
+  const isGlobalAdmin = canManageTournamentAccessUsers(user);
   const isParticipant = !!playerId && slots.some((slot) => text(slot.player_id) === playerId);
-  return { isAdmin, isParticipant, playerId: playerId || null };
+  return { isAdmin, isGlobalAdmin, isParticipant, playerId: playerId || null };
 }
 
 // The stage a player waits for and its start date: League Stage once qualified, else the entry stage.
@@ -344,6 +346,8 @@ export function registerCclMatchRoutes(app, {
       ok: true,
       tournament: { id: tournament.id, name: tournament.name, short_title: tournament.short_title || null },
       can_manage: actor.isAdmin,
+      // Global admins accept a player's pending time proposal for the opponent (as_admin).
+      can_accept_time_for_players: actor.isGlobalAdmin,
       my_player_id: actor.playerId,
       my_registration: await loadMyRegistration(db, tournament.id, slots, actor.playerId),
       stages: CCL_MATCH_STAGES,
@@ -588,14 +592,18 @@ export function registerCclMatchRoutes(app, {
     return res.json({ ok: true, match: await formatOne(db, result.after, result.slots, result.actor.playerId) });
   }));
 
+  // `as_admin: true`: a global admin accepts for the player the proposal waits for
+  // (e.g. that player cannot create an account on the site).
   app.patch("/ccl/matches/:id/time-proposal/accept", requireAuthenticated, handle("Failed to accept time proposal", async (req, res) => {
     const payload = req.body || {};
+    const asAdmin = payload.as_admin === true;
     const result = await inTransaction(db, async () => {
       const { match, slots, actor } = await loadMatchContext(db, req.user, req.params.id);
+      if (asAdmin && !actor.isGlobalAdmin) throw requestError(403, "Only a global admin can accept a time for a player");
       if (!isDuelProposalSnapshotCurrent(match, payload)) {
         throw requestError(409, "The time proposal has changed. Reload the match and review it again");
       }
-      const plan = planDuelTimeAcceptance({ duel: match, actorPlayerId: actor.playerId });
+      const plan = planDuelTimeAcceptance({ duel: match, actorPlayerId: actor.playerId, onBehalfOfOpponent: asAdmin });
       if (plan.error) throw requestError(plan.status, plan.error);
       await updateMatch(db, match.id, plan.value, actor.playerId);
       // Like a challenge duel, the rating is set when the two players agree on the time.
@@ -612,6 +620,7 @@ export function registerCclMatchRoutes(app, {
       metadata: {
         tournament_id: result.after.tournament_id,
         proposed_time_by_player_id: result.before.proposed_time_by_player_id,
+        ...(asAdmin ? { accepted_by_admin: true } : {}),
       },
     });
     return res.json({ ok: true, match: await formatOne(db, result.after, result.slots, result.actor.playerId) });

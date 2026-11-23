@@ -1,0 +1,930 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Fantasy CCL 2027 — Roster Builder v3</title>
+  <style>
+    :root {
+      --bg: #f4f6f9;
+      --card: #ffffff;
+      --ink: #16202a;
+      --muted: #5b6b7c;
+      --line: #dce3ec;
+      --accent: #1d4ed8;
+      --ok-bg: #ecfdf5;
+      --ok-ink: #065f46;
+      --warn-bg: #fffbeb;
+      --warn-ink: #92400e;
+      --bad-bg: #fef2f2;
+      --bad-ink: #991b1b;
+    }
+
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--ink);
+      line-height: 1.45;
+    }
+
+    header {
+      background: #0f172a;
+      color: #fff;
+      padding: 18px 24px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 16px;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    header h1 { margin: 0; font-size: 1.25rem; }
+    header p { margin: 4px 0 0; color: #cbd5e1; font-size: 0.9rem; }
+
+    .countdown-box {
+      background: #1e293b;
+      border: 1px solid #334155;
+      border-radius: 8px;
+      padding: 10px 14px;
+      min-width: 240px;
+    }
+
+    .countdown-label {
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      color: #94a3b8;
+    }
+
+    .countdown-clock {
+      font-size: 1.05rem;
+      font-weight: 700;
+      font-variant-numeric: tabular-nums;
+      color: #f8fafc;
+      margin-top: 2px;
+    }
+
+    .auth-banner {
+      max-width: 1280px;
+      margin: 16px auto 0;
+      padding: 12px 16px;
+      border-radius: 10px;
+      border: 1px solid var(--line);
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 0.9rem;
+    }
+
+    .auth-banner.logged-in { background: var(--ok-bg); color: var(--ok-ink); border-color: #a7f3d0; }
+    .auth-banner.logged-out { background: var(--bad-bg); color: var(--bad-ink); border-color: #fecaca; }
+
+    .dev-auth-controls {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: center;
+      font-size: 0.8rem;
+    }
+
+    .dev-auth-controls input {
+      padding: 5px 8px;
+      border-radius: 6px;
+      border: 1px solid #cbd5e1;
+      background: #fff;
+      color: var(--ink);
+    }
+
+    main {
+      max-width: 1280px;
+      margin: 16px auto 40px;
+      padding: 0 16px;
+      display: grid;
+      gap: 20px;
+    }
+
+    .identity-bar {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+      gap: 12px;
+      align-items: end;
+    }
+
+    .field label {
+      display: block;
+      font-size: 0.82rem;
+      font-weight: 600;
+      color: var(--muted);
+      margin-bottom: 4px;
+    }
+
+    .field input, .field select {
+      width: 100%;
+      padding: 8px 10px;
+      border-radius: 6px;
+      border: 1px solid var(--line);
+      font-size: 0.88rem;
+      background: #fff;
+    }
+
+    .division-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
+      gap: 20px;
+    }
+
+    .panel {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      padding: 16px;
+      box-shadow: 0 1px 2px rgba(0,0,0,0.04);
+    }
+
+    .panel-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 12px;
+    }
+
+    .panel-header h2 { margin: 0; font-size: 1.05rem; }
+
+    .badge {
+      padding: 3px 9px;
+      border-radius: 999px;
+      font-size: 0.78rem;
+      font-weight: 700;
+    }
+
+    .badge.valid { background: var(--ok-bg); color: var(--ok-ink); }
+    .badge.warn { background: var(--warn-bg); color: var(--warn-ink); }
+    .badge.invalid { background: var(--bad-bg); color: var(--bad-ink); }
+
+    .metrics {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 8px;
+      background: #f8fafc;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 10px;
+      margin-bottom: 12px;
+      font-size: 0.82rem;
+    }
+
+    .metrics strong { display: block; font-size: 0.98rem; font-variant-numeric: tabular-nums; }
+
+    .slot-row {
+      display: grid;
+      grid-template-columns: 28px 1fr 78px 34px;
+      gap: 8px;
+      align-items: center;
+      margin-bottom: 8px;
+    }
+
+    .slot-row select {
+      width: 100%;
+      padding: 6px 8px;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: #fff;
+      font-size: 0.86rem;
+    }
+
+    .price-pill {
+      text-align: right;
+      font-weight: 700;
+      font-variant-numeric: tabular-nums;
+      font-size: 0.88rem;
+    }
+
+    .filter-bar {
+      display: grid;
+      grid-template-columns: 1fr 150px 160px;
+      gap: 8px;
+      margin-bottom: 10px;
+    }
+
+    .filter-bar input, .filter-bar select {
+      padding: 6px 8px;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      font-size: 0.84rem;
+      background: #fff;
+    }
+
+    .pool-table-wrap {
+      max-height: 290px;
+      overflow-y: auto;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fff;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.83rem;
+    }
+
+    th, td {
+      padding: 7px 8px;
+      border-bottom: 1px solid #eef2f6;
+      text-align: left;
+      vertical-align: middle;
+    }
+
+    th {
+      position: sticky;
+      top: 0;
+      background: #f8fafc;
+      font-weight: 700;
+      color: var(--muted);
+      z-index: 1;
+    }
+
+    .num { text-align: right; font-variant-numeric: tabular-nums; }
+
+    button {
+      cursor: pointer;
+      border: 1px solid transparent;
+      border-radius: 6px;
+      padding: 6px 10px;
+      font-weight: 600;
+      background: var(--accent);
+      color: #fff;
+      font-size: 0.82rem;
+    }
+
+    button:disabled { opacity: 0.5; cursor: not-allowed; }
+    button.secondary { background: #e2e8f0; color: #0f172a; }
+    button.danger { background: #fee2e2; color: #991b1b; }
+    button.selected-btn { background: #065f46; color: #fff; }
+
+    .clear-btn {
+      padding: 4px 8px;
+      background: #f1f5f9;
+      color: #334155;
+      border: 1px solid var(--line);
+    }
+
+    .snapshot-box {
+      margin-top: 10px;
+      padding: 10px;
+      border-radius: 8px;
+      background: #f8fafc;
+      border: 1px dashed #cbd5e1;
+      font-size: 0.8rem;
+      color: var(--muted);
+    }
+
+    .action-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-top: 12px;
+    }
+
+    textarea {
+      width: 100%;
+      min-height: 120px;
+      margin-top: 10px;
+      padding: 10px;
+      border-radius: 8px;
+      border: 1px solid var(--line);
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: 0.78rem;
+      background: #f8fafc;
+    }
+
+    .note { font-size: 0.82rem; color: var(--muted); margin-top: 8px; }
+    .sub-heading { font-size: 0.9rem; font-weight: 700; margin: 14px 0 6px; color: var(--ink); }
+  </style>
+</head>
+<body>
+  <header>
+    <div>
+      <h1>Fantasy CCL 2027 — Roster Builder</h1>
+      <p>Firm Lockout: 27/11/2026 at 23:59 · Budget Cap: 50.0 per division</p>
+    </div>
+    <div class="countdown-box">
+      <div class="countdown-label">Time Remaining Until Lockout</div>
+      <div class="countdown-clock" id="countdownClock">Calculating...</div>
+    </div>
+  </header>
+
+  <div id="authBanner" class="auth-banner logged-out">
+    <div id="authStatusText">
+      <strong>Carcassonne.GG Login Required:</strong> Users must be logged into carcassonne.gg to select or save a team.
+    </div>
+    <div class="dev-auth-controls">
+      <span>Prototype Session Tester:</span>
+      <input id="simGgUserInput" type="text" value="Matt" placeholder="GG username" />
+      <button id="toggleAuthBtn" class="secondary" type="button">Simulate Login</button>
+    </div>
+  </div>
+
+  <main>
+    <section class="panel">
+      <div class="identity-bar">
+        <div class="field">
+          <label for="teamNameInput">Team Name (Required)</label>
+          <input id="teamNameInput" type="text" placeholder="e.g., Carcassonne Chronicles" />
+        </div>
+        <div class="field">
+          <label>Carcassonne.GG Account</label>
+          <input id="ggAccountDisplay" type="text" value="Not signed in" readonly />
+        </div>
+      </div>
+      <p class="note" id="gameConfigSummary"></p>
+    </section>
+
+    <div class="division-grid">
+      <!-- QUALIFYING DIVISION -->
+      <section class="panel" id="qualPanel">
+        <div class="panel-header">
+          <h2>Qualifying Draw Roster (Q1–Q3)</h2>
+          <span id="qualBadge" class="badge invalid">INCOMPLETE</span>
+        </div>
+        <div class="metrics">
+          <div><span>Slots</span><strong id="qualSlots">0 / 5</strong></div>
+          <div><span>Cost</span><strong id="qualCost">0.0 / 50.0</strong></div>
+          <div><span>Remaining</span><strong id="qualRem">50.0</strong></div>
+          <div><span>Current Pts</span><strong id="qualPts">0</strong></div>
+        </div>
+        <div id="qualSlotsContainer"></div>
+
+        <div class="sub-heading">Browse & Select Qualifying Contestants</div>
+        <div class="filter-bar">
+          <input id="qualSearch" type="text" placeholder="Search player..." />
+          <select id="qualCountryFilter"><option value="">All Nationalities</option></select>
+          <select id="qualSort">
+            <option value="points-desc">Sort: Points (High → Low)</option>
+            <option value="points-asc">Sort: Points (Low → High)</option>
+            <option value="price-desc">Sort: Price (High → Low)</option>
+            <option value="price-asc">Sort: Price (Low → High)</option>
+            <option value="country-asc">Sort: Nationality (A–Z)</option>
+          </select>
+        </div>
+        <div class="pool-table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Player</th>
+                <th>Nationality</th>
+                <th class="num">Pts</th>
+                <th class="num">Price</th>
+                <th class="num">Action</th>
+              </tr>
+            </thead>
+            <tbody id="qualPoolBody"></tbody>
+          </table>
+        </div>
+
+        <div class="snapshot-box" id="qualSnapshot">Last valid team: None saved yet</div>
+      </section>
+
+      <!-- MAIN DRAW DIVISION -->
+      <section class="panel" id="mainPanel">
+        <div class="panel-header">
+          <h2>Main Draw Roster</h2>
+          <span id="mainBadge" class="badge invalid">INCOMPLETE</span>
+        </div>
+        <div class="metrics">
+          <div><span>Slots</span><strong id="mainSlots">0 / 5</strong></div>
+          <div><span>Cost</span><strong id="mainCost">0.0 / 50.0</strong></div>
+          <div><span>Remaining</span><strong id="mainRem">50.0</strong></div>
+          <div><span>Current Pts</span><strong id="mainPts">0</strong></div>
+        </div>
+        <div id="mainSlotsContainer"></div>
+
+        <div class="sub-heading">Browse & Select Main Draw Contestants</div>
+        <div class="filter-bar">
+          <input id="mainSearch" type="text" placeholder="Search player..." />
+          <select id="mainCountryFilter"><option value="">All Nationalities</option></select>
+          <select id="mainSort">
+            <option value="points-desc">Sort: Points (High → Low)</option>
+            <option value="points-asc">Sort: Points (Low → High)</option>
+            <option value="price-desc">Sort: Price (High → Low)</option>
+            <option value="price-asc">Sort: Price (Low → High)</option>
+            <option value="country-asc">Sort: Nationality (A–Z)</option>
+          </select>
+        </div>
+        <div class="pool-table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Player</th>
+                <th>Nationality</th>
+                <th class="num">Pts</th>
+                <th class="num">Price</th>
+                <th class="num">Action</th>
+              </tr>
+            </thead>
+            <tbody id="mainPoolBody"></tbody>
+          </table>
+        </div>
+
+        <div class="snapshot-box" id="mainSnapshot">Last valid team: None saved yet</div>
+      </section>
+    </div>
+
+    <section class="panel">
+      <h2>Save Draft & Export Submission</h2>
+      <p class="note">
+        Drafts can be saved even if incomplete or over budget. Any valid division updates your
+        <strong>Last Valid Team</strong> automatically, which is used at 27/11/2026 23:59 if your draft is invalid.
+      </p>
+      <div class="action-row">
+        <button id="saveDraftBtn" type="button">Save Draft</button>
+        <button id="exportJsonBtn" class="secondary" type="button">Generate Submission JSON</button>
+        <button id="copyExportBtn" class="secondary" type="button">Copy to Clipboard</button>
+        <button id="resetAllBtn" class="danger" type="button">Reset Saved Team</button>
+      </div>
+      <textarea id="exportArea" placeholder="Generated team submission payload will appear here..."></textarea>
+    </section>
+  </main>
+
+  <script>
+    const GAME_CONFIG = Object.freeze({
+      budgetCap: 50.0,
+      qualSlots: 5,
+      mainSlots: 5,
+      deadlineIso: "2026-11-27T23:59:00Z"
+    });
+
+    const STORAGE_KEY = "fantasy_ccl_2027_game_v3";
+
+    // Sample pool with nationality, current points, and price (replace with full 2027 data)
+    const PLAYERS = {
+      qualifiers: [
+        { id: "q1", name: "Alexey_LV", country: "Latvia", group: "X", currentPoints: 3, price: 16.5 },
+        { id: "q2", name: "203club", country: "China", group: "Y", currentPoints: 3, price: 16.0 },
+        { id: "q3", name: "Someone_you_know", country: "RCP", group: "Z", currentPoints: 2, price: 17.5 },
+        { id: "q4", name: "Kithara", country: "Japan", group: "Z", currentPoints: 3, price: 14.5 },
+        { id: "q5", name: "UY_Scuti", country: "Poland", group: "B", currentPoints: 0, price: 14.5 },
+        { id: "q6", name: "qazxswedc", country: "China", group: "B", currentPoints: 0, price: 13.5 },
+        { id: "q7", name: "bignacho610", country: "Argentina", group: "Z", currentPoints: 1, price: 4.0 },
+        { id: "q8", name: "chawin053", country: "Thailand", group: "X", currentPoints: 0, price: 3.5 },
+        { id: "q9", name: "little arms", country: "Canada", group: "H", currentPoints: 0, price: 3.0 },
+        { id: "q10", name: "robw335", country: "Australia", group: "A", currentPoints: 0, price: 4.5 }
+      ],
+      main: [
+        { id: "m1", name: "mtuu", country: "Poland", pot: "Pot 1", currentPoints: 0, price: 16.5 },
+        { id: "m2", name: "adrear", country: "Ukraine", pot: "Pot 1", currentPoints: 0, price: 16.0 },
+        { id: "m3", name: "Nallerheim", country: "Finland", pot: "Pot 1", currentPoints: 0, price: 15.5 },
+        { id: "m4", name: "CraftyRaf", country: "Belgium", pot: "Pot 2", currentPoints: 0, price: 13.5 },
+        { id: "m5", name: "Bluste", country: "Croatia", pot: "Pot 3", currentPoints: 0, price: 10.0 },
+        { id: "m6", name: "Larpaattori", country: "Finland", pot: "Pot 3", currentPoints: 0, price: 11.0 },
+        { id: "m7", name: "Lord Terrycloth", country: "United Kingdom", pot: "Pot 4", currentPoints: 0, price: 7.5 },
+        { id: "m8", name: "King_Deded4d5", country: "Australia", pot: "Pot 5", currentPoints: 0, price: 6.5 }
+      ]
+    };
+
+    let sessionAuth = {
+      loggedIn: Boolean(window.CARCASSONNE_GG_USER),
+      username: window.CARCASSONNE_GG_USER || ""
+    };
+
+    let state = loadState();
+
+    function defaultState() {
+      return {
+        teamName: "",
+        draft: {
+          qualifiers: Array(GAME_CONFIG.qualSlots).fill(""),
+          main: Array(GAME_CONFIG.mainSlots).fill("")
+        },
+        lastValid: { qualifiers: null, main: null }
+      };
+    }
+
+    function loadState() {
+      try {
+        const raw = localStorage.getItem(STORAGE_KEY);
+        if (!raw) return defaultState();
+        const parsed = JSON.parse(raw);
+        return {
+          ...defaultState(),
+          ...parsed,
+          draft: {
+            qualifiers: Array.from({ length: GAME_CONFIG.qualSlots }, (_, i) => parsed.draft?.qualifiers?.[i] || ""),
+            main: Array.from({ length: GAME_CONFIG.mainSlots }, (_, i) => parsed.draft?.main?.[i] || "")
+          },
+          lastValid: {
+            qualifiers: parsed.lastValid?.qualifiers || null,
+            main: parsed.lastValid?.main || null
+          }
+        };
+      } catch {
+        return defaultState();
+      }
+    }
+
+    function persistState() {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    }
+
+    function isPastDeadline() {
+      return Date.now() >= new Date(GAME_CONFIG.deadlineIso).getTime();
+    }
+
+    function canPlay() {
+      return sessionAuth.loggedIn && Boolean(sessionAuth.username.trim()) && !isPastDeadline();
+    }
+
+    function getPlayer(div, id) {
+      return PLAYERS[div].find(p => p.id === id) || null;
+    }
+
+    function evaluateDivision(div, ids, slotCount) {
+      const selected = ids.map(id => getPlayer(div, id)).filter(Boolean);
+      const totalCost = Number(selected.reduce((sum, p) => sum + p.price, 0).toFixed(1));
+      const totalPoints = selected.reduce((sum, p) => sum + (p.currentPoints || 0), 0);
+      const uniqueIds = new Set(ids.filter(Boolean));
+      const hasDuplicates = uniqueIds.size !== selected.length;
+      const isFull = selected.length === slotCount;
+      const withinBudget = totalCost <= GAME_CONFIG.budgetCap + 1e-9;
+
+      let status = "VALID";
+      let reason = "Valid roster";
+      if (hasDuplicates) {
+        status = "INVALID";
+        reason = "Duplicate player";
+      } else if (!withinBudget) {
+        status = "INVALID";
+        reason = `Over ${GAME_CONFIG.budgetCap.toFixed(1)} budget`;
+      } else if (!isFull) {
+        status = "INCOMPLETE";
+        reason = `${slotCount - selected.length} slot(s) left`;
+      }
+
+      return {
+        ids: [...ids],
+        players: selected.map(p => ({
+          id: p.id,
+          name: p.name,
+          country: p.country,
+          price: p.price,
+          currentPoints: p.currentPoints || 0
+        })),
+        count: selected.length,
+        slotCount,
+        totalCost,
+        remaining: Number((GAME_CONFIG.budgetCap - totalCost).toFixed(1)),
+        totalPoints,
+        valid: status === "VALID",
+        status,
+        reason
+      };
+    }
+
+    function syncLastValidSnapshots() {
+      const qEval = evaluateDivision("qualifiers", state.draft.qualifiers, GAME_CONFIG.qualSlots);
+      const mEval = evaluateDivision("main", state.draft.main, GAME_CONFIG.mainSlots);
+
+      if (qEval.valid) {
+        state.lastValid.qualifiers = {
+          ...qEval,
+          teamName: state.teamName.trim(),
+          carcassonneGgUser: sessionAuth.username,
+          capturedAt: new Date().toISOString()
+        };
+      }
+      if (mEval.valid) {
+        state.lastValid.main = {
+          ...mEval,
+          teamName: state.teamName.trim(),
+          carcassonneGgUser: sessionAuth.username,
+          capturedAt: new Date().toISOString()
+        };
+      }
+      persistState();
+    }
+
+    function togglePlayerInDivision(div, playerId) {
+      if (!canPlay()) return;
+      const list = state.draft[div];
+      const existingIdx = list.indexOf(playerId);
+
+      if (existingIdx !== -1) {
+        list[existingIdx] = "";
+      } else {
+        const emptyIdx = list.indexOf("");
+        if (emptyIdx !== -1) {
+          list[emptyIdx] = playerId;
+        } else {
+          list[list.length - 1] = playerId;
+        }
+      }
+      syncLastValidSnapshots();
+      renderAll();
+    }
+
+    function populateCountryFilter(div, selectId) {
+      const sel = document.getElementById(selectId);
+      const current = sel.value;
+      const countries = [...new Set(PLAYERS[div].map(p => p.country))].sort((a, b) => a.localeCompare(b));
+      sel.innerHTML = `<option value="">All Nationalities</option>` +
+        countries.map(c => `<option value="${c}">${c}</option>`).join("");
+      if (countries.includes(current)) sel.value = current;
+    }
+
+    function renderPoolTable(div, tbodyId, searchId, countryId, sortId) {
+      const q = document.getElementById(searchId).value.trim().toLowerCase();
+      const country = document.getElementById(countryId).value;
+      const sortBy = document.getElementById(sortId).value;
+      const tbody = document.getElementById(tbodyId);
+      const selectedSet = new Set(state.draft[div].filter(Boolean));
+
+      const filtered = PLAYERS[div]
+        .filter(p => (!q || p.name.toLowerCase().includes(q) || p.country.toLowerCase().includes(q)))
+        .filter(p => (!country || p.country === country))
+        .sort((a, b) => {
+          if (sortBy === "points-desc") return (b.currentPoints || 0) - (a.currentPoints || 0) || b.price - a.price;
+          if (sortBy === "points-asc") return (a.currentPoints || 0) - (b.currentPoints || 0) || a.price - b.price;
+          if (sortBy === "price-desc") return b.price - a.price || (b.currentPoints || 0) - (a.currentPoints || 0);
+          if (sortBy === "price-asc") return a.price - b.price || (b.currentPoints || 0) - (a.currentPoints || 0);
+          return a.country.localeCompare(b.country) || a.name.localeCompare(b.name);
+        });
+
+      tbody.innerHTML = "";
+      filtered.forEach(p => {
+        const isSelected = selectedSet.has(p.id);
+        const tr = document.createElement("tr");
+
+        tr.innerHTML = `
+          <td><strong>${p.name}</strong></td>
+          <td>${p.country}</td>
+          <td class="num">${p.currentPoints ?? 0}</td>
+          <td class="num">${p.price.toFixed(1)}</td>
+          <td class="num"></td>
+        `;
+
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.textContent = isSelected ? "Selected" : "Select";
+        btn.className = isSelected ? "selected-btn" : "secondary";
+        btn.disabled = !canPlay();
+        btn.addEventListener("click", () => togglePlayerInDivision(div, p.id));
+
+        tr.lastElementChild.appendChild(btn);
+        tbody.appendChild(tr);
+      });
+    }
+
+    function renderDivision(div, config) {
+      const container = document.getElementById(config.slotsContainerId);
+      container.innerHTML = "";
+
+      state.draft[div].forEach((selectedId, idx) => {
+        const row = document.createElement("div");
+        row.className = "slot-row";
+
+        const num = document.createElement("span");
+        num.textContent = `#${idx + 1}`;
+
+        const select = document.createElement("select");
+        const blankOpt = document.createElement("option");
+        blankOpt.value = "";
+        blankOpt.textContent = "— Select contestant —";
+        select.appendChild(blankOpt);
+
+        PLAYERS[div].forEach(p => {
+          const opt = document.createElement("option");
+          opt.value = p.id;
+          opt.textContent = `${p.name} · ${p.country} · ${p.currentPoints ?? 0} pts (${p.price.toFixed(1)})`;
+          if (p.id === selectedId) opt.selected = true;
+          select.appendChild(opt);
+        });
+
+        select.addEventListener("change", () => {
+          if (!canPlay()) return;
+          state.draft[div][idx] = select.value;
+          syncLastValidSnapshots();
+          renderAll();
+        });
+
+        const player = getPlayer(div, selectedId);
+        const priceEl = document.createElement("span");
+        priceEl.className = "price-pill";
+        priceEl.textContent = player ? player.price.toFixed(1) : "0.0";
+
+        const clearBtn = document.createElement("button");
+        clearBtn.type = "button";
+        clearBtn.className = "clear-btn";
+        clearBtn.textContent = "×";
+        clearBtn.addEventListener("click", () => {
+          if (!canPlay()) return;
+          state.draft[div][idx] = "";
+          syncLastValidSnapshots();
+          renderAll();
+        });
+
+        row.append(num, select, priceEl, clearBtn);
+        container.appendChild(row);
+      });
+
+      const ev = evaluateDivision(div, state.draft[div], config.slotCount);
+      const badge = document.getElementById(config.badgeId);
+      badge.textContent = `${ev.status} · ${ev.reason}`;
+      badge.className = "badge " + (ev.valid ? "valid" : ev.status === "INCOMPLETE" ? "warn" : "invalid");
+
+      document.getElementById(config.slotsId).textContent = `${ev.count} / ${config.slotCount}`;
+      document.getElementById(config.costId).textContent = `${ev.totalCost.toFixed(1)} / ${GAME_CONFIG.budgetCap.toFixed(1)}`;
+      document.getElementById(config.remId).textContent = ev.remaining.toFixed(1);
+      document.getElementById(config.ptsId).textContent = `${ev.totalPoints}`;
+
+      const snap = state.lastValid[div];
+      const snapEl = document.getElementById(config.snapId);
+      if (snap) {
+        snapEl.innerHTML = `<strong>Last Valid Team (${snap.totalCost.toFixed(1)} cost · ${snap.totalPoints} pts):</strong> ` +
+          snap.players.map(p => `${p.name} [${p.country}, ${p.price.toFixed(1)}]`).join(", ");
+      } else {
+        snapEl.textContent = "Last valid team: None saved yet";
+      }
+
+      renderPoolTable(div, config.poolBodyId, config.searchId, config.countryId, config.sortId);
+    }
+
+    function updateCountdown() {
+      const target = new Date(GAME_CONFIG.deadlineIso).getTime();
+      const diff = target - Date.now();
+      const el = document.getElementById("countdownClock");
+
+      if (diff <= 0) {
+        el.textContent = "00d 00h 00m 00s — LOCKED";
+        applyInteractionLocks();
+        return;
+      }
+
+      const totalSec = Math.floor(diff / 1000);
+      const days = Math.floor(totalSec / 86400);
+      const hours = Math.floor((totalSec % 86400) / 3600);
+      const mins = Math.floor((totalSec % 3600) / 60);
+      const secs = totalSec % 60;
+
+      el.textContent = `${String(days).padStart(2, "0")}d ${String(hours).padStart(2, "0")}h ${String(mins).padStart(2, "0")}m ${String(secs).padStart(2, "0")}s`;
+    }
+
+    function applyInteractionLocks() {
+      const editable = canPlay();
+      document.getElementById("teamNameInput").disabled = !editable;
+      document.getElementById("saveDraftBtn").disabled = !editable;
+      document.querySelectorAll("select, .clear-btn, #qualPoolBody button, #mainPoolBody button").forEach(ctrl => {
+        if (ctrl.id === "qualCountryFilter" || ctrl.id === "qualSort" || ctrl.id === "mainCountryFilter" || ctrl.id === "mainSort") {
+          ctrl.disabled = false;
+        } else {
+          ctrl.disabled = !editable;
+        }
+      });
+    }
+
+    function renderAuthBanner() {
+      const banner = document.getElementById("authBanner");
+      const text = document.getElementById("authStatusText");
+      const accountDisplay = document.getElementById("ggAccountDisplay");
+      const toggleBtn = document.getElementById("toggleAuthBtn");
+
+      if (sessionAuth.loggedIn && sessionAuth.username.trim()) {
+        banner.className = "auth-banner logged-in";
+        text.innerHTML = `<strong>Carcassonne.GG Account Connected:</strong> Signed in as <strong>${sessionAuth.username.trim()}</strong>.`;
+        accountDisplay.value = sessionAuth.username.trim();
+        toggleBtn.textContent = "Simulate Logout";
+      } else {
+        banner.className = "auth-banner logged-out";
+        text.innerHTML = `<strong>Carcassonne.GG Login Required:</strong> Users must be logged into carcassonne.gg to select or save a team.`;
+        accountDisplay.value = "Not signed in";
+        toggleBtn.textContent = "Simulate Login";
+      }
+    }
+
+    function renderAll() {
+      document.getElementById("gameConfigSummary").textContent =
+        `Game Rules: ${GAME_CONFIG.qualSlots} Qualifying slots + ${GAME_CONFIG.mainSlots} Main Draw slots · Budget ${GAME_CONFIG.budgetCap.toFixed(1)} each · Firm Lockout 27/11/2026 23:59.`;
+      document.getElementById("teamNameInput").value = state.teamName || "";
+
+      renderAuthBanner();
+      renderDivision("qualifiers", {
+        slotCount: GAME_CONFIG.qualSlots,
+        slotsContainerId: "qualSlotsContainer",
+        badgeId: "qualBadge",
+        slotsId: "qualSlots",
+        costId: "qualCost",
+        remId: "qualRem",
+        ptsId: "qualPts",
+        snapId: "qualSnapshot",
+        poolBodyId: "qualPoolBody",
+        searchId: "qualSearch",
+        countryId: "qualCountryFilter",
+        sortId: "qualSort"
+      });
+      renderDivision("main", {
+        slotCount: GAME_CONFIG.mainSlots,
+        slotsContainerId: "mainSlotsContainer",
+        badgeId: "mainBadge",
+        slotsId: "mainSlots",
+        costId: "mainCost",
+        remId: "mainRem",
+        ptsId: "mainPts",
+        snapId: "mainSnapshot",
+        poolBodyId: "mainPoolBody",
+        searchId: "mainSearch",
+        countryId: "mainCountryFilter",
+        sortId: "mainSort"
+      });
+      applyInteractionLocks();
+    }
+
+    ["qualSearch", "qualCountryFilter", "qualSort", "mainSearch", "mainCountryFilter", "mainSort"].forEach(id => {
+      document.getElementById(id).addEventListener("input", renderAll);
+      document.getElementById(id).addEventListener("change", renderAll);
+    });
+
+    document.getElementById("toggleAuthBtn").addEventListener("click", () => {
+      const typedUser = document.getElementById("simGgUserInput").value.trim() || "GG_User";
+      sessionAuth = sessionAuth.loggedIn
+        ? { loggedIn: false, username: "" }
+        : { loggedIn: true, username: typedUser };
+      renderAll();
+    });
+
+    document.getElementById("simGgUserInput").addEventListener("input", (e) => {
+      if (sessionAuth.loggedIn) {
+        sessionAuth.username = e.target.value;
+        renderAll();
+      }
+    });
+
+    document.getElementById("teamNameInput").addEventListener("input", (e) => {
+      state.teamName = e.target.value;
+      persistState();
+    });
+
+    document.getElementById("saveDraftBtn").addEventListener("click", () => {
+      if (!canPlay()) {
+        alert("Please log into Carcassonne.GG before the deadline (27/11/2026 23:59) to save.");
+        return;
+      }
+      syncLastValidSnapshots();
+      renderAll();
+      alert("Draft saved. Any valid division was also recorded as your Last Valid Team.");
+    });
+
+    document.getElementById("exportJsonBtn").addEventListener("click", () => {
+      if (!sessionAuth.loggedIn || !sessionAuth.username.trim()) {
+        alert("Carcassonne.GG login is required to generate a team record.");
+        return;
+      }
+      if (!isPastDeadline()) syncLastValidSnapshots();
+
+      const qDraft = evaluateDivision("qualifiers", state.draft.qualifiers, GAME_CONFIG.qualSlots);
+      const mDraft = evaluateDivision("main", state.draft.main, GAME_CONFIG.mainSlots);
+
+      const payload = {
+        carcassonneGgUser: sessionAuth.username.trim(),
+        teamName: state.teamName.trim() || "Untitled Team",
+        exportedAt: new Date().toISOString(),
+        deadline: GAME_CONFIG.deadlineIso,
+        config: GAME_CONFIG,
+        currentDraft: { qualifiers: qDraft, main: mDraft },
+        lastValidSnapshots: state.lastValid,
+        effectiveAtLockout: {
+          qualifiers: qDraft.valid ? qDraft : state.lastValid.qualifiers,
+          main: mDraft.valid ? mDraft : state.lastValid.main
+        }
+      };
+      document.getElementById("exportArea").value = JSON.stringify(payload, null, 2);
+    });
+
+    document.getElementById("copyExportBtn").addEventListener("click", async () => {
+      const area = document.getElementById("exportArea");
+      if (!area.value) document.getElementById("exportJsonBtn").click();
+      if (area.value) {
+        await navigator.clipboard.writeText(area.value);
+        alert("Copied submission JSON to clipboard.");
+      }
+    });
+
+    document.getElementById("resetAllBtn").addEventListener("click", () => {
+      if (!sessionAuth.loggedIn || isPastDeadline()) return;
+      localStorage.removeItem(STORAGE_KEY);
+      state = defaultState();
+      renderAll();
+      document.getElementById("exportArea").value = "";
+    });
+
+    populateCountryFilter("qualifiers", "qualCountryFilter");
+    populateCountryFilter("main", "mainCountryFilter");
+    updateCountdown();
+    setInterval(updateCountdown, 1000);
+    renderAll();
+  </script>
+</body>
+</html>

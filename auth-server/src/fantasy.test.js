@@ -1,0 +1,553 @@
+import assert from "node:assert/strict";
+import { mkdtemp, rm } from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
+import test from "node:test";
+import sqlite3 from "sqlite3";
+
+import {
+  describeTeamState,
+  ensureFantasySchema,
+  getFantasyStatus,
+  normalizeLeagueSettings,
+  normalizeTeamInput,
+  registerFantasyRoutes,
+  SEED_LEAGUES,
+} from "./fantasy.js";
+import {
+  applyFantasyPricePlan,
+  buildFantasyPricePlan,
+  parseCsv,
+  readPriceRows,
+} from "./fantasy-import.js";
+
+function exec(db, sql) {
+  return new Promise((resolve, reject) => {
+    db.exec(sql, (error) => (error ? reject(error) : resolve()));
+  });
+}
+
+function all(db, sql, params = []) {
+  return new Promise((resolve, reject) => {
+    db.all(sql, params, (error, rows) => (error ? reject(error) : resolve(rows || [])));
+  });
+}
+
+function close(db) {
+  return new Promise((resolve) => db.close(resolve));
+}
+
+const LEAGUE_ID = "CCL-2027-Q";
+const LEAGUE = { ...SEED_LEAGUES[0], stages: ["Q1", "Q2", "Q3"] };
+const UPCOMING = new Date("2026-11-23T12:00:00Z");
+const OPEN = new Date("2026-11-25T12:00:00Z");
+const LATE = new Date("2026-11-30T12:00:00Z");
+const CLOSED = new Date("2026-12-05T00:00:00Z");
+
+const USERS = {
+  fan: { id: 1, name: "Fan One" },
+  player: { id: 2, name: "Jan Account", player_id: "p1", bga_nickname: "Jan" },
+  other: { id: 3, name: "Other Fan" },
+  admin: { id: 10, admin: 1, email: "admin@example.com" },
+  leagueAdmin: { id: 11, admin: 0, email: "matt@example.com" },
+  stranger: { id: 12, admin: 0 },
+};
+
+// Slots s1–s7 are qualifiers with prices; m1 is a Main slot (priced, but not in the league stages);
+// s8 has no player yet; x1 belongs to another tournament.
+async function createDatabase(t) {
+  const db = new sqlite3.Database(":memory:");
+  t.after(() => close(db));
+  await exec(db, `
+    PRAGMA foreign_keys = ON;
+    CREATE TABLE tournaments (id TEXT PRIMARY KEY COLLATE NOCASE, name TEXT NOT NULL, type TEXT, category TEXT);
+    INSERT INTO tournaments VALUES
+      ('CCL-2027', 'Carcassonne Champions League 2027', 'Individuals', 'CCL'),
+      ('CCL-2026', 'Carcassonne Champions League 2026', 'Individuals', 'CCL');
+    CREATE TABLE associations (association_row_id INTEGER PRIMARY KEY AUTOINCREMENT, code TEXT, name TEXT NOT NULL, flag TEXT);
+    INSERT INTO associations (code, name, flag) VALUES ('POL', 'Poland', 'pl.png'), ('UKR', 'Ukraine', 'ua.png');
+    CREATE TABLE profiles (id TEXT PRIMARY KEY, bga_nickname TEXT, name TEXT, deleted_at TEXT);
+    INSERT INTO profiles (id, bga_nickname) VALUES
+      ('p1', 'Jan'), ('p2', 'Kasia'), ('p3', 'Taras'), ('p4', 'Olena'), ('p5', 'Marek'), ('p6', 'Ivan'),
+      ('p7', 'Zosia'), ('p9', 'Main Star'), ('p10', 'Old Timer');
+    CREATE TABLE tournament_players (
+      id TEXT PRIMARY KEY COLLATE NOCASE, tournament_id TEXT NOT NULL, team_id TEXT, player_id TEXT,
+      association_id TEXT, entry_stage TEXT, league_status TEXT, created_at TEXT DEFAULT CURRENT_TIMESTAMP
+    );
+    INSERT INTO tournament_players (id, tournament_id, player_id, association_id, entry_stage, league_status) VALUES
+      ('s1', 'CCL-2027', 'p1', 'POL', 'Q1', NULL),
+      ('s2', 'CCL-2027', 'p2', 'POL', 'Q1', NULL),
+      ('s3', 'CCL-2027', 'p3', 'UKR', 'Q2', NULL),
+      ('s4', 'CCL-2027', 'p4', 'UKR', 'Q2', NULL),
+      ('s5', 'CCL-2027', 'p5', 'POL', 'Q3', NULL),
+      ('s6', 'CCL-2027', 'p6', 'UKR', 'Q3', 'eliminated'),
+      ('s7', 'CCL-2027', 'p7', 'POL', 'Q3', NULL),
+      ('s8', 'CCL-2027', NULL, 'POL', 'Q3', NULL),
+      ('m1', 'CCL-2027', 'p9', 'POL', 'Main', NULL),
+      ('x1', 'CCL-2026', 'p10', 'POL', 'Q1', NULL);
+    CREATE TABLE ccl_stage_entries (tournament_id TEXT, stage TEXT, slot_id TEXT, seed TEXT);
+    INSERT INTO ccl_stage_entries VALUES ('CCL-2027', 'Q1', 's1', 'Seeded'), ('CCL-2027', 'Q1', 's2', 'Unseeded');
+    CREATE TABLE duels (
+      id TEXT PRIMARY KEY, tournament_id TEXT, source_type TEXT, deleted_at TEXT, stage TEXT, group_name TEXT,
+      player_1_id TEXT, player_2_id TEXT
+    );
+    INSERT INTO duels VALUES
+      ('d1', 'CCL-2027', 'ccl', NULL, 'Q1', 'A', 'p1', 'p2'),
+      ('d2', 'CCL-2027', 'ccl', NULL, 'Q3', 'X', 'p5', 'p6');
+    CREATE TABLE users (id INTEGER PRIMARY KEY, email TEXT, name TEXT, bga_id TEXT);
+    INSERT INTO users (id, email, name, bga_id) VALUES
+      (1, 'fan@example.com', 'Fan One', NULL), (2, 'jan@example.com', 'Jan Account', 'p1'), (3, NULL, 'Other Fan', NULL),
+      (10, 'admin@example.com', 'Admin', NULL), (11, 'Matt@Example.com', 'Matt', NULL), (12, 'x@example.com', 'X', NULL),
+      (13, 'twin@example.com', 'Twin A', NULL), (14, 'twin@example.com', 'Twin B', NULL);
+  `);
+  await ensureFantasySchema(db);
+  await ensureFantasySchema(db);
+  await exec(db, `
+    INSERT INTO fantasy_league_admins (league_id, user_id, added_by) VALUES ('CCL-2027-Q', 11, 'test');
+    INSERT INTO fantasy_prices (league_id, slot_id, stage, price, effective_from, source_record_id) VALUES
+      ('CCL-2027-Q', 's1', 'Q1', 20, '2026-11-23T00:00:00.000Z', '101'),
+      ('CCL-2027-Q', 's2', 'Q1', 18.5, '2026-11-23T00:00:00.000Z', '102'),
+      ('CCL-2027-Q', 's3', 'Q2', 10, '2026-11-23T00:00:00.000Z', '103'),
+      ('CCL-2027-Q', 's3', 'Q2', 12, '2026-11-26T00:00:00.000Z', '103'),
+      ('CCL-2027-Q', 's4', 'Q2', 8, '2026-11-23T00:00:00.000Z', '104'),
+      ('CCL-2027-Q', 's5', 'Q3', 6, '2026-11-23T00:00:00.000Z', '105'),
+      ('CCL-2027-Q', 's6', 'Q3', 5, '2026-11-23T00:00:00.000Z', '106'),
+      ('CCL-2027-Q', 's7', 'Q3', 3.5, '2026-11-23T00:00:00.000Z', '107'),
+      ('CCL-2027-Q', 'm1', 'Main', 10, '2026-11-23T00:00:00.000Z', '109');
+  `);
+  return db;
+}
+
+function createApi(db, { now = OPEN } = {}) {
+  const routes = new Map();
+  const app = {};
+  for (const method of ["get", "post", "put", "patch", "delete"]) {
+    app[method] = (routePath, ...handlers) => routes.set(`${method.toUpperCase()} ${routePath}`, handlers.at(-1));
+  }
+  const audit = [];
+  const clock = { now };
+  registerFantasyRoutes(app, {
+    db,
+    getAuditActor: (user) => ({ actor_user_id: user?.id ?? null }),
+    logAuditEvent: (entry, done) => {
+      audit.push(entry);
+      done();
+    },
+    logger: { error() {} },
+    now: () => clock.now,
+  });
+  const call = async (route, { user = null, leagueId = LEAGUE_ID, params = {}, body = {}, query = {} } = {}) => {
+    const handler = routes.get(route);
+    assert.ok(handler, `route ${route} is not registered`);
+    const result = { status: 200, body: null };
+    const res = {
+      status(code) {
+        result.status = code;
+        return this;
+      },
+      json(value) {
+        result.body = value;
+        return this;
+      },
+    };
+    await handler({ user, params: { leagueId, ...params }, body, query }, res);
+    return result;
+  };
+  return { call, audit, clock };
+}
+
+const state = (api, user = null) => api.call("GET /public/fantasy/:leagueId", { user });
+const save = (api, user, slotIds, teamName = "Meeple Masters") => (
+  api.call("PUT /fantasy/:leagueId/team", { user, body: { team_name: teamName, slot_ids: slotIds } })
+);
+const commit = (api, user, slotIds, teamName = "Meeple Masters") => (
+  api.call("POST /fantasy/:leagueId/team/commit", { user, body: { team_name: teamName, slot_ids: slotIds } })
+);
+const teams = (api, user) => api.call("GET /fantasy/:leagueId/teams", { user });
+
+const CHEAP_FIVE = ["s3", "s4", "s5", "s6", "s7"]; // 10 + 8 + 6 + 5 + 3.5 = 32.5
+
+test("the qualifiers league is created once its tournament exists", async (t) => {
+  const db = await createDatabase(t);
+  const rows = await all(db, "SELECT id, tournament_id, stages, team_size, budget, main_deadline FROM fantasy_leagues");
+  assert.deepEqual(rows, [{
+    id: "CCL-2027-Q", tournament_id: "CCL-2027", stages: "Q1,Q2,Q3", team_size: 5, budget: 50,
+    main_deadline: "2026-11-27T23:59:59.000Z",
+  }]);
+
+  const empty = new sqlite3.Database(":memory:");
+  t.after(() => close(empty));
+  await exec(empty, "CREATE TABLE tournaments (id TEXT PRIMARY KEY COLLATE NOCASE, name TEXT);");
+  await ensureFantasySchema(empty);
+  assert.deepEqual(await all(empty, "SELECT id FROM fantasy_leagues"), []);
+});
+
+test("league status moves through upcoming, open, late and closed at the deadlines", () => {
+  assert.equal(getFantasyStatus(LEAGUE, UPCOMING), "upcoming");
+  assert.equal(getFantasyStatus(LEAGUE, new Date(LEAGUE.opens_at)), "open");
+  assert.equal(getFantasyStatus(LEAGUE, new Date(Date.parse(LEAGUE.main_deadline) - 1000)), "open");
+  assert.equal(getFantasyStatus(LEAGUE, new Date(LEAGUE.main_deadline)), "late");
+  assert.equal(getFantasyStatus(LEAGUE, new Date(Date.parse(LEAGUE.late_deadline) - 1000)), "late");
+  assert.equal(getFantasyStatus(LEAGUE, new Date(LEAGUE.late_deadline)), "closed");
+});
+
+test("team state: full main teams lock at the main deadline, late teams only by Commit", () => {
+  const main = { entry_type: "main", locked_at: null };
+  const late = { entry_type: "late", locked_at: null };
+  const committed = { entry_type: "late", locked_at: "2026-11-30T12:00:00.000Z" };
+  assert.deepEqual(describeTeamState(main, 5, LEAGUE, "open"), { state: "complete", locked: false, can_edit: true, can_commit: false });
+  assert.deepEqual(describeTeamState(main, 3, LEAGUE, "open"), { state: "draft", locked: false, can_edit: true, can_commit: false });
+  assert.deepEqual(describeTeamState(main, 5, LEAGUE, "late"), { state: "locked", locked: true, can_edit: false, can_commit: false });
+  assert.deepEqual(describeTeamState(main, 3, LEAGUE, "late"), { state: "draft", locked: false, can_edit: true, can_commit: false });
+  assert.deepEqual(describeTeamState(late, 5, LEAGUE, "late"), { state: "draft", locked: false, can_edit: true, can_commit: true });
+  assert.deepEqual(describeTeamState(committed, 5, LEAGUE, "late"), { state: "committed", locked: true, can_edit: false, can_commit: false });
+  assert.equal(describeTeamState(late, 5, LEAGUE, "closed").state, "not_entered");
+  assert.equal(describeTeamState(main, 5, LEAGUE, "closed").state, "locked");
+});
+
+test("team input needs a name and at most 5 different players", () => {
+  assert.equal(normalizeTeamInput({ team_name: "  ", slot_ids: [] }, LEAGUE).error, "Enter a team name");
+  assert.match(normalizeTeamInput({ team_name: "x".repeat(41), slot_ids: [] }, LEAGUE).error, /at most 40/);
+  assert.equal(normalizeTeamInput({ team_name: "A", slot_ids: "s1" }, LEAGUE).error, "slot_ids must be a list");
+  assert.equal(normalizeTeamInput({ team_name: "A", slot_ids: ["s1", "S1"] }, LEAGUE).error, "A player can be picked only once");
+  assert.match(normalizeTeamInput({ team_name: "A", slot_ids: ["s1", "s2", "s3", "s4", "s5", "s6"] }, LEAGUE).error, /at most 5/);
+  assert.deepEqual(
+    normalizeTeamInput({ team_name: "  My   team ", slot_ids: [" s1 "] }, LEAGUE).value,
+    { team_name: "My team", slot_ids: ["s1"] }
+  );
+});
+
+test("league settings: name, budget and dates in order, nothing else", () => {
+  assert.deepEqual(
+    normalizeLeagueSettings({ budget: 55.5, main_deadline: "2026-11-28T23:59:59Z" }, LEAGUE).value,
+    { budget: 55.5, main_deadline: "2026-11-28T23:59:59.000Z" }
+  );
+  assert.match(normalizeLeagueSettings({ budget: 50.3 }, LEAGUE).error, /steps of 0.5/);
+  assert.match(normalizeLeagueSettings({ opens_at: "2026-11-24" }, LEAGUE).error, /date and time in UTC/);
+  assert.match(normalizeLeagueSettings({ late_deadline: "2026-11-26T00:00:00Z" }, LEAGUE).error, /in order/);
+  assert.equal(normalizeLeagueSettings({ name: " " }, LEAGUE).error, "Enter the league name");
+  assert.equal(normalizeLeagueSettings({ team_size: 6, stages: "Main" }, LEAGUE).error, "Nothing to change");
+});
+
+test("state lists priced players of the league stages with the current price, group, seed and elimination", async (t) => {
+  const db = await createDatabase(t);
+  const api = createApi(db);
+
+  const result = await state(api);
+  assert.equal(result.status, 200);
+  assert.equal(result.body.league.status, "open");
+  assert.equal(result.body.league.budget, 50);
+  assert.deepEqual(result.body.league.stages, ["Q1", "Q2", "Q3"]);
+  assert.deepEqual(result.body.viewer, { authenticated: false, name: null, team: null });
+  // The Main slot, the empty slot and the other tournament are left out; prices are the ones in force now.
+  assert.deepEqual(
+    result.body.players.map((player) => [player.slot_id, player.price]),
+    [["s1", 20], ["s2", 18.5], ["s3", 10], ["s4", 8], ["s5", 6], ["s6", 5], ["s7", 3.5]]
+  );
+  const jan = result.body.players[0];
+  assert.equal(jan.nickname, "Jan");
+  assert.equal(jan.group, "A");
+  assert.equal(jan.seed, "Seeded");
+  assert.deepEqual(jan.association, { id: "POL", name: "Poland", flag: "pl.png" });
+  assert.equal(result.body.players.find((player) => player.slot_id === "s6").eliminated, true);
+
+  api.clock.now = new Date("2026-11-27T12:00:00Z");
+  const later = await state(api);
+  assert.equal(later.body.players.find((player) => player.slot_id === "s3").price, 12);
+  assert.equal((await api.call("GET /public/fantasy/:leagueId", { leagueId: "NOPE" })).status, 404);
+});
+
+test("a user saves a draft, completes it and sees only their own team", async (t) => {
+  const db = await createDatabase(t);
+  const api = createApi(db);
+
+  const draft = await save(api, USERS.fan, ["s1", "s3"]);
+  assert.equal(draft.status, 201);
+  assert.equal(draft.body.team.state, "draft");
+  assert.equal(draft.body.team.cost, 30);
+  assert.equal(draft.body.team.entry_type, "main");
+
+  const full = await save(api, USERS.fan, ["s1", "s3", "s4", "s5", "s7"], "Final Name");
+  assert.equal(full.status, 200);
+  assert.equal(full.body.team.id, draft.body.team.id);
+  assert.equal(full.body.team.state, "complete");
+  assert.equal(full.body.team.team_name, "Final Name");
+  assert.equal(full.body.team.cost, 47.5);
+
+  const mine = await state(api, USERS.fan);
+  assert.equal(mine.body.viewer.name, "Fan One");
+  assert.deepEqual(mine.body.viewer.team.players.map((player) => player.slot_id).sort(), ["s1", "s3", "s4", "s5", "s7"]);
+  assert.equal((await state(api, USERS.other)).body.viewer.team, null);
+  assert.equal((await state(api, USERS.player)).body.viewer.name, "Jan");
+  assert.equal(api.audit.length, 2);
+  assert.equal(api.audit[0].event_type, "fantasy_team.saved");
+});
+
+test("saving checks the budget and the players", async (t) => {
+  const db = await createDatabase(t);
+  const api = createApi(db);
+
+  const over = await save(api, USERS.fan, ["s1", "s2", "s3", "s4"]);
+  assert.equal(over.status, 400);
+  assert.match(over.body.message, /costs 56\.5, over the budget of 50/);
+  // Exactly the budget is allowed.
+  assert.equal((await save(api, USERS.fan, ["s1", "s2", "s7", "s4"])).status, 201);
+  for (const slot of ["m1", "x1", "s8", "nope"]) {
+    const result = await save(api, USERS.other, [slot]);
+    assert.equal(result.status, 400, slot);
+    assert.match(result.body.message, /Player not available/);
+  }
+  assert.equal((await save(api, USERS.other, ["s1", "s1"])).status, 400);
+  assert.equal((await api.call("PUT /fantasy/:leagueId/team", { user: null, body: {} })).status, 401);
+  assert.equal((await all(db, "SELECT COUNT(*) AS count FROM fantasy_teams"))[0].count, 1);
+});
+
+test("players kept in a team keep the price they were picked at", async (t) => {
+  const db = await createDatabase(t);
+  const api = createApi(db);
+  await save(api, USERS.fan, ["s3", "s4"]);
+  api.clock.now = new Date("2026-11-27T12:00:00Z");
+  const result = await save(api, USERS.fan, ["s3", "s4", "s5"]);
+  assert.equal(result.status, 200);
+  assert.deepEqual(
+    result.body.team.players.map((player) => [player.slot_id, player.price_at_pick]),
+    [["s3", 10], ["s4", 8], ["s5", 6]]
+  );
+  // Dropped and picked again: bought at today's price.
+  await save(api, USERS.fan, ["s4"]);
+  const again = await save(api, USERS.fan, ["s3", "s4"]);
+  assert.deepEqual(again.body.team.players.map((player) => [player.slot_id, player.price_at_pick]), [["s3", 12], ["s4", 8]]);
+});
+
+test("nothing can be saved before opening or after the late deadline", async (t) => {
+  const db = await createDatabase(t);
+  const before = await save(createApi(db, { now: UPCOMING }), USERS.fan, ["s3"]);
+  assert.equal(before.status, 409);
+  assert.equal(before.body.message, "Team building has not started yet");
+  const after = await save(createApi(db, { now: CLOSED }), USERS.fan, ["s3"]);
+  assert.equal(after.status, 409);
+  assert.equal(after.body.message, "Team building is closed");
+});
+
+test("a full main team is locked from the main deadline", async (t) => {
+  const db = await createDatabase(t);
+  const api = createApi(db);
+  await save(api, USERS.fan, CHEAP_FIVE);
+  api.clock.now = new Date(LEAGUE.main_deadline);
+  const result = await save(api, USERS.fan, ["s1"]);
+  assert.equal(result.status, 409);
+  assert.equal(result.body.message, "Your team is locked and cannot be changed");
+  const view = await state(api, USERS.fan);
+  assert.equal(view.body.viewer.team.state, "locked");
+  assert.equal(view.body.viewer.team.scoring_from, null);
+  assert.equal((await commit(api, USERS.fan, CHEAP_FIVE)).status, 409);
+});
+
+test("late entry: save keeps a draft, Commit locks it and starts scoring", async (t) => {
+  const db = await createDatabase(t);
+  const api = createApi(db);
+  // An incomplete main draft becomes a late entry after the main deadline.
+  await save(api, USERS.fan, ["s3"]);
+  api.clock.now = LATE;
+
+  assert.equal((await commit(createApi(db, { now: OPEN }), USERS.other, CHEAP_FIVE)).status, 409);
+
+  const draft = await save(api, USERS.fan, CHEAP_FIVE);
+  assert.equal(draft.status, 200);
+  assert.equal(draft.body.team.entry_type, "late");
+  assert.equal(draft.body.team.state, "draft");
+  assert.equal(draft.body.team.can_commit, true);
+  assert.equal(draft.body.team.scoring_from, null);
+
+  const short = await commit(api, USERS.fan, ["s3", "s4"]);
+  assert.equal(short.status, 400);
+  assert.match(short.body.message, /Pick 5 players/);
+
+  const committed = await commit(api, USERS.fan, CHEAP_FIVE, "Late Team");
+  assert.equal(committed.status, 200);
+  assert.equal(committed.body.team.state, "committed");
+  assert.equal(committed.body.team.locked_at, LATE.toISOString());
+  assert.equal(committed.body.team.scoring_from, LATE.toISOString());
+  assert.equal(api.audit.at(-1).event_type, "fantasy_team.committed");
+
+  assert.equal((await save(api, USERS.fan, ["s3"])).status, 409);
+  assert.equal((await commit(api, USERS.fan, CHEAP_FIVE)).status, 409);
+
+  // A new user can commit straight away, without a draft first (s3 now costs 12: 49.5 in all).
+  const direct = await commit(api, USERS.other, ["s1", "s3", "s4", "s5", "s7"]);
+  assert.equal(direct.status, 200);
+  assert.equal(direct.body.team.state, "committed");
+});
+
+test("league admins and site admins get every team with its players", async (t) => {
+  const db = await createDatabase(t);
+  const api = createApi(db);
+  await save(api, USERS.player, CHEAP_FIVE, "Jan's Five");
+  await save(api, USERS.fan, ["s1"], "Fan Draft");
+  api.clock.now = LATE;
+  await commit(api, USERS.other, ["s1", "s3", "s4", "s5", "s7"], "Late One");
+
+  assert.equal((await teams(api, USERS.stranger)).status, 403);
+  const result = await teams(api, USERS.leagueAdmin);
+  assert.equal(result.status, 200);
+  assert.deepEqual(result.body.counts, { total: 3, complete: 2, drafts: 1, late: 1, committed: 1 });
+  const jan = result.body.teams.find((team) => team.team_name === "Jan's Five");
+  assert.equal(jan.owner, "Jan");
+  assert.equal(jan.state, "locked");
+  assert.equal(jan.locked_at, LEAGUE.main_deadline);
+  assert.equal(jan.cost, 32.5);
+  assert.deepEqual(jan.players[0], { slot_id: "s3", player: "Taras", stage: "Q2", record_id: "103", price_at_pick: 10 });
+  const fan = result.body.teams.find((team) => team.team_name === "Fan Draft");
+  assert.equal(fan.owner, "Fan One");
+  assert.equal(fan.state, "draft");
+  assert.equal(result.body.teams.find((team) => team.team_name === "Late One").scoring_from, LATE.toISOString());
+  assert.equal((await teams(api, USERS.admin)).status, 200);
+});
+
+test("managed leagues: site admins see all, league admins their own, others none", async (t) => {
+  const db = await createDatabase(t);
+  const api = createApi(db);
+  const managed = (user) => api.call("GET /fantasy/leagues/managed", { user });
+  const admin = await managed(USERS.admin);
+  assert.equal(admin.body.can_manage_settings, true);
+  assert.deepEqual(admin.body.leagues.map((league) => league.id), ["CCL-2027-Q"]);
+  const matt = await managed(USERS.leagueAdmin);
+  assert.equal(matt.body.can_manage_settings, false);
+  assert.deepEqual(matt.body.leagues.map((league) => [league.id, league.status]), [["CCL-2027-Q", "open"]]);
+  assert.deepEqual((await managed(USERS.fan)).body.leagues, []);
+});
+
+test("only site admins change league settings", async (t) => {
+  const db = await createDatabase(t);
+  const api = createApi(db);
+  const patch = (user, body) => api.call("PATCH /fantasy/:leagueId", { user, body });
+  assert.equal((await patch(USERS.leagueAdmin, { budget: 60 })).status, 403);
+  assert.equal((await patch(USERS.admin, { budget: 60.2 })).status, 400);
+  const result = await patch(USERS.admin, { budget: 55, late_deadline: "2026-12-06T23:59:59Z" });
+  assert.equal(result.status, 200);
+  assert.equal(result.body.league.budget, 55);
+  assert.equal(result.body.league.late_deadline, "2026-12-06T23:59:59.000Z");
+  assert.equal(api.audit.at(-1).event_type, "fantasy_league.updated");
+  assert.deepEqual(api.audit.at(-1).changes.budget, { old: 50, new: 55 });
+  // The new budget applies to saves at once: 20 + 18.5 + 8 + 6 = 52.5.
+  assert.equal((await save(api, USERS.fan, ["s1", "s2", "s4", "s5"])).status, 201);
+});
+
+test("site admins add and remove league admins by the email of their site account", async (t) => {
+  const db = await createDatabase(t);
+  const api = createApi(db);
+  const add = (user, email) => api.call("POST /fantasy/:leagueId/admins", { user, body: { email } });
+  const list = (user) => api.call("GET /fantasy/:leagueId/admins", { user });
+  const remove = (user, userId) => api.call("DELETE /fantasy/:leagueId/admins/:userId", { user, params: { userId: String(userId) } });
+
+  assert.equal((await add(USERS.leagueAdmin, "fan@example.com")).status, 403);
+  assert.equal((await list(USERS.leagueAdmin)).status, 403);
+  assert.equal((await add(USERS.admin, "nobody@example.com")).status, 404);
+  assert.equal((await add(USERS.admin, "twin@example.com")).status, 409);
+  const added = await add(USERS.admin, " FAN@example.com ");
+  assert.equal(added.status, 201);
+  assert.equal(added.body.user_id, 1);
+  assert.equal((await add(USERS.admin, "fan@example.com")).status, 200);
+  assert.deepEqual((await list(USERS.admin)).body.admins.map((row) => [row.user_id, row.email]), [
+    [11, "Matt@Example.com"], [1, "fan@example.com"],
+  ]);
+  // The new league admin sees the teams.
+  assert.equal((await teams(api, USERS.fan)).status, 200);
+  assert.equal((await remove(USERS.admin, 1)).status, 200);
+  assert.equal((await remove(USERS.admin, 1)).status, 404);
+  assert.equal((await teams(api, USERS.fan)).status, 403);
+});
+
+test("CSV parsing handles quotes, empty lines and a BOM", () => {
+  const rows = parseCsv("﻿Record ID,country,player,qualifyingGroup,stage,Price\r\n1,Chile,\"Doe, \"\"JD\"\"\",A,Q1,10\r\n\r\n2,Poland,Kasia,\"\",Q1,4.5\n");
+  assert.deepEqual(rows.map((row) => [row["Record ID"], row.player, row.qualifyingGroup, row.Price]), [
+    ["1", "Doe, \"JD\"", "A", "10"],
+    ["2", "Kasia", "", "4.5"],
+  ]);
+  assert.throws(() => parseCsv("player,stage\nx,Q1"), /no column Record ID, Price/);
+});
+
+const CSV = [
+  "Record ID,country,currentPoints,elo,player,qualifyingGroup,seeded,stage,Price",
+  "1,Poland,,1600,jan,A,1,Q1,20",
+  "2,Poland,,1500,Kasia,B,0,Q1,18.5",
+  "3,Ukraine,,1500,Taras,,1,Q2,10",
+  "4,Ukraine,,1500,Olena,,0,Q2,8",
+  "5,Poland,,1500,Marek,X,0,Q3,6",
+  "6,Ukraine,,1500,Ivan,X,0,Q3,5",
+  "7,Ukraine,,1500,Zosia,,0,Q3,3.5",
+  "9,Poland,,1700,Main Star,,,Main,10",
+  "10,Argentina,,1600,Argentina main draw contestant 1,,,Main,10",
+].join("\n");
+
+async function createImportDatabase(t) {
+  const db = await createDatabase(t);
+  await exec(db, "DELETE FROM fantasy_prices");
+  return db;
+}
+
+test("the price plan matches players by nickname and stage and reports problems", async (t) => {
+  const db = await createImportDatabase(t);
+  const plan = await buildFantasyPricePlan(db, {
+    rows: readPriceRows(parseCsv(CSV)), leagueId: LEAGUE_ID, effectiveFrom: "2026-11-24T00:00:00Z", source: "test.csv",
+  });
+  assert.equal(plan.summary.ready, true);
+  assert.equal(plan.effective_from, "2026-11-24T00:00:00.000Z");
+  assert.deepEqual(plan.summary.skipped_by_stage, { Main: 2 });
+  assert.deepEqual(plan.prices.map((row) => [row.slot_id, row.price, row.source_record_id]), [
+    ["s1", 20, "1"], ["s2", 18.5, "2"], ["s3", 10, "3"], ["s4", 8, "4"], ["s5", 6, "5"], ["s6", 5, "6"], ["s7", 3.5, "7"],
+  ]);
+  // Kasia plays in group A on the site; Zosia's country differs.
+  assert.deepEqual(plan.warnings.map((warning) => [warning.code, warning.player]), [
+    ["GROUP_MISMATCH", "Kasia"], ["COUNTRY_MISMATCH", "Zosia"],
+  ]);
+
+  const broken = CSV
+    .replace("1,Poland,,1600,jan,A,1,Q1,20", "1,Poland,,1600,Janek,A,1,Q1,20")
+    .replace("3,Ukraine,,1500,Taras,,1,Q2,10", "3,Ukraine,,1500,Taras,,1,Q2,10.3")
+    .concat("\n11,Poland,,1500,Kasia,B,0,Q1,4");
+  const bad = await buildFantasyPricePlan(db, {
+    rows: readPriceRows(parseCsv(broken)), leagueId: LEAGUE_ID, effectiveFrom: "2026-11-24T00:00:00Z",
+  });
+  assert.equal(bad.summary.ready, false);
+  assert.deepEqual(bad.issues.map((issue) => [issue.code, issue.player]), [
+    ["UNMATCHED_PLAYER", "Janek"],
+    ["INVALID_PRICE", "Taras"],
+    ["DUPLICATE_PLAYER", "Kasia"],
+    ["MISSING_PRICE", "Jan"],
+    ["MISSING_PRICE", "Taras"],
+  ]);
+  await assert.rejects(
+    buildFantasyPricePlan(db, { rows: [], leagueId: "NOPE", effectiveFrom: "2026-11-24T00:00:00Z" }),
+    { code: "NO_LEAGUE" }
+  );
+});
+
+test("applying a plan backs up, writes the prices and refuses stale or edited plans", async (t) => {
+  const dir = await mkdtemp(path.join(os.tmpdir(), "fantasy-"));
+  t.after(() => rm(dir, { recursive: true, force: true }));
+  const db = await createImportDatabase(t);
+  const build = (csv, effectiveFrom) => buildFantasyPricePlan(db, {
+    rows: readPriceRows(parseCsv(csv)), leagueId: LEAGUE_ID, effectiveFrom,
+  });
+
+  const plan = await build(CSV, "2026-11-24T00:00:00Z");
+  await assert.rejects(applyFantasyPricePlan(db, { ...plan, effective_from: "2026-11-25T00:00:00.000Z" }, { backupDir: dir }), { code: "INVALID_PLAN" });
+  const result = await applyFantasyPricePlan(db, plan, { backupDir: dir });
+  assert.equal(result.applied, true);
+  assert.equal(result.prices, 7);
+  assert.ok(result.backup_path.startsWith(dir));
+  assert.equal((await all(db, "SELECT COUNT(*) AS count FROM fantasy_prices"))[0].count, 7);
+  // The same plan again is stale: the prices it adds are now in the database.
+  await assert.rejects(applyFantasyPricePlan(db, plan, { backupDir: dir }), { code: "STALE_PLAN" });
+
+  // A later import adds only the changed price, as a new row of the history.
+  const update = await build(CSV.replace("Olena,,0,Q2,8", "Olena,,0,Q2,9"), "2026-12-01T00:00:00Z");
+  assert.deepEqual(update.prices.map((row) => [row.slot_id, row.old_price, row.price]), [["s4", 8, 9]]);
+  assert.equal(update.unchanged.length, 6);
+  await applyFantasyPricePlan(db, update, { backupDir: dir });
+  assert.deepEqual(
+    await all(db, "SELECT price, effective_from FROM fantasy_prices WHERE slot_id = 's4' ORDER BY effective_from"),
+    [{ price: 8, effective_from: "2026-11-24T00:00:00.000Z" }, { price: 9, effective_from: "2026-12-01T00:00:00.000Z" }]
+  );
+});

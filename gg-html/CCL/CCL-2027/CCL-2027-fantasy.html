@@ -1,0 +1,777 @@
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+
+<!-- СТИЛІ -->
+<style>
+  :root {
+    --main-bg-color: #15375c;
+    --hover-bg-color: #0e2c4d;
+    --line: #dce3ec;
+    --soft: #f5f7fa;
+    --muted: #5b6b7c;
+    --ok-bg: #ecfdf5;
+    --ok-ink: #065f46;
+    --warn-bg: #fffbeb;
+    --warn-ink: #92400e;
+    --bad-bg: #fef2f2;
+    --bad-ink: #991b1b;
+  }
+
+  .ff-wrap {
+    font-family: 'Montserrat', sans-serif;
+    color: #16202a;
+    max-width: 1100px;
+    margin: 0 auto;
+    padding: 4px 2px 24px;
+    display: grid;
+    gap: 14px;
+    font-size: 14px;
+    line-height: 1.45;
+  }
+
+  .ff-wrap * { box-sizing: border-box; }
+
+  .ff-head {
+    background: var(--main-bg-color);
+    color: #fff;
+    border-radius: 6px;
+    padding: 14px 16px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  .ff-head h2 { margin: 0; font-size: 18px; }
+  .ff-head p { margin: 4px 0 0; color: #cbd5e1; font-size: 13px; }
+
+  .ff-clock {
+    background: var(--hover-bg-color);
+    border-radius: 6px;
+    padding: 8px 12px;
+    min-width: 200px;
+  }
+
+  .ff-clock-label { font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; color: #9fb3c8; }
+  .ff-clock-value { font-size: 16px; font-weight: 700; font-variant-numeric: tabular-nums; }
+
+  .ff-note {
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    padding: 10px 14px;
+    background: var(--soft);
+  }
+
+  .ff-note.ok { background: var(--ok-bg); color: var(--ok-ink); border-color: #a7f3d0; }
+  .ff-note.warn { background: var(--warn-bg); color: var(--warn-ink); border-color: #fde68a; }
+  .ff-note.bad { background: var(--bad-bg); color: var(--bad-ink); border-color: #fecaca; }
+  .ff-note strong { font-weight: 700; }
+  .ff-note .ff-btn { margin-top: 8px; }
+
+  .ff-grid {
+    display: grid;
+    grid-template-columns: minmax(300px, 380px) 1fr;
+    gap: 14px;
+    align-items: start;
+  }
+
+  .ff-panel {
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    padding: 14px;
+    background: #fff;
+  }
+
+  .ff-panel-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 10px;
+  }
+
+  .ff-panel-head h3 { margin: 0; font-size: 16px; }
+
+  .ff-badge {
+    padding: 2px 9px;
+    border-radius: 999px;
+    font-size: 12px;
+    font-weight: 700;
+    white-space: nowrap;
+  }
+
+  .ff-badge.ok { background: var(--ok-bg); color: var(--ok-ink); }
+  .ff-badge.warn { background: var(--warn-bg); color: var(--warn-ink); }
+  .ff-badge.bad { background: var(--bad-bg); color: var(--bad-ink); }
+  .ff-badge.info { background: #e0ebf7; color: var(--main-bg-color); }
+
+  .ff-field label { display: block; font-size: 12px; font-weight: 600; color: var(--muted); margin-bottom: 4px; }
+
+  .ff-input, .ff-select {
+    width: 100%;
+    height: 34px;
+    padding: 0 10px;
+    border: 1px solid #c8ced8;
+    border-radius: 4px;
+    font: inherit;
+    font-size: 14px;
+    background: #fff;
+  }
+
+  .ff-input:disabled { background: var(--soft); color: #444; }
+
+  .ff-metrics {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 6px;
+    margin: 12px 0;
+    padding: 8px;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    background: var(--soft);
+    font-size: 12px;
+    color: var(--muted);
+  }
+
+  .ff-metrics strong { display: block; font-size: 15px; color: #16202a; font-variant-numeric: tabular-nums; }
+  .ff-metrics .over strong { color: var(--bad-ink); }
+
+  .ff-slot {
+    display: grid;
+    grid-template-columns: 22px 1fr auto 30px;
+    gap: 8px;
+    align-items: center;
+    min-height: 38px;
+    padding: 4px 6px;
+    border: 1px dashed #c8ced8;
+    border-radius: 4px;
+    margin-bottom: 6px;
+  }
+
+  .ff-slot.filled { border-style: solid; background: #fff; }
+  .ff-slot-no { color: var(--muted); font-size: 12px; text-align: center; }
+  .ff-slot-empty { color: #9aa1ab; font-size: 13px; }
+  .ff-slot-price { font-weight: 700; font-variant-numeric: tabular-nums; }
+
+  .ff-player { display: flex; align-items: center; gap: 6px; min-width: 0; flex-wrap: wrap; }
+  .ff-player-name { font-weight: 600; overflow-wrap: anywhere; }
+  .ff-flag { width: 20px; height: 14px; object-fit: cover; border: 1px solid #e5e7eb; flex: none; }
+  .ff-tag { font-size: 11px; color: var(--muted); }
+  .ff-tag.out { color: var(--bad-ink); font-weight: 600; }
+
+  .ff-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    height: 34px;
+    padding: 0 14px;
+    border: 1px solid var(--main-bg-color);
+    border-radius: 4px;
+    background: var(--main-bg-color);
+    color: #fff;
+    font: inherit;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    text-decoration: none;
+  }
+
+  .ff-btn:hover:not(:disabled) { background: var(--hover-bg-color); }
+  .ff-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+  .ff-btn.light { background: #fff; color: var(--main-bg-color); }
+  .ff-btn.light:hover:not(:disabled) { background: var(--soft); }
+  .ff-btn.commit { background: #065f46; border-color: #065f46; }
+  .ff-btn.commit:hover:not(:disabled) { background: #054c38; }
+  .ff-btn.small { height: 28px; padding: 0 10px; font-size: 13px; }
+  .ff-btn.icon { width: 28px; height: 28px; padding: 0; background: #fff; color: var(--muted); border-color: #c8ced8; }
+  .ff-btn.icon:hover:not(:disabled) { background: var(--bad-bg); color: var(--bad-ink); }
+
+  .ff-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+  .ff-hint { font-size: 12px; color: var(--muted); margin-top: 8px; }
+  .ff-message { font-size: 13px; margin-top: 8px; }
+  .ff-message.bad { color: var(--bad-ink); }
+  .ff-message.ok { color: var(--ok-ink); }
+
+  .ff-filters {
+    display: grid;
+    grid-template-columns: 1.4fr repeat(4, 1fr);
+    gap: 8px;
+    margin-bottom: 10px;
+  }
+
+  .ff-table-wrap {
+    max-height: 620px;
+    overflow-y: auto;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+  }
+
+  .ff-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  .ff-table th, .ff-table td { padding: 7px 8px; border-bottom: 1px solid #eef2f6; text-align: left; vertical-align: middle; }
+  .ff-table th { position: sticky; top: 0; background: var(--soft); color: var(--muted); font-weight: 600; z-index: 1; }
+  .ff-table .num { text-align: right; font-variant-numeric: tabular-nums; }
+  .ff-table tr.picked td { background: #f0f7ff; }
+  .ff-table tr.out td { color: #8a94a3; }
+  .ff-empty { padding: 14px; color: var(--muted); }
+
+  @media (max-width: 860px) {
+    .ff-grid { grid-template-columns: 1fr; }
+    .ff-filters { grid-template-columns: 1fr 1fr; }
+    .ff-filters .ff-search { grid-column: 1 / -1; }
+    .ff-table-wrap { max-height: none; }
+    .ff-table .ff-col-group, .ff-table .ff-col-assoc { display: none; }
+  }
+</style>
+
+<!-- HTML -->
+<div class="ff-wrap" id="cclFantasy">
+  <div class="ff-empty">Loading Fantasy…</div>
+</div>
+
+<!-- СКРИПТ -->
+<script>
+(function () {
+  const API_BASE = window.AUTH_BASE_URL || "https://api.carcassonne.gg";
+  // The Fantasy league this page shows (fantasy_leagues.id).
+  const LEAGUE_ID = "CCL-2027-Q";
+  const STATE_URL = `${API_BASE}/public/fantasy/${encodeURIComponent(LEAGUE_ID)}`;
+  const TEAM_URL = `${API_BASE}/fantasy/${encodeURIComponent(LEAGUE_ID)}/team`;
+  const COMMIT_URL = `${TEAM_URL}/commit`;
+  const root = document.getElementById("cclFantasy");
+
+  let data = null;
+  // The team being edited: { team_name, slot_ids }. Differs from the saved team until Save.
+  let draft = null;
+  let busy = false;
+  let message = null;
+  const filters = { search: "", stage: "", group: "", association: "", sort: "price-desc" };
+  let clockTimer = 0;
+  let reloadedAt = null;
+
+  function el(tag, className, textContent) {
+    const node = document.createElement(tag);
+    if (className) node.className = className;
+    if (textContent !== undefined && textContent !== null) node.textContent = textContent;
+    return node;
+  }
+
+  function formatUtc(iso) {
+    const date = new Date(iso);
+    if (Number.isNaN(date.getTime())) return "";
+    const month = date.toLocaleString("en-GB", { month: "long", timeZone: "UTC" });
+    const time = `${String(date.getUTCHours()).padStart(2, "0")}:${String(date.getUTCMinutes()).padStart(2, "0")}`;
+    return `${month} ${date.getUTCDate()} at ${time} UTC`;
+  }
+
+  const credits = (value) => (Math.round(Number(value) * 2) / 2).toFixed(1);
+  const halves = (value) => Math.round(Number(value) * 2);
+  const season = () => data.league;
+  const team = () => data.viewer?.team || null;
+  const playerBySlot = (slotId) => data.players.find((player) => player.slot_id.toUpperCase() === String(slotId).toUpperCase()) || null;
+
+  // Price of a pick: players already in the saved team keep the price they were bought at.
+  function pickPrice(slotId) {
+    const saved = (team()?.players || []).find((player) => player.slot_id.toUpperCase() === String(slotId).toUpperCase());
+    if (saved) return Number(saved.price_at_pick);
+    const player = playerBySlot(slotId);
+    return player ? Number(player.price) : 0;
+  }
+
+  const draftCost = () => draft.slot_ids.reduce((sum, slotId) => sum + halves(pickPrice(slotId)), 0) / 2;
+
+  function savedDraft() {
+    const saved = team();
+    return {
+      team_name: saved?.team_name || "",
+      slot_ids: (saved?.players || []).map((player) => player.slot_id),
+    };
+  }
+
+  function isDirty() {
+    const saved = savedDraft();
+    const key = (value) => [...value.slot_ids].map((id) => id.toUpperCase()).sort().join("|");
+    return saved.team_name.trim() !== draft.team_name.trim() || key(saved) !== key(draft);
+  }
+
+  function canEdit() {
+    const status = season().status;
+    if (!data.viewer?.authenticated) return false;
+    if (status !== "open" && status !== "late") return false;
+    return !team() || team().can_edit;
+  }
+
+  // The deadline the countdown runs to, for the current status.
+  function clockTarget() {
+    const status = season().status;
+    if (status === "upcoming") return { label: "Team building opens in", at: season().opens_at };
+    if (status === "open") return { label: "Main deadline in", at: season().main_deadline };
+    if (status === "late") return { label: "Late entry closes in", at: season().late_deadline };
+    return null;
+  }
+
+  function renderClock(node) {
+    const target = clockTarget();
+    if (!target) {
+      node.textContent = "Team building is closed";
+      return;
+    }
+    const left = Math.max(0, Date.parse(target.at) - Date.now());
+    const days = Math.floor(left / 86400000);
+    const hours = Math.floor(left / 3600000) % 24;
+    const minutes = Math.floor(left / 60000) % 60;
+    const seconds = Math.floor(left / 1000) % 60;
+    node.textContent = `${days}d ${String(hours).padStart(2, "0")}h ${String(minutes).padStart(2, "0")}m ${String(seconds).padStart(2, "0")}s`;
+    // At the deadline the server state changes: load it again (once per deadline).
+    if (left === 0 && reloadedAt !== target.at) {
+      reloadedAt = target.at;
+      setTimeout(loadState, 1500);
+    }
+  }
+
+  function renderHead() {
+    const head = el("div", "ff-head");
+    const titles = el("div");
+    titles.append(
+      el("h2", "", season().name),
+      el("p", "", `Pick ${season().team_size} players · Budget ${credits(season().budget)} credits · Main deadline ${formatUtc(season().main_deadline)}`)
+    );
+    head.appendChild(titles);
+    const clock = el("div", "ff-clock");
+    const target = clockTarget();
+    clock.appendChild(el("div", "ff-clock-label", target ? target.label : "Status"));
+    const value = el("div", "ff-clock-value");
+    clock.appendChild(value);
+    head.appendChild(clock);
+    renderClock(value);
+    clearInterval(clockTimer);
+    clockTimer = setInterval(() => renderClock(value), 1000);
+    return head;
+  }
+
+  function signInButton() {
+    const button = el("button", "ff-btn light", "Sign in");
+    button.type = "button";
+    button.addEventListener("click", () => {
+      const popup = window.open(`${API_BASE}/auth/google`, "googleAuth", "width=520,height=640,left=100,top=100");
+      if (!popup) window.top.location.href = `${API_BASE}/auth/google`;
+    });
+    return button;
+  }
+
+  // One note under the header: what the viewer can do now.
+  function renderNotice() {
+    const status = season().status;
+    const saved = team();
+    const note = el("div", "ff-note");
+    if (status === "upcoming") {
+      note.textContent = `Team building opens ${formatUtc(season().opens_at)}. You can already look at the players and prices.`;
+      return note;
+    }
+    if (status === "closed") {
+      note.classList.add(saved && saved.locked ? "ok" : "warn");
+      note.textContent = saved && saved.locked
+        ? "Team building is closed. Your team is in the game."
+        : "Team building is closed.";
+      return note;
+    }
+    if (!data.viewer?.authenticated) {
+      note.append(
+        el("div", "", "Sign in to carcassonne.gg to build your team. One team per account."),
+        signInButton()
+      );
+      return note;
+    }
+    if (saved?.state === "locked") {
+      note.classList.add("ok");
+      note.textContent = "Your team is locked and scores all points its players earn in the qualifiers.";
+      return note;
+    }
+    if (saved?.state === "committed") {
+      note.classList.add("ok");
+      note.textContent = `Your team is committed. It scores matches that start after ${formatUtc(saved.scoring_from)}.`;
+      return note;
+    }
+    if (status === "late") {
+      note.classList.add("warn");
+      const strong = el("strong", "", "Late entry. ");
+      note.append(
+        strong,
+        `Save keeps a draft that you can still change; it scores nothing. Commit locks your team for good, and it scores only matches that start after you commit. Late entry closes ${formatUtc(season().late_deadline)}.`
+      );
+      return note;
+    }
+    note.textContent = `Save your team as often as you like until ${formatUtc(season().main_deadline)}. A complete team saved by then scores all points its players earn in the qualifiers, including matches already played.`;
+    return note;
+  }
+
+  function teamBadge() {
+    const saved = team();
+    const count = draft.slot_ids.length;
+    if (saved?.state === "locked") return el("span", "ff-badge ok", "Locked");
+    if (saved?.state === "committed") return el("span", "ff-badge ok", "Committed");
+    if (saved?.state === "not_entered") return el("span", "ff-badge bad", "Not entered");
+    if (count === season().team_size) return el("span", "ff-badge info", season().status === "late" ? "Ready to commit" : "Complete");
+    return el("span", "ff-badge warn", `Draft · ${count}/${season().team_size}`);
+  }
+
+  function playerLabel(player, { withStage = false } = {}) {
+    const box = el("div", "ff-player");
+    if (player.association?.flag) {
+      const flag = el("img", "ff-flag");
+      flag.src = player.association.flag;
+      flag.alt = player.association.name || "";
+      flag.title = player.association.name || "";
+      box.appendChild(flag);
+    }
+    box.appendChild(el("span", "ff-player-name", player.nickname));
+    if (withStage) box.appendChild(el("span", "ff-tag", [player.stage, player.group ? `Group ${player.group}` : ""].filter(Boolean).join(" · ")));
+    if (player.seed === "Seeded") box.appendChild(el("span", "ff-tag", "Seeded"));
+    if (player.eliminated) box.appendChild(el("span", "ff-tag out", "Eliminated"));
+    return box;
+  }
+
+  function renderTeamPanel() {
+    const panel = el("div", "ff-panel");
+    const head = el("div", "ff-panel-head");
+    head.append(el("h3", "", "Your team"), teamBadge());
+    panel.appendChild(head);
+    const editable = canEdit();
+
+    const field = el("div", "ff-field");
+    const label = el("label", "", "Team name");
+    label.htmlFor = "ffTeamName";
+    const input = el("input", "ff-input");
+    input.id = "ffTeamName";
+    input.maxLength = 40;
+    input.placeholder = "e.g. Meeple Masters";
+    input.value = draft.team_name;
+    input.disabled = !editable;
+    input.addEventListener("input", () => {
+      draft.team_name = input.value;
+      message = null;
+      renderActions(panel.querySelector(".ff-actions-box"));
+    });
+    field.append(label, input);
+    panel.appendChild(field);
+
+    const cost = draftCost();
+    const budget = Number(season().budget);
+    const metrics = el("div", "ff-metrics");
+    const metric = (name, value, className = "") => {
+      const box = el("div", className);
+      box.append(el("span", "", name), el("strong", "", value));
+      return box;
+    };
+    metrics.append(
+      metric("Players", `${draft.slot_ids.length} / ${season().team_size}`),
+      metric("Cost", `${credits(cost)} / ${credits(budget)}`, halves(cost) > halves(budget) ? "over" : ""),
+      metric("Remaining", credits(budget - cost), halves(cost) > halves(budget) ? "over" : "")
+    );
+    panel.appendChild(metrics);
+
+    for (let index = 0; index < season().team_size; index += 1) {
+      const slotId = draft.slot_ids[index];
+      const player = slotId ? playerBySlot(slotId) : null;
+      const row = el("div", `ff-slot${slotId ? " filled" : ""}`);
+      row.appendChild(el("span", "ff-slot-no", String(index + 1)));
+      if (slotId) {
+        row.appendChild(player ? playerLabel(player, { withStage: true }) : el("span", "ff-player-name", slotId));
+        row.appendChild(el("span", "ff-slot-price", credits(pickPrice(slotId))));
+        const remove = el("button", "ff-btn icon");
+        remove.type = "button";
+        remove.title = "Remove";
+        remove.setAttribute("aria-label", `Remove ${player?.nickname || slotId}`);
+        remove.appendChild(el("i", "fa-solid fa-xmark"));
+        remove.disabled = !editable;
+        remove.addEventListener("click", () => togglePlayer(slotId));
+        row.appendChild(remove);
+      } else {
+        row.appendChild(el("span", "ff-slot-empty", "Empty slot — pick a player from the list"));
+        row.append(el("span"), el("span"));
+      }
+      panel.appendChild(row);
+    }
+
+    const actions = el("div", "ff-actions-box");
+    panel.appendChild(actions);
+    renderActions(actions);
+    return panel;
+  }
+
+  function renderActions(box) {
+    if (!box) return;
+    box.innerHTML = "";
+    if (!canEdit()) {
+      if (message) box.appendChild(el("div", `ff-message ${message.kind}`, message.text));
+      return;
+    }
+    const status = season().status;
+    const full = draft.slot_ids.length === season().team_size;
+    const withinBudget = halves(draftCost()) <= halves(season().budget);
+    const named = draft.team_name.trim().length > 0;
+    const row = el("div", "ff-actions");
+    const saveButton = el("button", "ff-btn", "Save");
+    saveButton.type = "button";
+    saveButton.disabled = busy || !named || !withinBudget || (!isDirty() && Boolean(team()));
+    saveButton.addEventListener("click", () => submit(false));
+    row.appendChild(saveButton);
+    if (status === "late") {
+      const commitButton = el("button", "ff-btn commit", "Commit");
+      commitButton.type = "button";
+      commitButton.disabled = busy || !named || !withinBudget || !full;
+      commitButton.addEventListener("click", () => {
+        const ok = window.confirm("Commit locks your team for good. It scores only matches that start after now. Commit?");
+        if (ok) submit(true);
+      });
+      row.appendChild(commitButton);
+    }
+    box.appendChild(row);
+    const hints = [];
+    if (!named) hints.push("Enter a team name.");
+    if (!withinBudget) hints.push(`The team is over the budget of ${credits(season().budget)}.`);
+    if (!full) hints.push(`A team scores only with ${season().team_size} players; until then it is a draft.`);
+    if (status === "late" && full && withinBudget) hints.push("Save keeps a draft; Commit cannot be undone.");
+    if (team() && isDirty()) hints.push("You have unsaved changes.");
+    hints.forEach((hint) => box.appendChild(el("div", "ff-hint", hint)));
+    if (message) box.appendChild(el("div", `ff-message ${message.kind}`, message.text));
+  }
+
+  function togglePlayer(slotId) {
+    if (!canEdit()) return;
+    const key = slotId.toUpperCase();
+    const index = draft.slot_ids.findIndex((id) => id.toUpperCase() === key);
+    if (index >= 0) draft.slot_ids.splice(index, 1);
+    else if (draft.slot_ids.length < season().team_size) draft.slot_ids.push(slotId);
+    message = null;
+    render();
+  }
+
+  function filteredPlayers() {
+    const search = filters.search.trim().toLowerCase();
+    const rows = data.players.filter((player) => (
+      (!search || String(player.nickname).toLowerCase().includes(search))
+      && (!filters.stage || player.stage === filters.stage)
+      && (!filters.group || player.group === filters.group)
+      && (!filters.association || player.association?.id === filters.association)
+    ));
+    const byName = (left, right) => String(left.nickname).localeCompare(String(right.nickname));
+    const sorters = {
+      "price-desc": (left, right) => right.price - left.price || byName(left, right),
+      "price-asc": (left, right) => left.price - right.price || byName(left, right),
+      name: byName,
+    };
+    return rows.sort(sorters[filters.sort] || sorters["price-desc"]);
+  }
+
+  function select(options, value, onChange, ariaLabel) {
+    const node = el("select", "ff-select");
+    node.setAttribute("aria-label", ariaLabel);
+    options.forEach(([optionValue, optionLabel]) => {
+      const option = el("option", "", optionLabel);
+      option.value = optionValue;
+      node.appendChild(option);
+    });
+    node.value = value;
+    node.addEventListener("change", () => onChange(node.value));
+    return node;
+  }
+
+  function renderPool() {
+    const panel = el("div", "ff-panel");
+    const head = el("div", "ff-panel-head");
+    head.append(el("h3", "", "Players"), el("span", "ff-tag", `${data.players.length} qualifiers`));
+    panel.appendChild(head);
+
+    const bar = el("div", "ff-filters");
+    const search = el("input", "ff-input ff-search");
+    search.type = "search";
+    search.placeholder = "Search player…";
+    search.value = filters.search;
+    search.setAttribute("aria-label", "Search player");
+    search.addEventListener("input", () => {
+      filters.search = search.value;
+      renderPoolTable(tableBox);
+    });
+    const stages = season().stages.map((stage) => [stage, stage]);
+    const groups = [...new Set(data.players.filter((player) => !filters.stage || player.stage === filters.stage)
+      .map((player) => player.group).filter(Boolean))].sort();
+    const associations = new Map();
+    data.players.forEach((player) => {
+      if (player.association) associations.set(player.association.id, player.association.name);
+    });
+    bar.append(
+      search,
+      select([["", "All stages"], ...stages], filters.stage, (value) => {
+        filters.stage = value;
+        filters.group = "";
+        render();
+      }, "Stage"),
+      select([["", "All groups"], ...groups.map((group) => [group, `Group ${group}`])], filters.group, (value) => {
+        filters.group = value;
+        renderPoolTable(tableBox);
+      }, "Group"),
+      select([["", "All associations"], ...[...associations].sort((a, b) => a[1].localeCompare(b[1]))], filters.association, (value) => {
+        filters.association = value;
+        renderPoolTable(tableBox);
+      }, "Association"),
+      select([["price-desc", "Price: high → low"], ["price-asc", "Price: low → high"], ["name", "Name A–Z"]], filters.sort, (value) => {
+        filters.sort = value;
+        renderPoolTable(tableBox);
+      }, "Sort")
+    );
+    panel.appendChild(bar);
+    const tableBox = el("div", "ff-table-wrap");
+    panel.appendChild(tableBox);
+    renderPoolTable(tableBox);
+    return panel;
+  }
+
+  function renderPoolTable(box) {
+    box.innerHTML = "";
+    const rows = filteredPlayers();
+    if (!rows.length) {
+      box.appendChild(el("div", "ff-empty", data.players.length ? "No players match the filters." : "Prices are not published yet."));
+      return;
+    }
+    const editable = canEdit();
+    const full = draft.slot_ids.length >= season().team_size;
+    const remaining = halves(season().budget) - halves(draftCost());
+    const table = el("table", "ff-table");
+    const thead = el("thead");
+    const headRow = el("tr");
+    [["Player", ""], ["Stage", ""], ["Group", "ff-col-group"], ["Association", "ff-col-assoc"], ["Price", "num"], ["", "num"]]
+      .forEach(([label, className]) => headRow.appendChild(el("th", className, label)));
+    thead.appendChild(headRow);
+    table.appendChild(thead);
+    const tbody = el("tbody");
+    rows.forEach((player) => {
+      const picked = draft.slot_ids.some((id) => id.toUpperCase() === player.slot_id.toUpperCase());
+      const tr = el("tr", [picked ? "picked" : "", player.eliminated ? "out" : ""].filter(Boolean).join(" "));
+      const nameCell = el("td");
+      nameCell.appendChild(playerLabel(player));
+      tr.append(
+        nameCell,
+        el("td", "", player.stage),
+        el("td", "ff-col-group", player.group || "—"),
+        el("td", "ff-col-assoc", player.association?.name || "—"),
+        el("td", "num", credits(player.price))
+      );
+      const actionCell = el("td", "num");
+      if (editable) {
+        const button = el("button", `ff-btn small${picked ? " light" : ""}`, picked ? "Remove" : "Add");
+        button.type = "button";
+        if (!picked && full) {
+          button.disabled = true;
+          button.title = "Your team is full";
+        } else if (!picked && halves(player.price) > remaining) {
+          button.disabled = true;
+          button.title = "Not enough budget left";
+        }
+        button.addEventListener("click", () => togglePlayer(player.slot_id));
+        actionCell.appendChild(button);
+      }
+      tr.appendChild(actionCell);
+      tbody.appendChild(tr);
+    });
+    table.appendChild(tbody);
+    box.appendChild(table);
+  }
+
+  function render() {
+    if (!data) return;
+    root.innerHTML = "";
+    root.appendChild(renderHead());
+    root.appendChild(renderNotice());
+    const grid = el("div", "ff-grid");
+    grid.appendChild(data.viewer?.authenticated ? renderTeamPanel() : renderGuestPanel());
+    grid.appendChild(renderPool());
+    root.appendChild(grid);
+  }
+
+  function renderGuestPanel() {
+    const panel = el("div", "ff-panel");
+    panel.append(
+      el("h3", "", "Your team"),
+      el("div", "ff-hint", `Sign in to pick ${season().team_size} players within a budget of ${credits(season().budget)} credits.`)
+    );
+    return panel;
+  }
+
+  async function submit(commit) {
+    if (busy) return;
+    busy = true;
+    message = null;
+    render();
+    try {
+      const response = await fetch(commit ? COMMIT_URL : TEAM_URL, {
+        method: commit ? "POST" : "PUT",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ team_name: draft.team_name.trim(), slot_ids: draft.slot_ids }),
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok || !result.ok) throw new Error(result.message || "Saving failed. Please try again.");
+      data.viewer.team = result.team;
+      draft = savedDraft();
+      message = { kind: "ok", text: commit ? "Your team is committed." : "Team saved." };
+    } catch (error) {
+      message = { kind: "bad", text: error.message };
+    } finally {
+      busy = false;
+      render();
+    }
+  }
+
+  let loadRequest = 0;
+
+  function loadState() {
+    const request = ++loadRequest;
+    fetch(STATE_URL, { credentials: "include" })
+      .then((response) => {
+        if (!response.ok) throw new Error("Failed to load Fantasy");
+        return response.json();
+      })
+      .then((result) => {
+        if (request !== loadRequest) return;
+        if (!result?.ok || !Array.isArray(result.players)) throw new Error("Failed to load Fantasy");
+        // Keep unsaved picks when the state reloads for the same viewer (e.g. at a deadline).
+        const keepDraft = draft && data && data.viewer?.authenticated === result.viewer?.authenticated && isDirty();
+        data = result;
+        if (!keepDraft) draft = savedDraft();
+        render();
+      })
+      .catch((error) => {
+        if (request !== loadRequest) return;
+        console.error("Failed to load CCL Fantasy", error);
+        root.innerHTML = "";
+        root.appendChild(el("div", "ff-note bad", "Failed to load Fantasy. Please reload the page."));
+      });
+  }
+
+  // The site header announces sign-in and sign-out without a page reload.
+  function onAuthStateChange(event) {
+    const authenticated = Boolean(event.detail?.authenticated);
+    if (data && authenticated === Boolean(data.viewer?.authenticated)) return;
+    draft = null;
+    loadState();
+  }
+
+  window.addEventListener("gg-auth-state-change", onAuthStateChange);
+  try {
+    if (window.parent !== window) window.parent.addEventListener("gg-auth-state-change", onAuthStateChange);
+  } catch (_error) {
+    // Cross-origin parent: only this window's events are heard.
+  }
+
+  loadState();
+
+  // Lets the parent page fit the iframe to the content, if it listens.
+  if (window.parent !== window && "ResizeObserver" in window) {
+    new ResizeObserver(() => {
+      window.parent.postMessage({ type: "fantasy:height", height: document.documentElement.scrollHeight }, "*");
+    }).observe(document.body);
+  }
+})();
+</script>
