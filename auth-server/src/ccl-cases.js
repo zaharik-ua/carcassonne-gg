@@ -179,7 +179,7 @@ export function validateCclTimeAdjustment(currentTimeUtc, nextTimeUtc) {
 
 const DUEL_RESULT_FIELDS = ["time_utc", "dw1", "dw2", "status", "results_last_error", "results_checked_at", "updated_by", "updated_at"];
 
-async function snapshotDuelResult(db, duelId) {
+export async function snapshotDuelResult(db, duelId) {
   const duel = await dbGet(db, `SELECT ${DUEL_RESULT_FIELDS.join(", ")} FROM duels WHERE id = ?`, [duelId]);
   const games = await dbAll(db, "SELECT * FROM games WHERE duel_id = ?", [duelId]);
   return { duel, games };
@@ -187,7 +187,7 @@ async function snapshotDuelResult(db, duelId) {
 
 // Puts the duel and its games back as they were before a failed time adjustment: games the updater
 // added are removed (with their queued replays), changed or removed games get their saved values back.
-async function restoreDuelResult(db, duelId, snapshot) {
+export async function restoreDuelResult(db, duelId, snapshot) {
   await inTransaction(db, async () => {
     await dbRun(
       db,

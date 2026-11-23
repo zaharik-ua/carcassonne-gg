@@ -61,7 +61,7 @@ import {
 } from "./challenges.js";
 import { ensureTournamentCasesSchema, registerTournamentCaseRoutes } from "./tournament-cases.js";
 import { ensureEventsSchema, registerEventRoutes } from "./events.js";
-import { registerCclCaseRoutes } from "./ccl-cases.js";
+import { registerCclCaseRoutes, restoreDuelResult, snapshotDuelResult } from "./ccl-cases.js";
 import { registerDuelGameBgaResultRoutes } from "./duel-game-bga-result.js";
 import { registerBgaPlayerAvatarRoutes } from "./bga-player-avatar.js";
 import { ensureInPersonSchema } from "./in-person/schema.js";
@@ -5780,6 +5780,10 @@ function ensureDuelsSchema() {
           "proposed_time_status",
           "TEXT CHECK (proposed_time_status IS NULL OR proposed_time_status IN ('pending', 'accepted', 'change_pending'))"
         );
+        // A badge and the Main Event card on matches.html, as for team matches.
+        addColumnIfMissing(columns, "duels", "badge_name", "TEXT");
+        addColumnIfMissing(columns, "duels", "badge_color", "TEXT");
+        addColumnIfMissing(columns, "duels", "main_event", "INTEGER NOT NULL DEFAULT 0 CHECK (main_event IN (0, 1))");
         db.run(
           "UPDATE duels SET ranking = 1 WHERE ranking IS NULL",
           (normalizeErr) => {
@@ -8472,11 +8476,30 @@ registerCclRoutes(app, {
   logAuditEvent,
 });
 
+// The same BGA updater as /duels/:id/refetch-results, for one CCL duel; `label` names it in the log.
+async function runCclDuelResultsUpdate(duelId, label) {
+  const authServerRoot = path.resolve(__dirname, "..");
+  const pythonBin = String(process.env.PYTHON_BIN || "python3").trim() || "python3";
+  try {
+    const { stdout, stderr } = await execFileAsync(
+      pythonBin,
+      [path.resolve(authServerRoot, "run_update_matches.py"), "--db-path", dbFullPath, "--duel-id", duelId],
+      { cwd: authServerRoot, env: process.env, timeout: 5 * 60 * 1000, maxBuffer: 1024 * 1024 * 10 }
+    );
+    logUpdaterOutput(`${label}:${duelId}`, [stdout, stderr].map((part) => String(part || "").trim()).filter(Boolean).join("\n"));
+  } catch (error) {
+    logUpdaterOutput(`${label}:${duelId}`, [error?.stdout, error?.stderr, error?.message].map((part) => String(part || "").trim()).filter(Boolean).join("\n"));
+    throw error;
+  }
+}
+
 registerCclMatchRoutes(app, {
   db,
   requireAuthenticated,
   getAuditActor,
   logAuditEvent,
+  // Admin Get Results on the CCL match page.
+  runDuelResultsUpdate: (duelId) => runCclDuelResultsUpdate(duelId, "ccl-get-results"),
 });
 
 registerCclCaseRoutes(app, {
@@ -8485,22 +8508,8 @@ registerCclCaseRoutes(app, {
   requireTrustedJsonRequest,
   getAuditActor,
   logAuditEvent,
-  // Resolve → Adjust the match time: the same BGA updater as /duels/:id/refetch-results.
-  async runDuelResultsUpdate(duelId) {
-    const authServerRoot = path.resolve(__dirname, "..");
-    const pythonBin = String(process.env.PYTHON_BIN || "python3").trim() || "python3";
-    try {
-      const { stdout, stderr } = await execFileAsync(
-        pythonBin,
-        [path.resolve(authServerRoot, "run_update_matches.py"), "--db-path", dbFullPath, "--duel-id", duelId],
-        { cwd: authServerRoot, env: process.env, timeout: 5 * 60 * 1000, maxBuffer: 1024 * 1024 * 10 }
-      );
-      logUpdaterOutput(`ccl-adjust-time:${duelId}`, [stdout, stderr].map((part) => String(part || "").trim()).filter(Boolean).join("\n"));
-    } catch (error) {
-      logUpdaterOutput(`ccl-adjust-time:${duelId}`, [error?.stdout, error?.stderr, error?.message].map((part) => String(part || "").trim()).filter(Boolean).join("\n"));
-      throw error;
-    }
-  },
+  // Resolve → Adjust the match time.
+  runDuelResultsUpdate: (duelId) => runCclDuelResultsUpdate(duelId, "ccl-adjust-time"),
 });
 
 registerTournamentCaseRoutes(app, {
@@ -21219,6 +21228,9 @@ function publicMainPageMatchesHandler(req, res, next) {
         d.stage,
         d.group_name,
         d.round_name,
+        d.badge_name,
+        d.badge_color,
+        COALESCE(d.main_event, 0) AS main_event,
         cp.name AS challenge_period_name,
         cp.logo AS challenge_period_logo,
         cp.status AS challenge_period_status,
@@ -21643,6 +21655,9 @@ function publicMainPageMatchesHandler(req, res, next) {
                 stage: row.stage,
                 group_name: row.group_name,
                 round_name: row.round_name,
+                badge_name: row.badge_name,
+                badge_color: row.badge_color,
+                main_event: normalizeBooleanInt(row.main_event) === 1,
                 tournament_name: row.tournament_name,
                 tournament_short_title: row.tournament_short_title,
                 tournament_logo: row.tournament_logo,
@@ -25251,6 +25266,16 @@ app.post("/matches/:id/get-results", requireAdmin, async (req, res) => {
       .map((row) => String(row?.id || "").trim())
       .filter(Boolean);
 
+    // The result before the reset: a failed updater run puts it back (match, duels and their games).
+    const matchSnapshot = await dbGetAsync(
+      "SELECT dw1, dw2, gw1, gw2, status, updated_by, updated_at FROM matches WHERE id = ?",
+      [matchId]
+    );
+    const duelSnapshots = [];
+    for (const duelId of duelIds) {
+      duelSnapshots.push({ duelId, snapshot: await snapshotDuelResult(db, duelId) });
+    }
+
     await dbRunAsync("BEGIN IMMEDIATE TRANSACTION");
     try {
       await dbRunAsync(
@@ -25304,22 +25329,66 @@ app.post("/matches/:id/get-results", requireAdmin, async (req, res) => {
       throw resetError;
     }
 
-    const execResult = await execFileAsync(
-      pythonBin,
-      [
-        updateScriptPath,
-        "--db-path",
-        dbFullPath,
-        "--match-id",
-        matchId,
-      ],
-      {
-        cwd: authServerRoot,
-        env: process.env,
-        timeout: 5 * 60 * 1000,
-        maxBuffer: 1024 * 1024 * 10,
+    let execResult;
+    try {
+      execResult = await execFileAsync(
+        pythonBin,
+        [
+          updateScriptPath,
+          "--db-path",
+          dbFullPath,
+          "--match-id",
+          matchId,
+        ],
+        {
+          cwd: authServerRoot,
+          env: process.env,
+          timeout: 5 * 60 * 1000,
+          maxBuffer: 1024 * 1024 * 10,
+        }
+      );
+    } catch (updaterError) {
+      logUpdaterOutput(
+        `match-results:${matchId}`,
+        [updaterError?.stdout, updaterError?.stderr, updaterError?.message]
+          .map((part) => String(part || "").trim())
+          .filter(Boolean)
+          .join("\n")
+      );
+      try {
+        for (const { duelId, snapshot } of duelSnapshots) {
+          await restoreDuelResult(db, duelId, snapshot);
+        }
+        await dbRunAsync(
+          `
+            UPDATE matches
+            SET dw1 = ?, dw2 = ?, gw1 = ?, gw2 = ?, status = ?, updated_by = ?, updated_at = ?
+            WHERE id = ?
+          `,
+          [
+            matchSnapshot?.dw1 ?? null,
+            matchSnapshot?.dw2 ?? null,
+            matchSnapshot?.gw1 ?? null,
+            matchSnapshot?.gw2 ?? null,
+            matchSnapshot?.status ?? null,
+            matchSnapshot?.updated_by ?? null,
+            matchSnapshot?.updated_at ?? null,
+            matchId,
+          ]
+        );
+      } catch (restoreError) {
+        console.error(`Failed to restore match results for ${matchId}`, restoreError);
+        return res.status(500).json({
+          ok: false,
+          message: "Could not get the results from BGA, and the previous result could not be restored.",
+        });
       }
-    );
+      console.error(`Failed to refresh match results for ${matchId}`, updaterError);
+      return res.status(502).json({
+        ok: false,
+        message: "Could not get the results from BGA. Nothing was changed.",
+      });
+    }
     logUpdaterOutput(
       `match-results:${matchId}`,
       [execResult.stdout, execResult.stderr]

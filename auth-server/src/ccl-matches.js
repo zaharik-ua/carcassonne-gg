@@ -54,6 +54,23 @@ export function normalizeCclMatchInput(body, { partial = false } = {}) {
     value[field] = raw ? normalizeUtc(raw) : null;
     if (raw && !value[field]) return { error: `${field} must be a valid UTC timestamp` };
   }
+  // Badge on matches.html: a short text and a #rrggbb color (as matches.html reads it).
+  if (wants("badge_name")) {
+    value.badge_name = nullableText(input.badge_name);
+    if (value.badge_name && value.badge_name.length > MAX_TEXT_LENGTH) {
+      return { error: `badge_name must be at most ${MAX_TEXT_LENGTH} characters` };
+    }
+  }
+  if (wants("badge_color")) {
+    const raw = text(input.badge_color).replace(/^#/, "");
+    if (raw && !/^[0-9a-f]{6}$/i.test(raw)) return { error: "badge_color must be a hex color like #1a73b7" };
+    value.badge_color = raw ? `#${raw.toLowerCase()}` : null;
+  }
+  if (wants("main_event")) {
+    value.main_event = [true, 1, "1", "true", "yes", "on"].includes(
+      typeof input.main_event === "string" ? input.main_event.trim().toLowerCase() : input.main_event
+    ) ? 1 : 0;
+  }
   return { value };
 }
 

@@ -1858,7 +1858,7 @@ code {
   .event-title-link,
   .event-title-text {
     color: #222;
-    font-size: 14px;
+    font-size: 16px;
     line-height: 1.25;
     white-space: nowrap;
     overflow: hidden;
@@ -2832,7 +2832,10 @@ function createMainEventElement(match, options = {}) {
     }
     const liveScore = document.createElement("div");
     liveScore.className = "main-event-center__score";
-    liveScore.textContent = `${match?.dw1 || 0} - ${match?.dw2 || 0}`;
+    // Challenge and CCL duels keep their score (games won) in gw1/gw2.
+    liveScore.textContent = isGgPlayerDuel(match)
+      ? `${match?.gw1 || 0} - ${match?.gw2 || 0}`
+      : `${match?.dw1 || 0} - ${match?.dw2 || 0}`;
     live.appendChild(liveScore);
     if (!isDuel) {
       const liveGames = document.createElement("div");
@@ -3603,7 +3606,14 @@ function createEventTitleElement(eventItem, linkClass, textClass) {
   return title;
 }
 
-function createEventElement(eventItem) {
+function buildEventTimeLabel(timeValue, isToday) {
+  if (!isToday) return buildEventDateTimeLabel(timeValue);
+  return new Date(parseUtcTimestamp(timeValue))
+    .toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false });
+}
+
+// Today shows only the time; other sections show the date and time.
+function createEventElement(eventItem, options = {}) {
   const wrapper = document.createElement("div");
   wrapper.className = "match-wrapper event-wrapper";
 
@@ -3614,7 +3624,7 @@ function createEventElement(eventItem) {
   timeDiv.className = "match-time";
   const timeTextEl = document.createElement("div");
   timeTextEl.className = "match-time-text";
-  timeTextEl.textContent = buildEventDateTimeLabel(eventItem.time);
+  timeTextEl.textContent = buildEventTimeLabel(eventItem.time, options.isToday === true);
   timeDiv.appendChild(timeTextEl);
   row.appendChild(timeDiv);
 
@@ -3640,13 +3650,13 @@ function createEventElement(eventItem) {
   return wrapper;
 }
 
-function renderEventsCard(container, events) {
+function renderEventsCard(container, events, options = {}) {
   if (!Array.isArray(events) || events.length === 0) return;
   const sortedEvents = events.slice().sort((a, b) => parseUtcTimestamp(a.time) - parseUtcTimestamp(b.time));
   const card = document.createElement("div");
   card.className = "tournament-card";
   sortedEvents.forEach(eventItem => {
-    card.appendChild(createEventElement(eventItem));
+    card.appendChild(createEventElement(eventItem, options));
   });
   container.appendChild(card);
 }
@@ -3680,9 +3690,7 @@ function createMainEventInfoElement(eventItem, options = {}) {
 
   const time = document.createElement("div");
   time.className = "main-event-center__time";
-  const dateObj = new Date(parseUtcTimestamp(eventItem.time));
-  const timeLabel = dateObj.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", hour12: false });
-  time.textContent = options.isToday === true ? timeLabel : buildEventDateTimeLabel(eventItem.time);
+  time.textContent = buildEventTimeLabel(eventItem.time, options.isToday === true);
   stage.appendChild(time);
 
   stage.appendChild(createEventTitleElement(eventItem, "main-event-info__title main-event-info__title--link", "main-event-info__title"));
@@ -4000,7 +4008,7 @@ function renderSection(container, title, tournaments, matches, events, options =
   }
   renderMainEventCards(container, mainEventMatches, sectionTournaments, { isToday: isDaily, events: mainEvents });
   if (!renderEventsLast) {
-    renderEventsCard(container, standaloneEvents);
+    renderEventsCard(container, standaloneEvents, { isToday: isDaily });
   }
 
   // Time mode — single block, all tournaments merged and sorted by time
@@ -4023,7 +4031,7 @@ function renderSection(container, title, tournaments, matches, events, options =
       if (entry.kind === "event") {
         const eventItem = entry.item;
         card.appendChild(createTournamentHeader(tMap.get(eventItem.tournament) || getEventTournament(eventItem)));
-        card.appendChild(createEventElement(eventItem));
+        card.appendChild(createEventElement(eventItem, { isToday: isDaily }));
         return;
       }
       const match = entry.item;
@@ -4057,7 +4065,7 @@ function renderSection(container, title, tournaments, matches, events, options =
       container.appendChild(card);
     }
     if (renderEventsLast) {
-      renderEventsCard(container, standaloneEvents);
+      renderEventsCard(container, standaloneEvents, { isToday: isDaily });
     }
     return; // Skip default per-tournament rendering
   }
@@ -4299,7 +4307,7 @@ function renderSection(container, title, tournaments, matches, events, options =
       // Other sections: Today / Yesterday / Upcoming Matches
       mergeEventsIntoMatches(filtered, filteredEvents).forEach(({ kind, item: match }) => {
         if (kind === "event") {
-          card.appendChild(createEventElement(match));
+          card.appendChild(createEventElement(match, { isToday: isDaily }));
           return;
         }
         const tType = tournament.type || match.tournament_type;
@@ -4327,7 +4335,7 @@ function renderSection(container, title, tournaments, matches, events, options =
   });
 
   if (renderEventsLast) {
-    renderEventsCard(container, standaloneEvents);
+    renderEventsCard(container, standaloneEvents, { isToday: isDaily });
   }
 
 }
@@ -5078,6 +5086,10 @@ function adaptDbMainPageMatchesData(data, playerDetailsById = new Map()) {
       player1Details: getChallengePlayerDetails(duel, 1, playerDetailsById),
       player2Details: getChallengePlayerDetails(duel, 2, playerDetailsById),
       source_type: sourceType,
+      // CCL duels set a badge and Main Event on their admin page, as team matches do.
+      badge_name: String(duel?.badge_name || "").trim(),
+      badge_color: String(duel?.badge_color || "").trim(),
+      main_event: isMainEventMatch(duel),
       is_test: false,
     };
 

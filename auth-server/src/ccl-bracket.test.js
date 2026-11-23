@@ -155,7 +155,8 @@ async function createDatabase(t) {
       ranking INTEGER NOT NULL DEFAULT 1, status TEXT,
       source_type TEXT, is_test INTEGER NOT NULL DEFAULT 0, stage TEXT, group_name TEXT, round_name TEXT,
       round_order INTEGER, deadline_utc TEXT, proposed_time_utc TEXT, proposed_time_by_player_id TEXT,
-      proposed_time_status TEXT, cancellation_reason TEXT, created_by TEXT, updated_by TEXT, deleted_by TEXT, deleted_at TEXT,
+      proposed_time_status TEXT, cancellation_reason TEXT, badge_name TEXT, badge_color TEXT,
+      main_event INTEGER NOT NULL DEFAULT 0, created_by TEXT, updated_by TEXT, deleted_by TEXT, deleted_at TEXT,
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
     );
     INSERT INTO tournaments (id, name, type, category, ranking, is_test, format_key)

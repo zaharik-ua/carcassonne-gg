@@ -20,7 +20,7 @@ import {
 } from "./duel-time-proposals.js";
 import { calculateGgDuelRating, loadGgRatingContext } from "./gg-ratings.js";
 import { getCclResultEditAccess, isCclResultEditableStatus } from "./ccl-result-edit.js";
-import { getCclCaseScenario } from "./ccl-cases.js";
+import { getCclCaseScenario, restoreDuelResult, snapshotDuelResult } from "./ccl-cases.js";
 import { hasTournamentAdminAccess } from "./tournament-admin-access.js";
 
 // A CCL match is one duels row; stage, round and proposal live in the generic duels columns.
@@ -43,7 +43,10 @@ const MATCH_SELECT_SQL = `
     proposed_time_utc,
     proposed_time_by_player_id,
     proposed_time_status,
-    group_id
+    group_id,
+    badge_name,
+    badge_color,
+    COALESCE(main_event, 0) AS main_event
   FROM duels
   WHERE deleted_at IS NULL
     AND source_type = '${CCL_MATCH_SOURCE_TYPE}'
@@ -51,6 +54,7 @@ const MATCH_SELECT_SQL = `
 const EDITABLE_FIELDS = [
   "stage", "group_name", "round_name", "round_order", "deadline_utc",
   "player_1_id", "player_2_id", "duel_format", "time_utc",
+  "badge_name", "badge_color", "main_event",
 ];
 const PROPOSAL_FIELDS = ["proposed_time_utc", "proposed_time_by_player_id", "proposed_time_status"];
 // A generated bracket match takes its place and players from the bracket (ccl-bracket.js).
@@ -247,6 +251,9 @@ function formatMatch(match, context, viewerPlayerId, { isAdmin = false, games = 
     deadline_utc: match.deadline_utc || null,
     duel_format: match.duel_format || null,
     time_utc: match.time_utc || null,
+    badge_name: match.badge_name || null,
+    badge_color: match.badge_color || null,
+    main_event: Number(match.main_event) === 1,
     status: match.status,
     dw1: match.dw1 ?? null,
     dw2: match.dw2 ?? null,
@@ -289,6 +296,8 @@ export function registerCclMatchRoutes(app, {
   logAuditEvent = null,
   logger = console,
   now = () => new Date(),
+  // Runs the BGA results updater for one duel (run_update_matches.py --duel-id).
+  runDuelResultsUpdate = null,
 }) {
   if (!app || !db || typeof requireAuthenticated !== "function") {
     throw new Error("app, db and requireAuthenticated are required");
@@ -377,9 +386,9 @@ export function registerCclMatchRoutes(app, {
             id, tournament_id, match_id, duel_number, duel_format, time_utc,
             player_1_id, player_2_id, ranking, status, source_type, is_test,
             stage, group_name, round_name, round_order, deadline_utc, proposed_time_status,
-            created_by, updated_by
+            badge_name, badge_color, main_event, created_by, updated_by
           )
-          VALUES (?, ?, NULL, 1, ?, ?, ?, ?, ?, 'Planned', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          VALUES (?, ?, NULL, 1, ?, ?, ?, ?, ?, 'Planned', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `,
         [
           duelId, tournament.id, values.duel_format, values.time_utc,
@@ -387,6 +396,7 @@ export function registerCclMatchRoutes(app, {
           CCL_MATCH_SOURCE_TYPE, Number(tournament.is_test) === 1 ? 1 : 0,
           values.stage, values.group_name, values.round_name, values.round_order, values.deadline_utc,
           values.time_utc ? DUEL_TIME_PROPOSAL_STATUSES.ACCEPTED : null,
+          values.badge_name, values.badge_color, values.main_event,
           actorId, actorId,
         ]
       );
@@ -469,6 +479,63 @@ export function registerCclMatchRoutes(app, {
       metadata: { tournament_id: tournament.id },
     });
     return res.json({ ok: true });
+  }));
+
+  // Admin Get Results, as /matches/:id/get-results for a team match: clears the result and the games,
+  // then gets the games from BGA again. A failed updater run puts the old result back.
+  const refreshingDuels = new Set();
+  app.post("/ccl/matches/:id/get-results", requireAuthenticated, handle("Failed to get the match results", async (req, res) => {
+    if (typeof runDuelResultsUpdate !== "function") throw requestError(503, "Getting results is not available now");
+    const { match, tournament, actor } = await loadMatchContext(db, req.user, req.params.id);
+    if (!actor.isAdmin) throw requestError(403, "Forbidden");
+    if (!text(match.time_utc)) throw requestError(409, "Set the match time first");
+    if (refreshingDuels.has(match.id)) throw requestError(409, "Results of this match are being checked. Try again in a minute");
+
+    refreshingDuels.add(match.id);
+    try {
+      const snapshot = await snapshotDuelResult(db, match.id);
+      const actorId = actorPlayerId(req.user) || null;
+      await inTransaction(db, async () => {
+        await dbRun(
+          db,
+          `UPDATE duels
+           SET dw1 = NULL, dw2 = NULL, status = 'Planned', results_last_error = NULL, results_checked_at = NULL,
+             updated_by = ?, updated_at = CURRENT_TIMESTAMP
+           WHERE id = ? AND deleted_at IS NULL`,
+          [actorId, match.id]
+        );
+        await dbRun(db, "DELETE FROM games WHERE duel_id = ?", [match.id]);
+      });
+      try {
+        await runDuelResultsUpdate(match.id);
+      } catch (error) {
+        logger.error?.(`Failed to get results of CCL match ${match.id}`, error);
+        await restoreDuelResult(db, match.id, snapshot);
+        throw requestError(502, "Could not get the results from BGA. Nothing was changed.");
+      }
+      const after = await dbGet(db, "SELECT status, dw1, dw2, results_last_error FROM duels WHERE id = ?", [match.id]);
+      const games = await dbGet(db, "SELECT COUNT(*) AS total FROM games WHERE duel_id = ? AND deleted_at IS NULL", [match.id]);
+      audit(req, {
+        event_type: "ccl.match.results_refetched",
+        entity_type: "duel",
+        action: "refresh_results",
+        record_id: match.id,
+        changes: changedFields({ ...snapshot.duel }, after, ["status", "dw1", "dw2"]),
+        metadata: { tournament_id: tournament.id },
+      });
+      return res.json({
+        ok: true,
+        summary: {
+          status: after?.status ?? null,
+          dw1: after?.dw1 ?? null,
+          dw2: after?.dw2 ?? null,
+          games_total: Number(games?.total) || 0,
+          error: after?.results_last_error || null,
+        },
+      });
+    } finally {
+      refreshingDuels.delete(match.id);
+    }
   }));
 
   app.post("/ccl/matches/:id/time-proposal", requireAuthenticated, handle("Failed to save time proposal", async (req, res) => {

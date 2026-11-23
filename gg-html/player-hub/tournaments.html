@@ -2131,6 +2131,18 @@
     max-width: 220px;
   }
 
+  /* Match page (renderCclMatchEditPage): full-width rows of the two-column edit form. */
+  .cp-ccl-form-full {
+    grid-column: 1 / -1;
+    min-width: 0;
+  }
+
+  .cp-ccl-results-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
   @media (max-width: 520px) {
     .cp-ccl-match .cp-match-row {
       flex-wrap: wrap;
@@ -9075,15 +9087,15 @@
       error.textContent = String(message || "");
       error.classList.toggle("cp-hidden", !message);
     };
-    // Runs a request with the buttons disabled; closes the modal and reloads the page on success.
-    const submit = async (work) => {
+    // Runs a request with the buttons disabled; closes the modal and runs `after` (reloads the page) on success.
+    const submit = async (work, after = initCaptainPage) => {
       setError("");
       const buttons = Array.from(modal.querySelectorAll("button"));
       buttons.forEach((button) => { button.disabled = true; });
       try {
         await work();
         close();
-        initCaptainPage();
+        after();
       } catch (requestError) {
         setError(requestError?.message || "Request failed.");
       } finally {
@@ -9215,27 +9227,25 @@
     if (isIncoming) ui.addButton("Accept time", "cp-btn-primary", () => acceptProposal());
   }
 
-  // Admins create a match, or edit one (`match` given).
-  function openCclMatchEditModal(data, match = null) {
-    const ui = createCclModal(match ? "Edit match" : "Create match");
+  // Admins create a match here; an existing match is edited on its own page (renderCclMatchEditPage).
+  function openCclMatchEditModal(data) {
+    const ui = createCclModal("Create match");
     const stageSelect = document.createElement("select");
     (data.stages || []).forEach((stage) => stageSelect.add(new Option(CCL_STAGE_LABELS[stage] || stage, stage)));
-    stageSelect.value = match?.stage || cclStageFilters.get(data.tournament.id) || "Q1";
+    stageSelect.value = cclStageFilters.get(data.tournament.id) || "Q1";
     ui.addField("Stage", stageSelect);
 
-    const textInput = (value, placeholder) => {
+    const textInput = (placeholder) => {
       const input = document.createElement("input");
       input.type = "text";
-      input.value = value || "";
       input.placeholder = placeholder;
       return input;
     };
-    const groupInput = textInput(match?.group_name, "e.g. A");
-    const roundInput = textInput(match?.round_name, "e.g. Round 1");
+    const groupInput = textInput("e.g. A");
+    const roundInput = textInput("e.g. Round 1");
     const roundOrderInput = document.createElement("input");
     roundOrderInput.type = "number";
     roundOrderInput.min = "1";
-    roundOrderInput.value = match?.round_order ?? "";
     const advanced = document.createElement("div");
     advanced.className = "cp-ccl-modal-grid";
     ui.fields.appendChild(advanced);
@@ -9248,8 +9258,8 @@
     const fillPlayers = () => {
       const group = (data.players || []).find((entry) => entry.stage === stageSelect.value);
       const players = (group?.players || []).slice().sort((a, b) => cclPlayerName(a).localeCompare(cclPlayerName(b)));
-      [player1Select, player2Select].forEach((select, index) => {
-        const current = select.value || String((index === 0 ? match?.player_1 : match?.player_2)?.id || "");
+      [player1Select, player2Select].forEach((select) => {
+        const current = select.value;
         select.innerHTML = "";
         select.add(new Option("Select player", ""));
         players.forEach((player) => {
@@ -9266,15 +9276,15 @@
 
     const formatSelect = document.createElement("select");
     (data.duel_formats || []).forEach((format) => formatSelect.add(new Option(format, format)));
-    formatSelect.value = match?.duel_format || (data.duel_formats || []).find((format) => /bo3/i.test(format)) || "";
+    formatSelect.value = (data.duel_formats || []).find((format) => /bo3/i.test(format)) || "";
     ui.addField("Format", formatSelect);
-    const deadlineInput = createCclDatetimeInput(match?.deadline_utc);
+    const deadlineInput = createCclDatetimeInput("");
     ui.addField("Play before, UTC", deadlineInput);
-    const timeInput = createCclDatetimeInput(match?.time_utc);
+    const timeInput = createCclDatetimeInput("");
     ui.addField("Match time, UTC (optional: players can agree on it)", timeInput);
 
     ui.addButton("Cancel", "cp-btn-secondary", ui.close);
-    ui.addButton(match ? "Save" : "Create", "cp-btn-primary", () => ui.submit(() => {
+    ui.addButton("Create", "cp-btn-primary", () => ui.submit(() => {
       const body = {
         stage: stageSelect.value,
         group_name: groupInput.value,
@@ -9287,12 +9297,11 @@
         time_utc: toUtcIsoFromDatetimeLocal(timeInput.value),
       };
       if (!body.player_1_id || !body.player_2_id) throw new Error("Choose both players.");
-      return match
-        ? cclRequest(CCL_MATCH_URL(match.id), "PATCH", body)
-        : cclRequest(CCL_MATCHES_URL(data.tournament.id), "POST", body);
+      return cclRequest(CCL_MATCHES_URL(data.tournament.id), "POST", body);
     }));
   }
 
+  // Confirms the delete, then returns to the match list.
   function openCclMatchDeleteModal(match) {
     const ui = createCclModal("Delete match");
     const warning = document.createElement("div");
@@ -9300,7 +9309,356 @@
     warning.textContent = `Delete ${cclPlayerName(match.player_1)} vs ${cclPlayerName(match.player_2)}?`;
     ui.fields.appendChild(warning);
     ui.addButton("Cancel", "cp-btn-secondary", ui.close);
-    ui.addButton("Delete", "cp-btn-danger", () => ui.submit(() => cclRequest(CCL_MATCH_URL(match.id), "DELETE")));
+    ui.addButton("Delete", "cp-btn-danger", () => ui.submit(
+      () => cclRequest(CCL_MATCH_URL(match.id), "DELETE"),
+      () => resetCaptainSubview(CAPTAIN_VIEWS.MATCHES)
+    ));
+  }
+
+  // The same minute, or both empty (a 23:59:59 deadline equals its 23:59 input).
+  function isSameCclMinute(a, b) {
+    const minuteOf = (value) => {
+      const ts = Date.parse(String(value || "").trim());
+      return Number.isFinite(ts) ? Math.floor(ts / 60000) : null;
+    };
+    return minuteOf(a) === minuteOf(b);
+  }
+
+  // A message for the match page after it reloads (Get Results), shown once.
+  let cclMatchPageNotice = null;
+
+  // Admin page of one match, laid out like the team match editor: players, time and format on top,
+  // the rest under "Show advanced settings", then the games (read-only until Edit results).
+  function renderCclMatchEditPage(data, match) {
+    setPageHeading("Match editing");
+    countEl.textContent = `Editing: ${match.id}`;
+    hintEl.textContent = "";
+    addButtonEl.classList.add("cp-hidden");
+    adminModeControlEl.classList.add("cp-hidden");
+    clearFilters();
+    contentEl.className = "";
+    contentEl.innerHTML = "";
+
+    const isPlanned = String(match.status || "Planned").trim().toLowerCase() === "planned";
+    const hasResults = isCclResultEditableStatus(match.status);
+    const form = document.createElement("form");
+    form.className = "cp-edit-form";
+    form.noValidate = true;
+    form.addEventListener("submit", (event) => event.preventDefault());
+
+    const actions = document.createElement("div");
+    actions.className = "cp-edit-actions";
+    const createButton = (text, className, onClick) => {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = `cp-btn ${className}`;
+      button.textContent = text;
+      button.addEventListener("click", onClick);
+      return button;
+    };
+    const saveButton = createButton("Save", "cp-btn-primary", () => save());
+    const cancelButton = createButton("Cancel", "cp-btn-secondary", () => resetCaptainSubview(CAPTAIN_VIEWS.MATCHES));
+    const getResultsButton = createButton("Get Results", "cp-btn-secondary", () => getResults());
+    if (!hasValue(match.time_utc)) {
+      getResultsButton.disabled = true;
+      getResultsButton.title = "Set the match time first.";
+    }
+    const deleteButton = createButton("Delete", "cp-btn-danger", () => {
+      if (!match.is_bracket) openCclMatchDeleteModal(match);
+    });
+    if (match.is_bracket) {
+      deleteButton.classList.add("cp-btn-danger-disabled");
+      deleteButton.setAttribute("aria-disabled", "true");
+      deleteButton.title = "A bracket match cannot be deleted; regenerate the structure instead.";
+    }
+    actions.append(saveButton, cancelButton, getResultsButton, deleteButton);
+    const errorEl = document.createElement("div");
+    errorEl.className = "cp-edit-error cp-hidden";
+    const setError = (message) => {
+      errorEl.textContent = String(message || "");
+      errorEl.classList.toggle("cp-hidden", !message);
+    };
+    // "Updating results from BGA..." with a spinner, then the outcome, as on the team match page.
+    const statusEl = document.createElement("div");
+    statusEl.className = "cp-action-status cp-hidden";
+    const statusSpinner = document.createElement("img");
+    statusSpinner.src = "https://carcassonne.gg/gallery/loading-red.gif";
+    statusSpinner.alt = "";
+    const statusText = document.createElement("span");
+    statusEl.append(statusSpinner, statusText);
+    const setStatus = (message, type = "info", loading = false) => {
+      statusEl.classList.remove("cp-action-status--success", "cp-action-status--error");
+      if (type === "success") statusEl.classList.add("cp-action-status--success");
+      if (type === "error") statusEl.classList.add("cp-action-status--error");
+      statusText.textContent = String(message || "");
+      statusSpinner.classList.toggle("cp-hidden", !loading);
+      statusEl.classList.toggle("cp-hidden", !message);
+    };
+    if (cclMatchPageNotice?.matchId === match.id) setStatus(cclMatchPageNotice.text, cclMatchPageNotice.type);
+    cclMatchPageNotice = null;
+    form.append(actions, errorEl, statusEl);
+
+    const addRow = (parent, labelText, control) => {
+      const row = document.createElement("div");
+      row.className = "cp-edit-row";
+      const label = document.createElement("label");
+      label.textContent = labelText;
+      row.append(label, control);
+      parent.appendChild(row);
+      return row;
+    };
+    const createTextInput = (value, { readOnly = false, type = "text" } = {}) => {
+      const input = document.createElement("input");
+      input.type = type;
+      input.value = value ?? "";
+      if (readOnly) {
+        input.readOnly = true;
+        input.classList.add("cp-readonly-input");
+      }
+      return input;
+    };
+    const lock = (control, title) => {
+      if (control.setDisabled) {
+        control.setDisabled(true);
+        control.setTitle(title);
+        return;
+      }
+      control.readOnly = true;
+      control.disabled = true;
+      control.title = title;
+    };
+
+    // Players of every stage, and this match's own players even when they no longer qualify.
+    const playersById = new Map();
+    (data.players || []).forEach((entry) => (entry.players || []).forEach((player) => playersById.set(player.id, player)));
+    [match.player_1, match.player_2].forEach((player) => {
+      if (player?.id && !playersById.has(player.id)) playersById.set(player.id, player);
+    });
+    const playerOptions = (stage) => {
+      const group = (data.players || []).find((entry) => entry.stage === stage);
+      const players = (group?.players || []).slice();
+      if (stage === match.stage) {
+        [match.player_1, match.player_2].forEach((player) => {
+          if (player?.id && !players.some((entry) => entry.id === player.id)) players.push(player);
+        });
+      }
+      return players
+        .sort((a, b) => cclPlayerName(a).localeCompare(cclPlayerName(b)))
+        .map((player) => ({
+          value: player.id,
+          label: cclPlayerName(player),
+          logo: player.association_flag || "",
+          search: `${cclPlayerName(player)} ${player.name || ""} ${player.association_name || ""}`,
+        }));
+    };
+
+    const stageInput = createCclDropdown(
+      (data.stages || []).map((stage) => ({ value: stage, label: CCL_STAGE_LABELS[stage] || stage })),
+      { value: match.stage || "", onChange: (stage) => refillPlayers(stage) }
+    );
+    const player1Input = createCclDropdown(playerOptions(match.stage), {
+      value: match.player_1?.id || "", placeholder: "Select player", searchable: true, onChange: () => refreshLocalTimes(),
+    });
+    const player2Input = createCclDropdown(playerOptions(match.stage), {
+      value: match.player_2?.id || "", placeholder: "Select player", searchable: true, onChange: () => refreshLocalTimes(),
+    });
+    const refillPlayers = (stage) => {
+      [player1Input, player2Input].forEach((input) => {
+        const options = playerOptions(stage);
+        input.setOptions(options, options.some((option) => option.value === input.getValue()) ? input.getValue() : "");
+      });
+      refreshLocalTimes();
+    };
+    addRow(form, "Player 1", player1Input.root);
+    addRow(form, "Player 2", player2Input.root);
+
+    const timeInput = createCclDatetimeInput(match.time_utc);
+    const timeRow = addRow(form, "Time, UTC", timeInput);
+    const localTimes = document.createElement("div");
+    localTimes.className = "cp-ccl-local-times";
+    timeRow.appendChild(localTimes);
+    const refreshLocalTimes = () => {
+      const selected = {
+        player_1: playersById.get(player1Input.getValue()) || null,
+        player_2: playersById.get(player2Input.getValue()) || null,
+      };
+      const timeUtc = toUtcIsoFromDatetimeLocal(timeInput.value);
+      localTimes.innerHTML = cclPlayerTimeLinesHtml(selected, (timezone) => `Local time: ${formatTeamLocalTime(timezone, timeUtc)}`);
+    };
+    timeInput.addEventListener("input", refreshLocalTimes);
+    timeInput.addEventListener("change", refreshLocalTimes);
+    refreshLocalTimes();
+
+    const formats = (data.duel_formats || []).slice();
+    if (match.duel_format && !formats.includes(match.duel_format)) formats.unshift(match.duel_format);
+    const formatInput = createCclDropdown(formats.map((format) => ({ value: format, label: format })), {
+      value: match.duel_format || "", placeholder: "Select format",
+    });
+    addRow(form, "Format", formatInput.root);
+
+    const advancedToggleWrap = document.createElement("div");
+    advancedToggleWrap.className = "cp-ccl-form-full";
+    const advancedToggle = document.createElement("button");
+    advancedToggle.type = "button";
+    advancedToggle.className = "cp-advanced-toggle";
+    advancedToggle.textContent = "Show advanced settings";
+    advancedToggleWrap.appendChild(advancedToggle);
+    const advanced = document.createElement("div");
+    advanced.className = "cp-advanced-fields cp-hidden";
+    advancedToggle.addEventListener("click", () => {
+      const show = advanced.classList.contains("cp-hidden");
+      advanced.classList.toggle("cp-hidden", !show);
+      advancedToggle.textContent = show ? "Hide advanced settings" : "Show advanced settings";
+    });
+    form.append(advancedToggleWrap, advanced);
+
+    const groupInput = createTextInput(match.group_name || "");
+    groupInput.placeholder = "e.g. A";
+    const roundInput = createTextInput(match.round_name || "");
+    roundInput.placeholder = "e.g. Round 1";
+    const roundOrderInput = createTextInput(match.round_order ?? "", { type: "number" });
+    roundOrderInput.min = "1";
+    const deadlineInput = createCclDatetimeInput(match.deadline_utc);
+    const proposer = [match.player_1, match.player_2].find((player) => player?.id && player.id === match.proposed_time_by_player_id);
+    addRow(advanced, "Stage", stageInput.root);
+    addRow(advanced, "Group", groupInput);
+    addRow(advanced, "Round", roundInput);
+    addRow(advanced, "Round order", roundOrderInput);
+    addRow(advanced, "Play before, UTC", deadlineInput);
+    addRow(advanced, "Status", createTextInput(match.status || "Planned", { readOnly: true }));
+    addRow(advanced, "Proposed Time, UTC", createTextInput(
+      hasValue(match.proposed_time_utc) ? formatProposalTimeUtc(match.proposed_time_utc) : "", { readOnly: true }
+    ));
+    addRow(advanced, "Proposed Time By", createTextInput(
+      proposer ? cclPlayerName(proposer) : match.proposed_time_by_player_id || "", { readOnly: true }
+    ));
+    addRow(advanced, "Proposed Time Status", createTextInput(match.proposed_time_status || "", { readOnly: true }));
+    // Badge and Main Event on matches.html, as for team matches.
+    const badgeNameInput = createTextInput(match.badge_name || "");
+    badgeNameInput.placeholder = "e.g. Final";
+    const badgeColorInput = createTextInput(match.badge_color || "");
+    badgeColorInput.placeholder = "e.g. #1a73b7";
+    const mainEventInput = document.createElement("input");
+    mainEventInput.type = "checkbox";
+    mainEventInput.checked = match.main_event === true;
+    mainEventInput.setAttribute("aria-label", "Main Event");
+    const mainEventControl = document.createElement("label");
+    mainEventControl.className = "cp-edit-checkbox";
+    mainEventControl.appendChild(mainEventInput);
+    addRow(advanced, "Badge name", badgeNameInput);
+    addRow(advanced, "Badge color", badgeColorInput);
+    addRow(advanced, "Main Event", mainEventControl);
+
+    // The server keeps the players of a played match, and the place and players of a bracket match.
+    if (match.is_bracket) {
+      const title = "A bracket match keeps the stage, round, group and players set by the bracket.";
+      [stageInput, player1Input, player2Input, groupInput, roundInput, roundOrderInput].forEach((control) => lock(control, title));
+    } else if (!isPlanned) {
+      const title = "Players can be changed only for a planned match.";
+      [stageInput, player1Input, player2Input].forEach((control) => lock(control, title));
+    }
+
+    // Games: read-only until Edit results; Close editing drops the unsaved changes.
+    let editor = null;
+    let isEditingResults = false;
+    if (hasResults) {
+      const resultsActions = document.createElement("div");
+      resultsActions.className = "cp-ccl-form-full cp-ccl-results-actions";
+      const editResultsButton = createButton("Edit results", "cp-btn-secondary", () => {
+        isEditingResults = !isEditingResults;
+        editResultsButton.textContent = isEditingResults ? "Close editing" : "Edit results";
+        renderResults();
+      });
+      if (!match.can_edit_result) {
+        editResultsButton.disabled = true;
+        editResultsButton.title = "Results editing is not available for this match.";
+      }
+      resultsActions.appendChild(editResultsButton);
+      const resultsPanel = document.createElement("div");
+      resultsPanel.className = "cp-ccl-form-full";
+      const renderResults = () => {
+        setError("");
+        editor = createCclGamesEditor(match, { readOnly: !isEditingResults });
+        resultsPanel.replaceChildren(editor.root);
+      };
+      renderResults();
+      form.append(resultsActions, resultsPanel);
+    }
+
+    contentEl.appendChild(form);
+
+    // Only the changed fields go to the server: it refuses some of them for played and bracket matches.
+    const changedFields = () => {
+      const body = {};
+      const putText = (key, next, current) => {
+        if (String(next ?? "").trim() !== String(current ?? "").trim()) body[key] = next;
+      };
+      const putTime = (key, input, current) => {
+        if (!isSameCclMinute(toUtcIsoFromDatetimeLocal(input.value), current)) body[key] = toUtcIsoFromDatetimeLocal(input.value);
+      };
+      putText("stage", stageInput.getValue(), match.stage);
+      putText("player_1_id", player1Input.getValue(), match.player_1?.id);
+      putText("player_2_id", player2Input.getValue(), match.player_2?.id);
+      putText("duel_format", formatInput.getValue(), match.duel_format);
+      putText("group_name", groupInput.value, match.group_name);
+      putText("round_name", roundInput.value, match.round_name);
+      putText("round_order", roundOrderInput.value, match.round_order);
+      putTime("time_utc", timeInput, match.time_utc);
+      putTime("deadline_utc", deadlineInput, match.deadline_utc);
+      putText("badge_name", badgeNameInput.value, match.badge_name);
+      putText("badge_color", badgeColorInput.value, match.badge_color);
+      if (mainEventInput.checked !== (match.main_event === true)) body.main_event = mainEventInput.checked;
+      return body;
+    };
+
+    async function save() {
+      setError("");
+      if (isEditingResults && (editor.isBusy() || editor.validate())) return;
+      const body = changedFields();
+      if (("player_1_id" in body || "player_2_id" in body) && (!player1Input.getValue() || !player2Input.getValue())) {
+        setError("Choose both players.");
+        return;
+      }
+      const buttons = [saveButton, cancelButton, getResultsButton, deleteButton];
+      buttons.forEach((button) => { button.disabled = true; });
+      saveButton.textContent = "Saving...";
+      try {
+        if (Object.keys(body).length) await cclRequest(CCL_MATCH_URL(match.id), "PATCH", body);
+        if (isEditingResults) await cclRequest(DUEL_GAMES_SAVE_URL(match.id), "POST", { games: editor.payload() });
+        resetCaptainSubview(CAPTAIN_VIEWS.MATCHES);
+      } catch (requestError) {
+        setError(requestError?.message || "Failed to save match.");
+        buttons.forEach((button) => { button.disabled = false; });
+        getResultsButton.disabled = !hasValue(match.time_utc);
+        saveButton.textContent = "Save";
+      }
+    }
+
+    // Clears the result and the games, gets them from BGA again and reloads this page with the outcome.
+    async function getResults() {
+      setError("");
+      setStatus("Updating results from BGA...", "info", true);
+      const buttons = [saveButton, cancelButton, getResultsButton, deleteButton];
+      buttons.forEach((button) => { button.disabled = true; });
+      getResultsButton.textContent = "Getting...";
+      try {
+        const { summary = {} } = await cclRequest(`${CCL_MATCH_URL(match.id)}/get-results`, "POST");
+        const isError = String(summary.status || "").toLowerCase() === "error";
+        const score = hasValue(summary.dw1) || hasValue(summary.dw2) ? ` (${summary.dw1 ?? 0}–${summary.dw2 ?? 0})` : "";
+        cclMatchPageNotice = {
+          matchId: match.id,
+          type: isError ? "error" : "success",
+          text: `Completed. Loaded ${summary.games_total || 0} games. Status: ${summary.status || "Planned"}${score}.`
+            + (isError && summary.error ? ` ${summary.error}` : ""),
+        };
+        initCaptainPage();
+      } catch (requestError) {
+        setStatus(requestError?.message || "Failed to update match results.", "error");
+        buttons.forEach((button) => { button.disabled = false; });
+        getResultsButton.disabled = !hasValue(match.time_utc);
+        getResultsButton.textContent = "Get Results";
+      }
+    }
   }
 
   const isCclResultEditableStatus = (status) => ["done", "error"].includes(String(status || "").trim().toLowerCase());
@@ -9331,7 +9689,8 @@
   }
 
   // Game-by-game result editor of a CCL match; mirrors the Challenge result editor.
-  function createCclGamesEditor(match) {
+  // `readOnly` shows the saved games with every control locked and no add, move or delete.
+  function createCclGamesEditor(match, { readOnly = false } = {}) {
     const duelId = String(match.id || "");
     const root = document.createElement("div");
     root.className = "cp-duel-edit-panel";
@@ -9348,7 +9707,11 @@
       status: String(game?.status || "").trim(),
       isNewLocal: false,
     }));
-    const state = { games: savedGames.length ? savedGames : [createCclPendingGame(duelId, 1)], saving: false, error: "" };
+    const state = {
+      games: savedGames.length || readOnly ? savedGames : [createCclPendingGame(duelId, 1)],
+      saving: false,
+      error: "",
+    };
     const players = { player1: match.player_1, player2: match.player_2 };
     const isBusy = () => state.saving || state.games.some((game) => game.fetchingBgaResult);
     const renumber = () => state.games.forEach((game, index) => { game.game_number = index + 1; });
@@ -9372,7 +9735,7 @@
     // Our dropdown (cp-dd) in place of a native select; `disabled` also locks it.
     const createSelect = (value, options, onChange, disabled = false) => createCclDropdown(
       options.map(([optionValue, label]) => ({ value: optionValue, label })),
-      { value, onChange, disabled: isBusy() || disabled }
+      { value, onChange, disabled: isBusy() || disabled || readOnly }
     ).root;
     const createButton = (text, className, onClick, disabled = false) => {
       const button = document.createElement("button");
@@ -9515,6 +9878,7 @@
       };
       const actions = document.createElement("div");
       actions.className = "cp-duel-edit-meta-actions";
+      if (readOnly) actions.classList.add("cp-hidden");
       const up = createButton("↑", "cp-btn-secondary cp-duel-edit-move-btn", () => move(-1), index === 0);
       up.title = "Move up";
       up.setAttribute("aria-label", "Move up");
@@ -9557,7 +9921,7 @@
         score.type = "number";
         score.step = "1";
         score.value = hasValue(game[`${prefix}_score`]) ? String(game[`${prefix}_score`]) : "";
-        score.readOnly = isNoShow;
+        score.readOnly = isNoShow || readOnly;
         score.disabled = isBusy();
         score.addEventListener("input", () => { game[`${prefix}_score`] = parseNullableInt(score.value); });
         addCell("Score", score, "cp-duel-edit-field--score");
@@ -9590,6 +9954,16 @@
       state.games.forEach((game, index) => {
         gamesWrap.appendChild(isCclPendingGame(game) ? createPendingGame(game, index) : createGame(game, index));
       });
+      if (readOnly) {
+        if (!state.games.length) {
+          const empty = document.createElement("div");
+          empty.className = "cp-ccl-meta";
+          empty.textContent = "No games saved for this match.";
+          gamesWrap.appendChild(empty);
+        }
+        root.appendChild(gamesWrap);
+        return;
+      }
       const actions = document.createElement("div");
       actions.className = "cp-duel-edit-actions";
       actions.appendChild(createButton("Add Game", "cp-btn-secondary", () => {
@@ -9843,12 +10217,14 @@
     details.focus();
   }
 
-  // Resolve a match in Error without games: a no-show, an agreed reschedule, or another case.
-  // Our dropdown (cp-dd) without search, in place of a native select: { value, label } options,
-  // onChange(value) after a pick. One document listener closes the open ones on an outside click.
+  // Our dropdown (cp-dd) in place of a native select: { value, label, logo?, search? } options,
+  // onChange(value) after a pick; `searchable` adds a filter field. One document listener closes
+  // the open ones on an outside click.
   let cclDropdownsBound = false;
 
-  function createCclDropdown(options, { value: initialValue = "", placeholder = "", onChange = () => {}, disabled = false } = {}) {
+  function createCclDropdown(options, {
+    value: initialValue = "", placeholder = "", onChange = () => {}, disabled = false, searchable = false,
+  } = {}) {
     if (!cclDropdownsBound) {
       cclDropdownsBound = true;
       document.addEventListener("click", (event) => {
@@ -9858,13 +10234,12 @@
       });
     }
     let value = String(initialValue ?? "");
+    let query = "";
     const root = document.createElement("div");
     root.className = "cp-dd cp-ccl-dd";
     const button = document.createElement("button");
     button.type = "button";
     button.className = "cp-dd-btn";
-    button.disabled = !!disabled;
-    button.classList.toggle("disabled", !!disabled);
     const buttonText = document.createElement("span");
     buttonText.className = "cp-dd-btn-content";
     const chevron = document.createElement("span");
@@ -9873,34 +10248,74 @@
     button.append(buttonText, chevron);
     const menu = document.createElement("div");
     menu.className = "cp-dd-menu";
+    let searchInput = null;
     const close = () => {
       menu.classList.remove("open");
       menu.style.maxHeight = "0px";
       button.classList.remove("open");
     };
     root.cclClose = close;
-    const render = () => {
+    const appendLabel = (parent, option) => {
+      if (option.logo) {
+        const flag = document.createElement("img");
+        flag.className = "cp-dd-flag";
+        flag.src = option.logo;
+        flag.alt = "";
+        parent.appendChild(flag);
+      }
+      const label = document.createElement("span");
+      label.textContent = option.label || " ";
+      parent.appendChild(label);
+    };
+    const renderButton = () => {
       const selected = options.find((option) => option.value === value) || null;
-      const label = selected?.label || "";
-      buttonText.textContent = label || placeholder || "\u00a0";
-      buttonText.classList.toggle("cp-dd-placeholder", !label);
-      menu.innerHTML = "";
-      options.forEach((option) => {
-        const item = document.createElement("button");
-        item.type = "button";
-        item.className = "cp-dd-option";
-        item.classList.toggle("active", option.value === value);
-        item.textContent = option.label || "\u00a0";
-        item.addEventListener("click", (event) => {
-          event.stopPropagation();
-          close();
-          if (option.value === value) return;
-          value = option.value;
-          render();
-          onChange(value);
+      buttonText.innerHTML = "";
+      if (selected?.label) appendLabel(buttonText, selected);
+      else buttonText.textContent = placeholder || " ";
+      buttonText.classList.toggle("cp-dd-placeholder", !selected?.label);
+    };
+    const renderOptions = () => {
+      menu.querySelectorAll(".cp-dd-option").forEach((node) => node.remove());
+      options
+        .filter((option) => !query || String(option.search || option.label || "").toLowerCase().includes(query))
+        .forEach((option) => {
+          const item = document.createElement("button");
+          item.type = "button";
+          item.className = "cp-dd-option";
+          item.classList.toggle("active", option.value === value);
+          appendLabel(item, option);
+          item.addEventListener("click", (event) => {
+            event.stopPropagation();
+            close();
+            if (option.value === value) return;
+            value = option.value;
+            renderButton();
+            renderOptions();
+            onChange(value);
+          });
+          menu.appendChild(item);
         });
-        menu.appendChild(item);
+    };
+    if (searchable) {
+      const searchWrap = document.createElement("div");
+      searchWrap.className = "cp-dd-search";
+      searchInput = document.createElement("input");
+      searchInput.type = "text";
+      searchInput.placeholder = "Type to filter...";
+      searchInput.addEventListener("click", (event) => event.stopPropagation());
+      searchInput.addEventListener("keydown", (event) => event.stopPropagation());
+      searchInput.addEventListener("input", () => {
+        query = searchInput.value.trim().toLowerCase();
+        renderOptions();
+        menu.style.maxHeight = `${Math.min(menu.scrollHeight, 280)}px`;
       });
+      searchWrap.appendChild(searchInput);
+      menu.appendChild(searchWrap);
+    }
+    const setDisabled = (isDisabled) => {
+      button.disabled = !!isDisabled;
+      button.classList.toggle("disabled", !!isDisabled);
+      if (isDisabled) close();
     };
     button.addEventListener("click", (event) => {
       event.stopPropagation();
@@ -9911,13 +10326,34 @@
       document.querySelectorAll(".cp-ccl-dd").forEach((node) => {
         if (node !== root) node.cclClose?.();
       });
+      if (searchInput) {
+        query = "";
+        searchInput.value = "";
+        renderOptions();
+      }
       menu.classList.add("open");
       menu.style.maxHeight = `${Math.min(menu.scrollHeight, 280)}px`;
       button.classList.add("open");
+      searchInput?.focus({ preventScroll: true });
     });
-    render();
+    renderButton();
+    renderOptions();
+    setDisabled(disabled);
     root.append(button, menu);
-    return { root, close, getValue: () => value };
+    return {
+      root,
+      close,
+      getValue: () => value,
+      setDisabled,
+      setTitle: (title) => { button.title = String(title || ""); },
+      // New options (e.g. the players of another stage); keeps the value unless one is given.
+      setOptions: (nextOptions, nextValue = value) => {
+        options = nextOptions;
+        value = String(nextValue ?? "");
+        renderButton();
+        renderOptions();
+      },
+    };
   }
 
   // Resolve a match in Error without games: a no-show, an agreed reschedule, or another problem.
@@ -10177,7 +10613,7 @@
     const canEditResult = isPlayed && match.can_edit_result === true && (!!match.my_side || options.manage)
       && (options.manage || !isError);
     const editUntilTs = Date.parse(String(match.result_edit_until || ""));
-    if (canEditResult && match.my_side && Number.isFinite(editUntilTs) && editUntilTs > Date.now()) {
+    if (canEditResult && match.my_side && !options.manage && Number.isFinite(editUntilTs) && editUntilTs > Date.now()) {
       const note = document.createElement("div");
       note.className = "cp-ccl-result-note";
       note.textContent = `Result editing is available until ${formatCclViewerTime(match, match.result_edit_until)}`;
@@ -10203,37 +10639,43 @@
       onClick: () => openCclReportProblemModal(match, scenario),
     };
     const isPlanned = String(match.status || "Planned").toLowerCase() === "planned";
-    if (match.my_side && isPlanned) {
-      const myId = (match.my_side === 1 ? match.player_1 : match.player_2)?.id;
-      const incoming = isCclActiveProposal(match) && match.proposed_time_by_player_id !== myId;
-      const timeButton = createAction(
-        incoming ? "Review time" : isCclActiveProposal(match) ? "Edit proposal" : hasValue(match.time_utc) ? "Change time" : "Propose time",
-        incoming ? "cp-btn-primary" : "cp-btn-secondary",
-        () => openCclTimeProposalModal(match)
-      );
-      actions.appendChild(scenario === "scheduling" ? createCclSplitAction(timeButton, [reportProblem]) : timeButton);
-    }
     if (isError) {
       const badge = document.createElement("span");
       badge.className = "cp-status-badge cp-status-badge-error";
       badge.textContent = "Error";
       actions.appendChild(badge);
     }
-    if (scenario === "not_played") {
-      addAction("Resolve", "cp-btn-primary", () => openCclResolveModal(match));
-    }
-    if (scenario === "incomplete") {
-      addAction("Resolve", "cp-btn-primary", () => openCclIncompleteResolveModal(match));
-    }
-    if (canEditResult) {
-      addAction("Edit results", "cp-btn-secondary", () => openCclResultsModal(match));
-    }
-    if (scenario === "result_dispute") {
-      actions.appendChild(createCclSplitAction(null, [reportProblem]));
-    }
+    // Admin mode: the match page (renderCclMatchEditPage) holds every admin action.
     if (options.manage) {
-      addAction("Edit", "cp-btn-secondary", () => openCclMatchEditModal(data, match));
-      addAction("Delete", "cp-btn-danger", () => openCclMatchDeleteModal(match));
+      const viewButton = document.createElement("button");
+      viewButton.type = "button";
+      viewButton.className = "cp-edit-btn cp-edit-btn-view";
+      viewButton.textContent = "View";
+      viewButton.addEventListener("click", () => openCaptainEdit(CAPTAIN_VIEWS.MATCHES, { matchId: String(match.id || "") }));
+      actions.appendChild(viewButton);
+    } else {
+      if (match.my_side && isPlanned) {
+        const myId = (match.my_side === 1 ? match.player_1 : match.player_2)?.id;
+        const incoming = isCclActiveProposal(match) && match.proposed_time_by_player_id !== myId;
+        const timeButton = createAction(
+          incoming ? "Review time" : isCclActiveProposal(match) ? "Edit proposal" : hasValue(match.time_utc) ? "Change time" : "Propose time",
+          incoming ? "cp-btn-primary" : "cp-btn-secondary",
+          () => openCclTimeProposalModal(match)
+        );
+        actions.prepend(scenario === "scheduling" ? createCclSplitAction(timeButton, [reportProblem]) : timeButton);
+      }
+      if (scenario === "not_played") {
+        addAction("Resolve", "cp-btn-primary", () => openCclResolveModal(match));
+      }
+      if (scenario === "incomplete") {
+        addAction("Resolve", "cp-btn-primary", () => openCclIncompleteResolveModal(match));
+      }
+      if (canEditResult) {
+        addAction("Edit results", "cp-btn-secondary", () => openCclResultsModal(match));
+      }
+      if (scenario === "result_dispute") {
+        actions.appendChild(createCclSplitAction(null, [reportProblem]));
+      }
     }
 
     row.append(time, divider, players, actions);
@@ -10361,7 +10803,7 @@
     });
   }
 
-  async function renderCclTournamentPage(tournament, authState) {
+  async function renderCclTournamentPage(tournament, authState, editMatchId = "") {
     const result = await cclRequest(CCL_MATCHES_URL(tournament.id), "GET").catch((requestError) => ({ error: requestError }));
     if (result.error) {
       renderRestrictedSectionMessage(result.error.message === "Forbidden"
@@ -10371,6 +10813,21 @@
     }
     const data = result;
     const myMatches = data.matches.filter((match) => match.my_side);
+
+    // The match page is for tournament admins; anyone else gets the match list.
+    if (editMatchId && data.can_manage) {
+      const match = data.matches.find((entry) => String(entry.id) === editMatchId);
+      if (match) {
+        renderCclMatchEditPage(data, match);
+      } else {
+        clearFilters();
+        addButtonEl.classList.add("cp-hidden");
+        contentEl.className = "captain-alert";
+        contentEl.textContent = `Match not found: ${editMatchId}`;
+        countEl.textContent = "";
+      }
+      return;
+    }
 
     // Admin mode: an admin who also plays here can switch to the player view.
     const preferenceKey = JSON.stringify([authState.currentUserAuthId, tournament.id]);
@@ -10567,9 +11024,9 @@
       const currentTournament = activeView === CAPTAIN_VIEWS.MATCHES
         ? (tournamentsById.get(requestedTournamentId) || null)
         : null;
-      if (currentTournament && isCclTournament(currentTournament) && !isCreateMode && !isEditMode) {
+      if (currentTournament && isCclTournament(currentTournament)) {
         setPageHeading(getImmediatePageHeading(currentTournament));
-        await renderCclTournamentPage(currentTournament, { currentUserAuthId });
+        await renderCclTournamentPage(currentTournament, { currentUserAuthId }, isEditMode ? editMatchId : "");
         return;
       }
       const currentTournamentAccess = getTournamentAccessState(currentTournament, {

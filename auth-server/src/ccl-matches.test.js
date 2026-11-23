@@ -37,11 +37,20 @@ test("normalizes the admin match form", () => {
     duel_format: "Bo3",
     time_utc: null,
     deadline_utc: "2026-12-14T23:59:00.000Z",
+    badge_name: null,
+    badge_color: null,
+    main_event: 0,
   });
   assert.match(normalizeCclMatchInput({ stage: "Q4" }).error, /stage/);
   assert.match(normalizeCclMatchInput({ stage: "Q1", player_1_id: "a" }).error, /player_2_id/);
   assert.deepEqual(normalizeCclMatchInput({ group_name: "" }, { partial: true }).value, { group_name: null });
   assert.match(normalizeCclMatchInput({ time_utc: "soon" }, { partial: true }).error, /time_utc/);
+  assert.deepEqual(
+    normalizeCclMatchInput({ badge_name: " Final ", badge_color: "1A73B7", main_event: true }, { partial: true }).value,
+    { badge_name: "Final", badge_color: "#1a73b7", main_event: 1 }
+  );
+  assert.deepEqual(normalizeCclMatchInput({ badge_color: "", main_event: false }, { partial: true }).value, { badge_color: null, main_event: 0 });
+  assert.match(normalizeCclMatchInput({ badge_color: "red" }, { partial: true }).error, /badge_color/);
 });
 
 test("pairs only players registered for the stage", () => {
