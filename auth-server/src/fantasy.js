@@ -336,7 +336,8 @@ export async function loadLeagueSlots(db, league) {
     db,
     `
       SELECT tp.id AS slot_id, trim(tp.player_id) AS player_id, tp.entry_stage AS stage, tp.association_id,
-             tp.league_status, p.bga_nickname, p.name AS profile_name, e.seed
+             tp.league_status, p.bga_nickname, p.name AS profile_name, e.seed,
+             p.avatar, p.bga_elo, p.gg_elo, p.gg_rating_position
       FROM tournament_players tp
       LEFT JOIN profiles p ON trim(p.id) = trim(tp.player_id)
       LEFT JOIN ccl_stage_entries e ON upper(trim(e.slot_id)) = upper(trim(tp.id)) AND e.stage = tp.entry_stage
@@ -423,6 +424,72 @@ export async function loadScoredMatches(db, league) {
     `,
     [league.tournament_id, ...league.stages]
   );
+}
+
+// Matches still to play in the league stages (Planned or In progress, both players known), soonest first:
+// a match without a time goes after the timed ones, by its deadline.
+export async function loadUpcomingMatches(db, league) {
+  return dbAll(
+    db,
+    `
+      SELECT id, stage, group_name, round_name, time_utc, deadline_utc, duel_format,
+             COALESCE(NULLIF(trim(status), ''), 'Planned') AS status,
+             trim(player_1_id) AS player_1_id, trim(player_2_id) AS player_2_id
+      FROM duels
+      WHERE source_type = 'ccl'
+        AND upper(trim(tournament_id)) = upper(trim(?))
+        AND stage IN (${league.stages.map(() => "?").join(", ")})
+        AND lower(COALESCE(NULLIF(trim(status), ''), 'planned')) IN ('planned', 'in progress')
+        AND deleted_at IS NULL
+        AND COALESCE(is_test, 0) = 0
+        AND trim(COALESCE(player_1_id, '')) <> ''
+        AND trim(COALESCE(player_2_id, '')) <> ''
+      ORDER BY time_utc IS NULL, time_utc, deadline_utc IS NULL, deadline_utc, id
+    `,
+    [league.tournament_id, ...league.stages]
+  );
+}
+
+// What the match details popup shows of a player (the fields of the duel popup on matches.html).
+function matchPlayerView(playerId, slot, associations) {
+  const association = slot ? associations.get(idKey(slot.association_id)) || null : null;
+  const number = (value) => (value === null || value === undefined || value === "" ? null : Number(value));
+  return {
+    id: text(playerId),
+    nickname: slot ? slot.bga_nickname || slot.profile_name || slot.player_id : text(playerId),
+    name: text(slot?.profile_name) || null,
+    avatar: text(slot?.avatar) || null,
+    flag: association?.flag || null,
+    country: association?.name || null,
+    elo: number(slot?.gg_elo),
+    rank: number(slot?.gg_rating_position),
+    bgaElo: number(slot?.bga_elo),
+  };
+}
+
+// slot key → the player's next match (or nothing), with both players for the popup.
+export function nextMatchesBySlot(slots, matches, associations) {
+  const slotByPlayer = new Map(slots.map((slot) => [text(slot.player_id), slot]));
+  const next = new Map();
+  for (const match of matches) {
+    for (const [playerId, opponentId] of [[match.player_1_id, match.player_2_id], [match.player_2_id, match.player_1_id]]) {
+      const slot = slotByPlayer.get(text(playerId));
+      if (!slot || next.has(idKey(slot.slot_id))) continue;
+      next.set(idKey(slot.slot_id), {
+        duel_id: match.id,
+        time_utc: match.time_utc || null,
+        deadline_utc: match.deadline_utc || null,
+        format: text(match.duel_format) || null,
+        status: match.status,
+        stage: match.stage || null,
+        group: text(match.group_name) || null,
+        round_name: text(match.round_name) || null,
+        player: matchPlayerView(playerId, slot, associations),
+        opponent: matchPlayerView(opponentId, slotByPlayer.get(text(opponentId)) || null, associations),
+      });
+    }
+  }
+  return next;
 }
 
 // player id → the player's results, oldest first, each from the player's side.
@@ -691,11 +758,14 @@ export function registerFantasyRoutes(app, {
     const current = now();
     const status = getFantasyStatus(league, current);
     const accountId = userId(req.user);
-    const [pool, team, scores] = await Promise.all([
+    const [pool, team, scores, upcoming, associations] = await Promise.all([
       loadFantasyPlayers(db, league, current.toISOString()),
       accountId === null ? null : loadTeam(db, league.id, accountId),
       loadLeagueScores(db, league, current),
+      loadUpcomingMatches(db, league),
+      loadAssociationsById(db),
     ]);
+    const nextMatches = nextMatchesBySlot(scores.slots, upcoming, associations);
     const teamPlayers = team ? await loadTeamPlayers(db, team.id) : [];
     // How many teams picked a player: only once teams are locked, so nobody sees others' picks before the deadline.
     const afterMain = status === "late" || status === "closed";
@@ -708,6 +778,7 @@ export function registerFantasyRoutes(app, {
     const players = pool.map((player) => ({
       ...player,
       points: scores.playerPoints.get(idKey(player.slot_id)) || 0,
+      next_match: nextMatches.get(idKey(player.slot_id)) || null,
       ...(afterMain ? { picked_by: pickedBy.get(idKey(player.slot_id)) || 0 } : {}),
     }));
     return res.json({

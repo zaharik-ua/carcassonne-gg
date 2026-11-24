@@ -69,7 +69,10 @@ async function createDatabase(t) {
       ('CCL-2026', 'Carcassonne Champions League 2026', 'Individuals', 'CCL');
     CREATE TABLE associations (association_row_id INTEGER PRIMARY KEY AUTOINCREMENT, code TEXT, name TEXT NOT NULL, flag TEXT);
     INSERT INTO associations (code, name, flag) VALUES ('POL', 'Poland', 'pl.png'), ('UKR', 'Ukraine', 'ua.png');
-    CREATE TABLE profiles (id TEXT PRIMARY KEY, bga_nickname TEXT, name TEXT, deleted_at TEXT);
+    CREATE TABLE profiles (
+      id TEXT PRIMARY KEY, bga_nickname TEXT, name TEXT, deleted_at TEXT,
+      avatar TEXT, bga_elo REAL, gg_elo REAL, gg_rating_position INTEGER
+    );
     INSERT INTO profiles (id, bga_nickname) VALUES
       ('p1', 'Jan'), ('p2', 'Kasia'), ('p3', 'Taras'), ('p4', 'Olena'), ('p5', 'Marek'), ('p6', 'Ivan'),
       ('p7', 'Zosia'), ('p9', 'Main Star'), ('p10', 'Old Timer');
@@ -93,7 +96,7 @@ async function createDatabase(t) {
     CREATE TABLE duels (
       id TEXT PRIMARY KEY, tournament_id TEXT, source_type TEXT, deleted_at TEXT, stage TEXT, group_name TEXT,
       round_name TEXT, player_1_id TEXT, player_2_id TEXT, status TEXT, dw1 INTEGER, dw2 INTEGER, time_utc TEXT,
-      is_test INTEGER NOT NULL DEFAULT 0
+      is_test INTEGER NOT NULL DEFAULT 0, deadline_utc TEXT, duel_format TEXT
     );
     INSERT INTO duels (id, tournament_id, source_type, deleted_at, stage, group_name, player_1_id, player_2_id, status) VALUES
       ('d1', 'CCL-2027', 'ccl', NULL, 'Q1', 'A', 'p1', 'p2', 'Planned'),
@@ -658,6 +661,40 @@ test("players carry their points; how many teams picked them shows only after th
   const early = (await state(createApi(db, { now: OPEN }))).body.players;
   assert.ok(early.every((player) => !("picked_by" in player)));
   assert.equal(early.find((player) => player.slot_id === "s4").points, 4);
+});
+
+test("each player carries their next match with both players for the popup", async (t) => {
+  const { db, api } = await scoredLeague(t);
+  await exec(db, `
+    UPDATE profiles SET name = 'Jan Kowalski', avatar = 'https://x.boardgamearena.net/a.jpg', bga_elo = 410, gg_elo = 1720, gg_rating_position = 12
+    WHERE id = 'p1';
+    UPDATE duels SET duel_format = 'Bo3', round_name = 'Round 2' WHERE id = 'n2';
+    INSERT INTO duels (id, tournament_id, source_type, stage, group_name, player_1_id, player_2_id, status, time_utc) VALUES
+      ('x1', 'CCL-2027', 'ccl', 'Q2', 'B', 'p3', 'p4', 'Draft', '2026-12-03T10:00:00.000Z'),
+      ('x2', 'CCL-2027', 'ccl', 'Q2', 'B', 'p3', NULL, 'Planned', '2026-12-03T11:00:00.000Z');
+  `);
+  const players = (await state(api)).body.players;
+  const bySlot = Object.fromEntries(players.map((player) => [player.slot_id, player]));
+  // s1: the timed planned match n2 comes before d1, which has no time yet.
+  const next = bySlot.s1.next_match;
+  assert.equal(next.duel_id, "n2");
+  assert.equal(next.time_utc, "2026-12-03T18:00:00.000Z");
+  assert.equal(next.format, "Bo3");
+  assert.equal(next.status, "Planned");
+  assert.deepEqual([next.stage, next.group, next.round_name], ["Q1", "A", "Round 2"]);
+  assert.deepEqual(next.player, {
+    id: "p1", nickname: "Jan", name: "Jan Kowalski", avatar: "https://x.boardgamearena.net/a.jpg",
+    flag: "pl.png", country: "Poland", elo: 1720, rank: 12, bgaElo: 410,
+  });
+  assert.equal(next.opponent.nickname, "Kasia");
+  // From the other side too, with the opponent on the right.
+  assert.equal(bySlot.s2.next_match.duel_id, "n2");
+  assert.equal(bySlot.s2.next_match.opponent.nickname, "Jan");
+  // s5: d2 has no time but is still the next match.
+  assert.equal(bySlot.s5.next_match.duel_id, "d2");
+  assert.equal(bySlot.s5.next_match.opponent.nickname, "Ivan");
+  // s3: only a draft match and one without an opponent: no next match.
+  assert.equal(bySlot.s3.next_match, null);
 });
 
 test("league admins see the points of every scoring team and player", async (t) => {

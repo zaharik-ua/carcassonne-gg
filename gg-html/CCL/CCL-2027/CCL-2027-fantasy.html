@@ -108,7 +108,7 @@
 
   .ff-field label { display: block; font-size: 12px; font-weight: 600; color: var(--muted); margin-bottom: 4px; }
 
-  .ff-input, .ff-select {
+  .ff-input {
     width: 100%;
     height: 34px;
     padding: 0 10px;
@@ -196,9 +196,268 @@
 
   .ff-filters {
     display: grid;
-    grid-template-columns: 1.4fr repeat(4, 1fr);
+    grid-template-columns: 1.4fr repeat(3, 1fr);
     gap: 8px;
     margin-bottom: 10px;
+    align-items: center;
+  }
+
+  /* Our dropdown (cp-dd on player-hub/tournaments.html) in place of native selects. */
+  .ff-dd { position: relative; display: inline-flex; flex-direction: column; width: 100%; }
+  .ff-dd-btn {
+    all: unset;
+    box-sizing: border-box;
+    width: 100%;
+    height: 34px;
+    border: 1px solid #c8ced8;
+    border-radius: 4px;
+    background: #fff;
+    color: #2f3947;
+    font-size: 14px;
+    padding: 4px 10px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    cursor: pointer;
+  }
+  .ff-dd-btn:hover, .ff-dd-btn:focus-visible, .ff-dd-btn.open { border-color: #9ea7b3; }
+  .ff-dd-btn-content { display: inline-flex; align-items: center; gap: 6px; min-width: 0; white-space: nowrap; overflow: hidden; }
+  .ff-dd-btn-content span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .ff-dd-flag { width: 16px; height: 11px; border-radius: 2px; object-fit: cover; flex-shrink: 0; }
+  .ff-dd-chevron { color: #6f7785; font-size: 10px; transition: transform 0.18s ease; }
+  .ff-dd-btn.open .ff-dd-chevron { transform: rotate(180deg); }
+  .ff-dd-menu {
+    position: absolute;
+    left: 0;
+    top: calc(100% + 4px);
+    min-width: 100%;
+    width: max-content;
+    max-width: 320px;
+    max-height: 0;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    background: #fff;
+    border: 1px solid #d5dbe4;
+    border-radius: 4px;
+    box-shadow: 0 8px 18px rgba(15, 28, 48, 0.14);
+    opacity: 0;
+    pointer-events: none;
+    transform: translateY(4px);
+    transition: opacity 0.16s ease, transform 0.16s ease, max-height 0.16s ease;
+    z-index: 20;
+  }
+  .ff-dd-menu.open { opacity: 1; pointer-events: auto; transform: translateY(0); overflow-y: auto; overflow-x: hidden; }
+  .ff-dd-search { padding: 6px 8px; border-bottom: 1px solid #edf1f6; background: #fff; }
+  .ff-dd-search input {
+    width: 100%;
+    height: 28px;
+    border: 1px solid #c8ced8;
+    border-radius: 4px;
+    padding: 4px 8px;
+    font: inherit;
+    font-size: 13px;
+    box-sizing: border-box;
+  }
+  .ff-dd-option {
+    all: unset;
+    box-sizing: border-box;
+    padding: 6px 10px;
+    border-top: 1px solid #edf1f6;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 13px;
+    color: #2f3947;
+    line-height: 1.2;
+    white-space: nowrap;
+    cursor: pointer;
+  }
+  .ff-dd-option:first-child { border-top: none; }
+  .ff-dd-option:hover { background: #f5f5f5; }
+  .ff-dd-option.active { background: #e4f0fb; }
+
+  /* Sortable column headers: Player A→Z→Z→A→default, Price low→high→default, Pts high→low→default. */
+  .ff-sort {
+    all: unset;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    color: inherit;
+    font-weight: 600;
+  }
+  .ff-sort:hover, .ff-sort:focus-visible { color: var(--main-bg-color); }
+  .ff-sort .ff-sort-arrow { font-size: 10px; color: #9aa1ab; }
+  .ff-sort.active .ff-sort-arrow { color: var(--main-bg-color); }
+
+  /* [Next match]: a small outline button next to the player. */
+  .ff-next-btn {
+    all: unset;
+    box-sizing: border-box;
+    height: 20px;
+    padding: 0 6px;
+    border: 1px solid #c8ced8;
+    border-radius: 3px;
+    background: transparent;
+    color: var(--muted);
+    font-size: 11px;
+    font-weight: 600;
+    line-height: 18px;
+    white-space: nowrap;
+    cursor: pointer;
+  }
+  .ff-next-btn:hover, .ff-next-btn:focus-visible { border-color: var(--main-bg-color); color: var(--main-bg-color); }
+
+  /* Match details popup, as on matches.html. */
+  .challenge-match-modal-overlay {
+    position: fixed;
+    inset: 44px 0 0;
+    z-index: 1000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 16px;
+    background: rgba(24, 31, 41, 0.42);
+    box-sizing: border-box;
+    font-family: 'Montserrat', sans-serif;
+  }
+  .challenge-match-modal {
+    position: relative;
+    width: min(100%, 760px);
+    max-height: min(620px, calc(100vh - 44px - 32px));
+    overflow: auto;
+    border: 1px solid #d8dee8;
+    border-radius: 8px;
+    background: #fff;
+    box-shadow: 0 16px 36px rgba(15, 28, 48, 0.22);
+    padding: 22px 24px;
+    box-sizing: border-box;
+  }
+  .challenge-match-modal__close {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    width: 32px;
+    height: 32px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: 0;
+    border-radius: 4px;
+    background: transparent;
+    color: #667080;
+    font-size: 22px;
+    line-height: 1;
+    cursor: pointer;
+  }
+  .challenge-match-modal__close:hover, .challenge-match-modal__close:focus-visible { background: #f1f3f6; color: #172232; outline: none; }
+  .challenge-match-meta {
+    padding: 4px 40px 0 6px;
+    color: #5b6b7c;
+    font-size: 13px;
+    display: grid;
+    gap: 2px;
+  }
+  .challenge-match-meta strong { color: #172232; font-size: 15px; }
+  .challenge-match-card {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+    align-items: center;
+    gap: 24px;
+    padding: 18px 6px 6px;
+  }
+  .challenge-match-player { min-width: 0; display: flex; flex-direction: column; gap: 10px; }
+  .challenge-match-player--right { align-items: flex-end; text-align: right; }
+  .challenge-match-player__rating {
+    width: 100%;
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 12px;
+    color: #172232;
+    font-size: 14px;
+  }
+  .challenge-match-player__rank, .challenge-match-player__rating-value { font-weight: 700; }
+  .challenge-match-player__ratings { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; }
+  .challenge-match-player__rating-line { display: inline-flex; gap: 4px; }
+  .challenge-match-player__profile { width: 100%; max-width: 100%; box-sizing: border-box; display: flex; align-items: center; gap: 10px; }
+  .challenge-match-player--right .challenge-match-player__profile { flex-direction: row-reverse; }
+  .challenge-match-player__info { min-width: 0; display: flex; flex-direction: column; gap: 2px; color: #333; font-size: 14px; line-height: 1.25; }
+  .challenge-match-player--right .challenge-match-player__info { align-items: flex-end; }
+  .challenge-match-player__avatar { width: 48px; height: 48px; flex: 0 0 48px; border-radius: 6px; background: #f2f2f2; object-fit: cover; }
+  .challenge-match-player__avatar-fallback { display: inline-flex; align-items: center; justify-content: center; color: #718096; font-size: 18px; font-weight: 700; }
+  .challenge-match-player__nickname {
+    min-width: 0;
+    overflow: hidden;
+    color: #172232;
+    font-size: 18px;
+    font-weight: 700;
+    text-decoration: none;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .challenge-match-player__nickname:hover, .challenge-match-player__nickname:focus-visible { color: #0277BD; outline: none; }
+  .challenge-match-player__flag { width: 18px; height: 18px; flex: 0 0 auto; object-fit: contain; }
+  .challenge-match-player__country-row { display: inline-flex; align-items: center; gap: 6px; margin-top: 2px; font-size: 13px; }
+  .challenge-match-player__name, .challenge-match-player__country { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .challenge-match-player__bga-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    margin-top: 4px;
+    font-size: 12px;
+    color: #1a73b7;
+    text-decoration: none;
+    line-height: 1.2;
+  }
+  .challenge-match-player__bga-link:hover { color: #165e93; text-decoration: underline; }
+  .challenge-match-player__bga-link img { width: 14px; height: 14px; object-fit: contain; }
+  .challenge-match-card__vs {
+    display: grid;
+    grid-template-rows: auto minmax(12px, 1fr) auto minmax(12px, 1fr);
+    justify-items: center;
+    align-self: stretch;
+    color: #8b1e2d;
+    font-size: 18px;
+    font-weight: 700;
+  }
+  .challenge-match-card__vs-content { grid-row: 3; display: flex; flex-direction: column; align-items: center; }
+  .challenge-match-card__format { grid-row: 1; }
+  .challenge-match-format-badge { display: inline-flex; padding: 3px 7px; border-radius: 3px; font-size: 12px; line-height: 1.2; font-weight: 600; }
+  .challenge-match-format-badge.bo1 { background-color: #eee; color: #333; }
+  .challenge-match-format-badge.bo3 { background-color: #d7eaff; color: #073654; }
+  .challenge-match-format-badge.bo5 { background-color: #fce0e0; color: #590f0f; }
+  .challenge-match-card__vs::before, .challenge-match-card__vs::after {
+    content: "";
+    width: 1px;
+    align-self: stretch;
+    margin: 6px 0;
+    background: #d8dee8;
+  }
+  .challenge-match-card__vs::before { grid-row: 2; }
+  .challenge-match-card__vs::after { grid-row: 4; }
+
+  @media (max-width: 600px) {
+    .challenge-match-modal { max-height: calc(100vh - 44px - 24px); padding: 18px 16px; }
+    .challenge-match-card { grid-template-columns: 1fr; gap: 14px; padding: 18px 2px 4px; }
+    .challenge-match-player--right { align-items: flex-start; text-align: left; }
+    .challenge-match-player--right .challenge-match-player__profile { flex-direction: row; }
+    .challenge-match-player--right .challenge-match-player__info { align-items: flex-start; }
+    .challenge-match-card__vs {
+      width: 100%;
+      align-self: auto;
+      grid-template-columns: 1fr auto 1fr;
+      grid-template-rows: auto auto;
+      column-gap: 12px;
+      row-gap: 6px;
+    }
+    .challenge-match-card__format { grid-column: 2; grid-row: 1; }
+    .challenge-match-card__vs-content { grid-column: 2; grid-row: 2; }
+    .challenge-match-card__vs::before, .challenge-match-card__vs::after { width: auto; height: 1px; margin: 0; align-self: center; }
+    .challenge-match-card__vs::before { grid-column: 1; grid-row: 2; }
+    .challenge-match-card__vs::after { grid-column: 3; grid-row: 2; }
   }
 
   .ff-table-wrap {
@@ -306,7 +565,8 @@
   let draft = null;
   let busy = false;
   let message = null;
-  const filters = { search: "", stage: "", group: "", association: "", sort: "price-desc" };
+  const DEFAULT_SORT = "price-desc";
+  const filters = { search: "", stage: "", group: "", association: "", sort: DEFAULT_SORT };
   let clockTimer = 0;
   let reloadedAt = null;
 
@@ -501,7 +761,6 @@
     }
     box.appendChild(el("span", "ff-player-name", player.nickname));
     if (withStage) box.appendChild(el("span", "ff-tag", [player.stage, player.group ? `Group ${player.group}` : ""].filter(Boolean).join(" · ")));
-    if (player.seed === "Seeded") box.appendChild(el("span", "ff-tag", "Seeded"));
     if (player.eliminated) box.appendChild(el("span", "ff-tag out", "Eliminated"));
     return box;
   }
@@ -633,27 +892,133 @@
       && (!filters.group || player.group === filters.group)
       && (!filters.association || player.association?.id === filters.association)
     ));
-    const byName = (left, right) => String(left.nickname).localeCompare(String(right.nickname));
+    const byName = (left, right) => String(left.nickname).localeCompare(String(right.nickname), undefined, { sensitivity: "base" });
     const sorters = {
       "price-desc": (left, right) => right.price - left.price || byName(left, right),
       "price-asc": (left, right) => left.price - right.price || byName(left, right),
       "points-desc": (left, right) => (right.points || 0) - (left.points || 0) || byName(left, right),
-      name: byName,
+      "name-asc": byName,
+      "name-desc": (left, right) => byName(right, left),
     };
-    return rows.sort(sorters[filters.sort] || sorters["price-desc"]);
+    return rows.sort(sorters[filters.sort] || sorters[DEFAULT_SORT]);
   }
 
-  function select(options, value, onChange, ariaLabel) {
-    const node = el("select", "ff-select");
-    node.setAttribute("aria-label", ariaLabel);
-    options.forEach(([optionValue, optionLabel]) => {
-      const option = el("option", "", optionLabel);
-      option.value = optionValue;
-      node.appendChild(option);
+  // A click on a column header steps through its orders and then back to the default (Price high → low).
+  const SORT_CYCLES = { player: ["name-asc", "name-desc"], price: ["price-asc"], points: ["points-desc"] };
+
+  function nextSort(column) {
+    const cycle = SORT_CYCLES[column];
+    const index = cycle.indexOf(filters.sort);
+    filters.sort = index === -1 ? cycle[0] : cycle[index + 1] || DEFAULT_SORT;
+  }
+
+  // The arrow a header shows: Price shows the default order too.
+  function sortArrow(column) {
+    const arrows = {
+      player: { "name-asc": "▲", "name-desc": "▼" },
+      price: { "price-asc": "▲", "price-desc": "▼" },
+      points: { "points-desc": "▼" },
+    };
+    return arrows[column][filters.sort] || "";
+  }
+
+  // Our dropdown (cp-dd from player-hub/tournaments.html) in place of a native select.
+  // options: [{ value, label, flag? }]; `searchable` adds a filter field.
+  let dropdownsBound = false;
+
+  function dropdown(options, value, onChange, { ariaLabel = "", searchable = false } = {}) {
+    if (!dropdownsBound) {
+      dropdownsBound = true;
+      document.addEventListener("click", (event) => {
+        document.querySelectorAll(".ff-dd").forEach((node) => {
+          if (!node.contains(event.target)) node.ffClose?.();
+        });
+      });
+    }
+    let query = "";
+    const root = el("div", "ff-dd");
+    const button = el("button", "ff-dd-btn");
+    button.type = "button";
+    button.setAttribute("aria-haspopup", "listbox");
+    if (ariaLabel) button.setAttribute("aria-label", ariaLabel);
+    const content = el("span", "ff-dd-btn-content");
+    button.append(content, el("span", "ff-dd-chevron", "▾"));
+    const menu = el("div", "ff-dd-menu");
+    menu.setAttribute("role", "listbox");
+    let searchInput = null;
+    const close = () => {
+      menu.classList.remove("open");
+      menu.style.maxHeight = "0px";
+      button.classList.remove("open");
+    };
+    root.ffClose = close;
+    const appendLabel = (parent, option) => {
+      if (option.flag) {
+        const flag = el("img", "ff-dd-flag");
+        flag.src = option.flag;
+        flag.alt = "";
+        parent.appendChild(flag);
+      }
+      parent.appendChild(el("span", "", option.label));
+    };
+    const renderOptions = () => {
+      menu.querySelectorAll(".ff-dd-option").forEach((node) => node.remove());
+      options
+        .filter((option) => !query || !option.value || String(option.label).toLowerCase().includes(query))
+        .forEach((option) => {
+          const item = el("button", `ff-dd-option${option.value === value ? " active" : ""}`);
+          item.type = "button";
+          item.setAttribute("role", "option");
+          item.setAttribute("aria-selected", String(option.value === value));
+          appendLabel(item, option);
+          item.addEventListener("click", (event) => {
+            event.stopPropagation();
+            close();
+            if (option.value !== value) onChange(option.value);
+          });
+          menu.appendChild(item);
+        });
+    };
+    if (searchable) {
+      const wrap = el("div", "ff-dd-search");
+      searchInput = el("input");
+      searchInput.type = "text";
+      searchInput.placeholder = "Type to filter...";
+      searchInput.addEventListener("click", (event) => event.stopPropagation());
+      searchInput.addEventListener("input", () => {
+        query = searchInput.value.trim().toLowerCase();
+        renderOptions();
+        menu.style.maxHeight = `${Math.min(menu.scrollHeight, 300)}px`;
+      });
+      wrap.appendChild(searchInput);
+      menu.appendChild(wrap);
+    }
+    button.addEventListener("click", (event) => {
+      event.stopPropagation();
+      if (menu.classList.contains("open")) {
+        close();
+        return;
+      }
+      document.querySelectorAll(".ff-dd").forEach((node) => {
+        if (node !== root) node.ffClose?.();
+      });
+      if (searchInput) {
+        query = "";
+        searchInput.value = "";
+        renderOptions();
+      }
+      menu.classList.add("open");
+      menu.style.maxHeight = `${Math.min(menu.scrollHeight, 300)}px`;
+      button.classList.add("open");
+      searchInput?.focus({ preventScroll: true });
     });
-    node.value = value;
-    node.addEventListener("change", () => onChange(node.value));
-    return node;
+    root.addEventListener("keydown", (event) => {
+      if (event.key === "Escape") close();
+    });
+    appendLabel(content, options.find((option) => option.value === value) || options[0]);
+    renderOptions();
+    root.append(button, menu);
+    return root;
   }
 
   function renderPool() {
@@ -672,32 +1037,37 @@
       filters.search = search.value;
       renderPoolTable(tableBox);
     });
-    const stages = season().stages.map((stage) => [stage, stage]);
+    const stages = season().stages.map((stage) => ({ value: stage, label: stage }));
     const groups = [...new Set(data.players.filter((player) => !filters.stage || player.stage === filters.stage)
       .map((player) => player.group).filter(Boolean))].sort();
     const associations = new Map();
     data.players.forEach((player) => {
-      if (player.association) associations.set(player.association.id, player.association.name);
+      if (player.association) associations.set(player.association.id, player.association);
     });
+    const associationOptions = [...associations.values()]
+      .sort((left, right) => String(left.name).localeCompare(String(right.name)))
+      .map((association) => ({ value: association.id, label: association.name, flag: association.flag }));
+    // Changing a filter redraws the panel: the group list depends on the stage, and every dropdown shows its value.
+    const setFilter = (field, value) => {
+      filters[field] = value;
+      if (field === "stage") filters.group = "";
+      render();
+    };
     bar.append(
       search,
-      select([["", "All stages"], ...stages], filters.stage, (value) => {
-        filters.stage = value;
-        filters.group = "";
-        render();
-      }, "Stage"),
-      select([["", "All groups"], ...groups.map((group) => [group, `Group ${group}`])], filters.group, (value) => {
-        filters.group = value;
-        renderPoolTable(tableBox);
-      }, "Group"),
-      select([["", "All associations"], ...[...associations].sort((a, b) => a[1].localeCompare(b[1]))], filters.association, (value) => {
-        filters.association = value;
-        renderPoolTable(tableBox);
-      }, "Association"),
-      select([["price-desc", "Price: high → low"], ["price-asc", "Price: low → high"], ["points-desc", "Points: high → low"], ["name", "Name A–Z"]], filters.sort, (value) => {
-        filters.sort = value;
-        renderPoolTable(tableBox);
-      }, "Sort")
+      dropdown([{ value: "", label: "All stages" }, ...stages], filters.stage, (value) => setFilter("stage", value), { ariaLabel: "Stage" }),
+      dropdown(
+        [{ value: "", label: "All groups" }, ...groups.map((group) => ({ value: group, label: `Group ${group}` }))],
+        filters.group,
+        (value) => setFilter("group", value),
+        { ariaLabel: "Group" }
+      ),
+      dropdown(
+        [{ value: "", label: "All associations" }, ...associationOptions],
+        filters.association,
+        (value) => setFilter("association", value),
+        { ariaLabel: "Association", searchable: true }
+      )
     );
     panel.appendChild(bar);
     const tableBox = el("div", "ff-table-wrap");
@@ -722,9 +1092,27 @@
     const thead = el("thead");
     const headRow = el("tr");
     [
-      ["Player", ""], ["Stage", ""], ["Group", "ff-col-group"], ["Association", "ff-col-assoc"], ["Price", "num"], ["Pts", "num"],
-      ...(showPicked ? [["Picked", "num"]] : []), ["", "num"],
-    ].forEach(([label, className]) => headRow.appendChild(el("th", className, label)));
+      ["Player", "", "player"], ["Stage", ""], ["Group", "ff-col-group"], ["Association", "ff-col-assoc"], ["Price", "num", "price"],
+      ["Pts", "num", "points"], ...(showPicked ? [["Picked", "num"]] : []), ["", "num"],
+    ].forEach(([label, className, sortColumn]) => {
+      const th = el("th", className);
+      if (sortColumn) {
+        const arrow = sortArrow(sortColumn);
+        const button = el("button", `ff-sort${arrow ? " active" : ""}`);
+        button.type = "button";
+        button.title = "Sort";
+        button.append(el("span", "", label), el("span", "ff-sort-arrow", arrow || "↕"));
+        th.setAttribute("aria-sort", arrow === "▲" ? "ascending" : arrow === "▼" ? "descending" : "none");
+        button.addEventListener("click", () => {
+          nextSort(sortColumn);
+          renderPoolTable(box);
+        });
+        th.appendChild(button);
+      } else {
+        th.textContent = label;
+      }
+      headRow.appendChild(th);
+    });
     thead.appendChild(headRow);
     table.appendChild(thead);
     const tbody = el("tbody");
@@ -732,7 +1120,16 @@
       const picked = draft.slot_ids.some((id) => id.toUpperCase() === player.slot_id.toUpperCase());
       const tr = el("tr", [picked ? "picked" : "", player.eliminated ? "out" : ""].filter(Boolean).join(" "));
       const nameCell = el("td");
-      nameCell.appendChild(playerLabel(player));
+      const label = playerLabel(player);
+      if (player.next_match) {
+        const next = el("button", "ff-next-btn", "Next match");
+        next.type = "button";
+        next.setAttribute("aria-haspopup", "dialog");
+        next.setAttribute("aria-label", `Next match of ${player.nickname}`);
+        next.addEventListener("click", () => openMatchModal(player.next_match, next));
+        label.appendChild(next);
+      }
+      nameCell.appendChild(label);
       tr.append(
         nameCell,
         el("td", "", player.stage),
@@ -761,6 +1158,173 @@
     });
     table.appendChild(tbody);
     box.appendChild(table);
+  }
+
+  // ---- Next match popup: the duel details modal of matches.html, for a match still to play.
+
+  const BGA_ICON_URL = "https://carcassonne.gg/gallery/bga-logo.png";
+
+  // Same as matches.html: profiles.avatar is a URL, a BGA avatar hash or a default avatar code.
+  function buildBgaAvatarUrl(playerId, avatarValue) {
+    const playerIdText = String(playerId || "").trim();
+    const avatarText = String(avatarValue || "").trim();
+    if (!avatarText) return "";
+    if (/^https?:\/\//i.test(avatarText)) {
+      // Repair saved BGA photo URLs that use the old 100-million folder boundary.
+      return avatarText.replace(
+        /^(https?:\/\/x\.boardgamearena\.net\/data\/avatar\/)\d+\/\d+\/\d+\/(\d+)(_\d+\.[a-z0-9]+)(?=[?#]|$)/i,
+        (_match, base, photoPlayerId, imageSuffix) => {
+          const id = Number(photoPlayerId);
+          return `${base}${Math.floor(id / 1000000000)}/${Math.floor(id / 1000000)}/${Math.floor(id / 1000)}/${photoPlayerId}${imageSuffix}`;
+        }
+      );
+    }
+    if (avatarText === "x00000") return "https://x.boardgamearena.net/data/avatar/default_184.jpg";
+    const defaultMatch = avatarText.match(/^_def_(\d+)$/);
+    if (defaultMatch) return `https://x.boardgamearena.net/data/avatar/defaults/default-${defaultMatch[1].padStart(4, "0")}.jpg`;
+    if (!/^\d+$/.test(playerIdText)) return "";
+    const playerIdNumber = Number(playerIdText);
+    if (!Number.isFinite(playerIdNumber)) return "";
+    return `https://x.boardgamearena.net/data/avatar/${Math.floor(playerIdNumber / 1000000000)}/${Math.floor(playerIdNumber / 1000000)}/${Math.floor(playerIdNumber / 1000)}/${playerIdText}_184.jpg?h=${encodeURIComponent(avatarText)}`;
+  }
+
+  function getPlayerInitials(player) {
+    const source = String(player?.nickname || player?.name || "?").trim();
+    const parts = source.split(/\s+/).filter(Boolean);
+    return (parts.length > 1 ? `${parts[0][0]}${parts[1][0]}` : source.slice(0, 2)).toUpperCase();
+  }
+
+  function createMatchFormatBadge(formatValue) {
+    const rawFormat = String(formatValue || "").trim();
+    const formatKey = rawFormat.toLowerCase();
+    if (!["bo1", "bo3", "bo5"].includes(formatKey)) return null;
+    return el("div", `challenge-match-format-badge ${formatKey} challenge-match-card__format`, rawFormat);
+  }
+
+  function createMatchPlayerCard(player, side) {
+    const card = el("section", `challenge-match-player challenge-match-player--${side}`);
+    const eloValue = Number(player?.elo);
+    const hasRating = Number.isFinite(eloValue) && eloValue > 0;
+    const bgaEloValue = Number(player?.bgaElo);
+    const hasBgaRating = Number.isFinite(bgaEloValue) && bgaEloValue > 0;
+
+    const rating = el("div", "challenge-match-player__rating");
+    rating.appendChild(el("span", "challenge-match-player__rank", hasRating && player?.rank ? `#${player.rank}` : "New"));
+    const ratings = el("span", "challenge-match-player__ratings");
+    const elo = el("span", "challenge-match-player__rating-line");
+    if (hasRating) elo.append(el("span", "", "GG Elo:"), el("span", "challenge-match-player__rating-value", String(Math.trunc(eloValue))));
+    else {
+      elo.classList.add("challenge-match-player__rating-value");
+      elo.textContent = "Unrated";
+    }
+    const bgaElo = el("span", "challenge-match-player__rating-line");
+    bgaElo.append(el("span", "", "BGA Elo:"), el("span", "challenge-match-player__rating-value", hasBgaRating ? String(Math.trunc(bgaEloValue)) : "Unrated"));
+    ratings.append(elo, bgaElo);
+    rating.appendChild(ratings);
+    card.appendChild(rating);
+
+    const profile = el("div", "challenge-match-player__profile");
+    const avatarUrl = buildBgaAvatarUrl(player?.id, player?.avatar);
+    if (avatarUrl) {
+      const avatar = el("img", "challenge-match-player__avatar");
+      avatar.src = avatarUrl;
+      avatar.alt = "";
+      avatar.loading = "lazy";
+      profile.appendChild(avatar);
+    } else {
+      profile.appendChild(el("span", "challenge-match-player__avatar challenge-match-player__avatar-fallback", getPlayerInitials(player)));
+    }
+    const info = el("div", "challenge-match-player__info");
+    const nickname = el("a", "challenge-match-player__nickname", player?.nickname || player?.id || "Unknown player");
+    nickname.href = `https://carcassonne.gg/player/?id=${encodeURIComponent(String(player?.id || ""))}`;
+    nickname.target = "_top";
+    info.appendChild(nickname);
+    if (String(player?.name || "").trim()) info.appendChild(el("span", "challenge-match-player__name", String(player.name).trim()));
+    const countryRow = el("div", "challenge-match-player__country-row");
+    if (player?.flag) {
+      const flag = el("img", "challenge-match-player__flag");
+      flag.src = player.flag;
+      flag.alt = "";
+      countryRow.appendChild(flag);
+    }
+    countryRow.appendChild(el("span", "challenge-match-player__country", player?.country || "—"));
+    info.appendChild(countryRow);
+    const bgaId = String(player?.id || "").trim();
+    if (bgaId) {
+      const bgaLink = el("a", "challenge-match-player__bga-link");
+      bgaLink.href = `https://boardgamearena.com/player?id=${encodeURIComponent(bgaId)}`;
+      bgaLink.target = "_blank";
+      bgaLink.rel = "noopener noreferrer";
+      const logo = el("img");
+      logo.src = BGA_ICON_URL;
+      logo.alt = "BGA";
+      bgaLink.append(logo, document.createTextNode("BGA profile"));
+      info.appendChild(bgaLink);
+    }
+    profile.appendChild(info);
+    card.appendChild(profile);
+    return card;
+  }
+
+  function closeMatchModal() {
+    const overlay = document.querySelector(".challenge-match-modal-overlay");
+    if (!overlay) return;
+    const returnFocus = overlay._returnFocus;
+    overlay.remove();
+    document.removeEventListener("keydown", onMatchModalKeydown);
+    if (returnFocus instanceof HTMLElement && returnFocus.isConnected) returnFocus.focus({ preventScroll: true });
+  }
+
+  function onMatchModalKeydown(event) {
+    if (event.key === "Escape") closeMatchModal();
+  }
+
+  // match: next_match from the server; the picked player on the left, the opponent on the right.
+  function openMatchModal(match, returnFocus) {
+    closeMatchModal();
+    const overlay = el("div", "challenge-match-modal-overlay");
+    overlay._returnFocus = returnFocus;
+    const dialog = el("div", "challenge-match-modal");
+    dialog.setAttribute("role", "dialog");
+    dialog.setAttribute("aria-modal", "true");
+    dialog.setAttribute("aria-label", `Next match: ${match.player?.nickname || ""} versus ${match.opponent?.nickname || ""}`);
+
+    const closeButton = el("button", "challenge-match-modal__close");
+    closeButton.type = "button";
+    closeButton.setAttribute("aria-label", "Close match details");
+    closeButton.innerHTML = "&times;";
+    closeButton.addEventListener("click", closeMatchModal);
+    dialog.appendChild(closeButton);
+
+    // When and where: the match time, or its deadline while the players have not agreed a time.
+    const meta = el("div", "challenge-match-meta");
+    const when = match.time_utc
+      ? formatUtc(match.time_utc)
+      : match.deadline_utc ? `Time not set yet · play by ${formatUtc(match.deadline_utc)}` : "Time not set yet";
+    meta.append(
+      el("strong", "", `${match.status === "In progress" ? "In progress" : "Next match"} · ${when}`),
+      el("span", "", ["CCL 2027", match.stage, match.group ? `Group ${match.group}` : "", match.round_name].filter(Boolean).join(" · "))
+    );
+    dialog.appendChild(meta);
+
+    const card = el("div", "challenge-match-card");
+    card.appendChild(createMatchPlayerCard(match.player || {}, "left"));
+    const vs = el("div", "challenge-match-card__vs");
+    const badge = createMatchFormatBadge(match.format);
+    if (badge) vs.appendChild(badge);
+    const vsContent = el("div", "challenge-match-card__vs-content");
+    vsContent.appendChild(el("span", "", "VS"));
+    vs.appendChild(vsContent);
+    card.appendChild(vs);
+    card.appendChild(createMatchPlayerCard(match.opponent || {}, "right"));
+    dialog.appendChild(card);
+    overlay.appendChild(dialog);
+    overlay.addEventListener("click", (event) => {
+      if (event.target === overlay) closeMatchModal();
+    });
+    document.body.appendChild(overlay);
+    document.addEventListener("keydown", onMatchModalKeydown);
+    closeButton.focus({ preventScroll: true });
   }
 
   const afterMainDeadline = () => season().status === "late" || season().status === "closed";
