@@ -776,19 +776,18 @@ export function registerFantasyRoutes(app, {
     ]);
     const nextMatches = nextMatchesBySlot(scores.slots, upcoming, associations);
     const teamPlayers = team ? await loadTeamPlayers(db, team.id) : [];
-    // How many teams picked a player: only once teams are locked, so nobody sees others' picks before the deadline.
+    // How many teams picked a player. Before the main deadline every saved team counts (drafts too), so
+    // managers can follow or avoid the crowd; after it only the teams that score count.
     const afterMain = status === "late" || status === "closed";
     const pickedBy = new Map();
-    if (afterMain) {
-      for (const entry of scores.teams.filter((item) => item.scoring)) {
-        for (const player of entry.players) pickedBy.set(idKey(player.slot_id), (pickedBy.get(idKey(player.slot_id)) || 0) + 1);
-      }
+    for (const entry of scores.teams.filter((item) => !afterMain || item.scoring)) {
+      for (const player of entry.players) pickedBy.set(idKey(player.slot_id), (pickedBy.get(idKey(player.slot_id)) || 0) + 1);
     }
     const players = pool.map((player) => ({
       ...player,
       points: scores.playerPoints.get(idKey(player.slot_id)) || 0,
       next_match: nextMatches.get(idKey(player.slot_id)) || null,
-      ...(afterMain ? { picked_by: pickedBy.get(idKey(player.slot_id)) || 0 } : {}),
+      picked_by: pickedBy.get(idKey(player.slot_id)) || 0,
     }));
     return res.json({
       ok: true,

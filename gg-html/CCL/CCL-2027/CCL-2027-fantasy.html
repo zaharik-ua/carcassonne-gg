@@ -278,7 +278,7 @@
   .ff-dd-option:hover { background: #f5f5f5; }
   .ff-dd-option.active { background: #e4f0fb; }
 
-  /* Sortable column headers: Player A→Z→Z→A→default, Price low→high→default, Pts high→low→default. */
+  /* Sortable column headers: Player A→Z ↔ Z→A; Price, Pts and Picked high→low ↔ low→high. Default: Price high→low. */
   .ff-sort {
     all: unset;
     cursor: pointer;
@@ -867,20 +867,21 @@
   .ff-lb-score { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; justify-content: flex-end; font-variant-numeric: tabular-nums; }
   .ff-lb-score strong { margin-right: 2px; }
   .ff-match {
-    border: 0;
-    padding: 1px 6px;
-    border-radius: 4px;
+    border: 1px solid #c8d6e5;
+    padding: 0 4px;
+    border-radius: 2px;
     font: inherit;
-    font-size: 12px;
+    font-size: 11px;
     font-weight: 600;
+    line-height: 16px;
     background: #e0ebf7;
     color: var(--main-bg-color);
     cursor: pointer;
   }
-  .ff-match:hover, .ff-match:focus-visible { outline: 2px solid #9ec5ea; outline-offset: 1px; }
-  .ff-match.win { background: var(--ok-bg); color: var(--ok-ink); }
-  .ff-match.loss { background: var(--bad-bg); color: var(--bad-ink); }
-  .ff-match.skip { background: #eef0f3; color: #9aa1ab; text-decoration: line-through; }
+  .ff-match:hover, .ff-match:focus-visible { border-color: currentColor; outline: none; }
+  .ff-match.win { background: var(--ok-bg); color: var(--ok-ink); border-color: #a7f3d0; }
+  .ff-match.loss { background: var(--bad-bg); color: var(--bad-ink); border-color: #fecaca; }
+  .ff-match.skip { background: #eef0f3; color: #9aa1ab; border-color: #d5d9df; text-decoration: line-through; }
 
   @media (max-width: 860px) {
     .ff-lb-detail { padding-left: 12px; }
@@ -1256,19 +1257,28 @@
       "price-desc": (left, right) => right.price - left.price || byName(left, right),
       "price-asc": (left, right) => left.price - right.price || byName(left, right),
       "points-desc": (left, right) => (right.points || 0) - (left.points || 0) || byName(left, right),
+      "points-asc": (left, right) => (left.points || 0) - (right.points || 0) || byName(left, right),
+      "picked-desc": (left, right) => (right.picked_by || 0) - (left.picked_by || 0) || byName(left, right),
+      "picked-asc": (left, right) => (left.picked_by || 0) - (right.picked_by || 0) || byName(left, right),
       "name-asc": byName,
       "name-desc": (left, right) => byName(right, left),
     };
     return rows.sort(sorters[filters.sort] || sorters[DEFAULT_SORT]);
   }
 
-  // A click on a column header steps through its orders and then back to the default (Price high → low).
-  const SORT_CYCLES = { player: ["name-asc", "name-desc"], price: ["price-asc"], points: ["points-desc"] };
+  // A click on a column header sorts by it in its first order; the next click flips the order.
+  // There is no reset click: the default (Price high → low) comes back with a reload or a click on Price.
+  const SORT_CYCLES = {
+    player: ["name-asc", "name-desc"],
+    price: ["price-desc", "price-asc"],
+    points: ["points-desc", "points-asc"],
+    picked: ["picked-desc", "picked-asc"],
+  };
 
   function nextSort(column) {
     const cycle = SORT_CYCLES[column];
     const index = cycle.indexOf(filters.sort);
-    filters.sort = index === -1 ? cycle[0] : cycle[index + 1] || DEFAULT_SORT;
+    filters.sort = index === -1 ? cycle[0] : cycle[(index + 1) % cycle.length];
   }
 
   // The arrow a header shows: Price shows the default order too.
@@ -1276,7 +1286,8 @@
     const arrows = {
       player: { "name-asc": "▲", "name-desc": "▼" },
       price: { "price-asc": "▲", "price-desc": "▼" },
-      points: { "points-desc": "▼" },
+      points: { "points-desc": "▼", "points-asc": "▲" },
+      picked: { "picked-desc": "▼", "picked-asc": "▲" },
     };
     return arrows[column][filters.sort] || "";
   }
@@ -1445,14 +1456,14 @@
     const editable = canEdit();
     const full = draft.slot_ids.length >= season().team_size;
     const remaining = halves(season().budget) - halves(draftCost());
-    // "Picked" (how many teams have the player) comes from the server only after the main deadline.
+    // "Picked": how many teams have the player (before the main deadline every saved team counts).
     const showPicked = data.players.some((player) => player.picked_by !== undefined);
     const table = el("table", "ff-table");
     const thead = el("thead");
     const headRow = el("tr");
     [
       ["Player", "", "player"], ["Stage", ""], ["Group", "ff-col-group"], ["Association", "ff-col-assoc"], ["Price", "num", "price"],
-      ["Pts", "num", "points"], ...(showPicked ? [["Picked", "num"]] : []), ["", "num"],
+      ["Pts", "num", "points"], ...(showPicked ? [["Picked", "num", "picked"]] : []), ["", "num"],
     ].forEach(([label, className, sortColumn]) => {
       const th = el("th", className);
       if (sortColumn) {
@@ -2314,14 +2325,14 @@
         el("span", "ff-tag", `${credits(player.price_at_pick)} cr`)
       );
       if (STATUS_LABELS[player.status]) label.appendChild(el("span", `ff-tag${player.status === "eliminated" ? " out" : ""}`, STATUS_LABELS[player.status]));
-      // "5 : [2-1] [0-2] [2-0]": the player's points for this team, then the scores of their matches.
+      // "5 : 2-1 0-2 2-0": the player's points for this team, then the scores of their matches.
       const score = el("div", "ff-lb-score");
       score.appendChild(el("strong", "", `${player.points} :`));
       if (!player.matches.length) score.appendChild(el("span", "ff-tag", "no matches yet"));
       player.matches.forEach((match) => {
         const [own, opp] = match.score.split("-").map(Number);
         // A click opens the match details popup (the same as on the qualifications page).
-        const chip = el("button", `ff-match ${match.counted ? (own > opp ? "win" : "loss") : "skip"}`, `[${match.score}]`);
+        const chip = el("button", `ff-match ${match.counted ? (own > opp ? "win" : "loss") : "skip"}`, match.score);
         chip.type = "button";
         chip.setAttribute("aria-haspopup", "dialog");
         chip.setAttribute("aria-label", `${player.nickname} vs ${match.opponent || "opponent"} ${match.score}, ${match.points} pt${match.points === 1 ? "" : "s"}${match.counted ? "" : ", not counted"}`);

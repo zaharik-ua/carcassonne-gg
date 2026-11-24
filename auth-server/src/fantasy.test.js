@@ -654,7 +654,7 @@ test("drafts, unknown teams and teams before the main deadline answer 404", asyn
   assert.equal((await teamDetails(early, ids["Meeple Masters"])).status, 404);
 });
 
-test("players carry their points; how many teams picked them shows only after the main deadline", async (t) => {
+test("players carry their points and how many teams picked them", async (t) => {
   const { db, api } = await scoredLeague(t);
   const players = (await state(api)).body.players;
   const bySlot = Object.fromEntries(players.map((player) => [player.slot_id, player]));
@@ -663,7 +663,12 @@ test("players carry their points; how many teams picked them shows only after th
     [["s1", 3, 2], ["s2", 0, 0], ["s3", 2, 4], ["s4", 4, 4], ["s5", 2, 4], ["s6", 1, 2], ["s7", 3, 4]]
   );
   const early = (await state(createApi(db, { now: OPEN }))).body.players;
-  assert.ok(early.every((player) => !("picked_by" in player)));
+  // Before the main deadline every saved team counts, drafts included (s1: Jan's Five, Just a Draft, Late Five).
+  const earlyBySlot = Object.fromEntries(early.map((player) => [player.slot_id, player.picked_by]));
+  assert.deepEqual(
+    ["s1", "s2", "s3", "s4", "s5", "s6", "s7"].map((slot) => earlyBySlot[slot]),
+    [3, 0, 4, 4, 4, 2, 4]
+  );
   assert.equal(early.find((player) => player.slot_id === "s4").points, 4);
 });
 
