@@ -633,6 +633,10 @@ test("team details list each player's matches and mark the ones a late team does
     marek.matches.map((match) => [match.score, match.points, match.counted, match.opponent, match.round_name]),
     [["2-1", 2, false, "Ivan", "Round 1"], ["0-2", 0, true, "Zosia", "Upper Semifinals"]]
   );
+  assert.equal(marek.player_id, "p5");
+  // The duel as stored, for the popup: m4 is Ivan (p6) 1:2 Marek (p5).
+  const m4 = marek.matches[0];
+  assert.deepEqual([m4.duel_id, m4.player_1_id, m4.player_2_id, m4.dw1, m4.dw2, m4.status], ["m4", "p6", "p5", 1, 2, "Done"]);
 
   const main = (await teamDetails(api, ids["Meeple Masters"])).body.team;
   assert.equal(main.points, 12);
@@ -678,6 +682,7 @@ test("each player carries their next match with both players for the popup", asy
   // s1: the timed planned match n2 comes before d1, which has no time yet.
   const next = bySlot.s1.next_match;
   assert.equal(next.duel_id, "n2");
+  assert.deepEqual([next.player_1_id, next.player_2_id], ["p1", "p2"]);
   assert.equal(next.time_utc, "2026-12-03T18:00:00.000Z");
   assert.equal(next.format, "Bo3");
   assert.equal(next.status, "Planned");

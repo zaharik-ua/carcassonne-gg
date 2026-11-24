@@ -410,7 +410,7 @@ export async function loadScoredMatches(db, league) {
   return dbAll(
     db,
     `
-      SELECT id, stage, group_name, round_name, time_utc,
+      SELECT id, stage, group_name, round_name, time_utc, duel_format, status,
              trim(player_1_id) AS player_1_id, trim(player_2_id) AS player_2_id, dw1, dw2
       FROM duels
       WHERE source_type = 'ccl'
@@ -477,6 +477,8 @@ export function nextMatchesBySlot(slots, matches, associations) {
       if (!slot || next.has(idKey(slot.slot_id))) continue;
       next.set(idKey(slot.slot_id), {
         duel_id: match.id,
+        player_1_id: match.player_1_id,
+        player_2_id: match.player_2_id,
         time_utc: match.time_utc || null,
         deadline_utc: match.deadline_utc || null,
         format: text(match.duel_format) || null,
@@ -508,6 +510,13 @@ export function resultsByPlayer(matches) {
       stage: match.stage || null,
       group: text(match.group_name) || null,
       round_name: text(match.round_name) || null,
+      // The duel as stored, for the match details popup (player 1 on the left).
+      player_1_id: match.player_1_id || null,
+      player_2_id: match.player_2_id || null,
+      dw1: Number(match.dw1),
+      dw2: Number(match.dw2),
+      format: text(match.duel_format) || null,
+      status: text(match.status) || "Done",
     });
   };
   for (const match of matches) {
@@ -853,6 +862,7 @@ export function registerFantasyRoutes(app, {
           const association = slot ? associations.get(idKey(slot.association_id)) || null : null;
           return {
             slot_id: player.slot_id,
+            player_id: slot ? text(slot.player_id) : null,
             nickname: slot ? slot.bga_nickname || slot.profile_name || slot.player_id : player.slot_id,
             stage: slot?.stage || null,
             group: slot ? groups.get(`${idKey(slot.stage)}|${text(slot.player_id)}`) || null : null,
@@ -870,6 +880,12 @@ export function registerFantasyRoutes(app, {
               stage: result.stage,
               group: result.group,
               round_name: result.round_name,
+              player_1_id: result.player_1_id,
+              player_2_id: result.player_2_id,
+              dw1: result.dw1,
+              dw2: result.dw2,
+              format: result.format,
+              status: result.status,
             })),
           };
         }),
