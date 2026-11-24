@@ -789,11 +789,16 @@ export function registerFantasyRoutes(app, {
       next_match: nextMatches.get(idKey(player.slot_id)) || null,
       picked_by: pickedBy.get(idKey(player.slot_id)) || 0,
     }));
+    // Teams formed: before the main deadline the complete saved teams, after it the teams that score.
+    const teamsFormed = scores.teams.filter((entry) => (afterMain
+      ? entry.scoring
+      : entry.players.length === Number(league.team_size))).length;
     return res.json({
       ok: true,
       league: leagueView(league, status),
       tournament: { id: tournament.id, name: tournament.name },
       players,
+      teams_formed: teamsFormed,
       viewer: {
         authenticated: Boolean(req.user),
         name: req.user ? ownerName(req.user) : null,

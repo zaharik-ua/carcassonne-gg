@@ -662,7 +662,11 @@ test("players carry their points and how many teams picked them", async (t) => {
     ["s1", "s2", "s3", "s4", "s5", "s6", "s7"].map((slot) => [slot, bySlot[slot].points, bySlot[slot].picked_by]),
     [["s1", 3, 2], ["s2", 0, 0], ["s3", 2, 4], ["s4", 4, 4], ["s5", 2, 4], ["s6", 1, 2], ["s7", 3, 4]]
   );
-  const early = (await state(createApi(db, { now: OPEN }))).body.players;
+  assert.equal((await state(api)).body.teams_formed, 4);
+  const earlyState = (await state(createApi(db, { now: OPEN }))).body;
+  // Complete saved teams: Jan's Five, Meeple Masters, Admin Five, Late Five (Just a Draft has one player).
+  assert.equal(earlyState.teams_formed, 4);
+  const early = earlyState.players;
   // Before the main deadline every saved team counts, drafts included (s1: Jan's Five, Just a Draft, Late Five).
   const earlyBySlot = Object.fromEntries(early.map((player) => [player.slot_id, player.picked_by]));
   assert.deepEqual(
