@@ -1,7 +1,7 @@
 import { loadAssociationsById, loadCclTournament } from "./ccl-routes.js";
 
 // Fantasy leagues: a signed-in user picks a team of CCL players within a budget; players score points
-// for the teams that picked them (scoring comes in Phase 2). Design: "CCL 2027 Fantasy League — технічне рішення".
+// for the teams that picked them. Design: "CCL 2027 Fantasy League — технічне рішення".
 //
 // - A league is a row of fantasy_leagues, linked to a CCL tournament and some of its stages
 //   (the qualifiers trial and the main stage are two leagues of one tournament).
@@ -13,6 +13,9 @@ import { loadAssociationsById, loadCclTournament } from "./ccl-routes.js";
 // - Until the main deadline a team can be changed freely; a complete team then scores every match of the stages.
 // - Until the late deadline a user without a locked team saves a draft and commits it: Commit cannot be undone,
 //   it locks the team and only matches that start after it count (scoring_from).
+// - Points are counted from the CCL matches (duels) on every request, never stored: 2:0 → 3, 2:1 → 2, 1:2 → 1,
+//   0:2 → 0 per player; a team scores the sum of its players. From the main deadline the leaderboard and the
+//   locked teams are public.
 //
 // No foreign keys to tournament_players: the CCL module rebuilds that table, and a deleted slot must not
 // take a saved team with it.
@@ -389,6 +392,174 @@ async function loadTeamPlayers(db, teamId) {
   );
 }
 
+// ---- Scoring (Phase 2). Points are not stored: they are counted from duels on every request,
+// so a corrected match result changes the leaderboard at once.
+
+// Points of a player for one Bo3 match: the winner gets 3 minus the games the opponent won (2:0 → 3, 2:1 → 2),
+// the loser gets the games they won (1:2 → 1, 0:2 → 0).
+export const matchPoints = (own, opp) => (own > opp ? Math.max(0, 3 - opp) : own);
+
+const timeOf = (value) => {
+  const time = Date.parse(text(value));
+  return Number.isFinite(time) ? time : null;
+};
+
+// Finished CCL matches of the league stages: Done, a decided score, not deleted, not a test. Oldest first.
+export async function loadScoredMatches(db, league) {
+  return dbAll(
+    db,
+    `
+      SELECT id, stage, group_name, round_name, time_utc,
+             trim(player_1_id) AS player_1_id, trim(player_2_id) AS player_2_id, dw1, dw2
+      FROM duels
+      WHERE source_type = 'ccl'
+        AND upper(trim(tournament_id)) = upper(trim(?))
+        AND stage IN (${league.stages.map(() => "?").join(", ")})
+        AND lower(trim(COALESCE(status, ''))) = 'done'
+        AND deleted_at IS NULL
+        AND COALESCE(is_test, 0) = 0
+        AND dw1 IS NOT NULL AND dw2 IS NOT NULL AND dw1 <> dw2
+      ORDER BY time_utc IS NULL, time_utc, id
+    `,
+    [league.tournament_id, ...league.stages]
+  );
+}
+
+// player id → the player's results, oldest first, each from the player's side.
+export function resultsByPlayer(matches) {
+  const results = new Map();
+  const add = (playerId, opponentId, own, opp, match) => {
+    if (!playerId) return;
+    if (!results.has(playerId)) results.set(playerId, []);
+    results.get(playerId).push({
+      duel_id: match.id,
+      own,
+      opp,
+      points: matchPoints(own, opp),
+      opponent_id: opponentId || null,
+      time_utc: match.time_utc || null,
+      stage: match.stage || null,
+      group: text(match.group_name) || null,
+      round_name: text(match.round_name) || null,
+    });
+  };
+  for (const match of matches) {
+    const dw1 = Number(match.dw1);
+    const dw2 = Number(match.dw2);
+    add(match.player_1_id, match.player_2_id, dw1, dw2, match);
+    add(match.player_2_id, match.player_1_id, dw2, dw1, match);
+  }
+  return results;
+}
+
+// Whether a result counts for a team: every match for a main team (scoring_from NULL); for a late team,
+// a match whose time is at or after its Commit. A match without a time counts for main teams only.
+export function resultCounts(result, scoringFrom) {
+  if (!scoringFrom) return true;
+  const at = timeOf(result.time_utc);
+  return at !== null && at >= timeOf(scoringFrom);
+}
+
+// Most points first; equal points share a place (1, 2, 2, 4), then by team name.
+export function rankTeams(rows) {
+  const sorted = [...rows].sort((left, right) => (
+    right.points - left.points || String(left.team_name).localeCompare(String(right.team_name))
+  ));
+  let rank = 0;
+  return sorted.map((row, index) => {
+    if (index === 0 || row.points !== sorted[index - 1].points) rank = index + 1;
+    return { rank, ...row };
+  });
+}
+
+const playerStatus = (slot) => {
+  if (slot?.league_status === "eliminated") return "eliminated";
+  if (slot?.league_status === "qualified") return "qualified";
+  return "playing";
+};
+
+// Every team of the league with its players and points. Only locked teams score (a full main team after the
+// main deadline, a late team after Commit); drafts get points = null.
+async function loadLeagueScores(db, league, current) {
+  const status = getFantasyStatus(league, current);
+  const [slots, matches, teams, picks] = await Promise.all([
+    loadLeagueSlots(db, league),
+    loadScoredMatches(db, league),
+    dbAll(
+      db,
+      `
+        SELECT t.*, p.bga_nickname
+        FROM fantasy_teams t
+        LEFT JOIN users u ON u.id = t.user_id
+        LEFT JOIN profiles p ON p.id = u.bga_id AND p.deleted_at IS NULL
+        WHERE upper(trim(t.league_id)) = upper(trim(?))
+        ORDER BY t.id
+      `,
+      [league.id]
+    ),
+    dbAll(
+      db,
+      `
+        SELECT tp.team_id, tp.slot_id, tp.price_at_pick
+        FROM fantasy_team_players tp
+        JOIN fantasy_teams t ON t.id = tp.team_id
+        WHERE upper(trim(t.league_id)) = upper(trim(?))
+        ORDER BY tp.team_id, tp.price_at_pick DESC, tp.slot_id
+      `,
+      [league.id]
+    ),
+  ]);
+  const slotByKey = new Map(slots.map((slot) => [idKey(slot.slot_id), slot]));
+  const results = resultsByPlayer(matches);
+  const resultsOf = (slot) => (slot ? results.get(text(slot.player_id)) || [] : []);
+  const playerPoints = new Map(slots.map((slot) => [
+    idKey(slot.slot_id),
+    resultsOf(slot).reduce((sum, result) => sum + result.points, 0),
+  ]));
+  const picksByTeam = new Map();
+  for (const pick of picks) {
+    if (!picksByTeam.has(pick.team_id)) picksByTeam.set(pick.team_id, []);
+    picksByTeam.get(pick.team_id).push(pick);
+  }
+  const scoredTeams = teams.map((team) => {
+    const teamPicks = picksByTeam.get(team.id) || [];
+    const state = describeTeamState(team, teamPicks.length, league, status);
+    const scoring = state.locked;
+    const players = teamPicks.map((pick) => {
+      const slot = slotByKey.get(idKey(pick.slot_id)) || null;
+      const playerResults = resultsOf(slot).map((result) => ({
+        ...result,
+        counted: scoring && resultCounts(result, team.scoring_from),
+      }));
+      return {
+        slot_id: pick.slot_id,
+        price_at_pick: Number(pick.price_at_pick),
+        slot,
+        results: playerResults,
+        points: scoring ? playerResults.reduce((sum, result) => sum + (result.counted ? result.points : 0), 0) : null,
+      };
+    });
+    return {
+      team,
+      state,
+      scoring,
+      players,
+      points: scoring ? players.reduce((sum, player) => sum + player.points, 0) : null,
+    };
+  });
+  const lastResultAt = matches.reduce((latest, match) => {
+    const at = timeOf(match.time_utc);
+    return at !== null && (latest === null || at > latest) ? at : latest;
+  }, null);
+  return {
+    status,
+    slots,
+    playerPoints,
+    teams: scoredTeams,
+    lastResultAt: lastResultAt === null ? null : new Date(lastResultAt).toISOString(),
+  };
+}
+
 function userId(user) {
   const id = Number(user?.id);
   return user?.id != null && Number.isInteger(id) ? id : null;
@@ -433,8 +604,18 @@ function leagueView(league, status) {
   };
 }
 
-function teamView(team, players, league, status) {
-  const cost = players.reduce((sum, player) => sum + halves(player.price_at_pick), 0) / 2;
+// currentPrices: slot key → today's price. A late draft is priced at today's prices (see saveTeam),
+// so a price rise can push it over the budget; it then cannot be committed until players are replaced.
+function teamView(team, players, league, status, currentPrices = new Map()) {
+  const teamState = describeTeamState(team, players.length, league, status);
+  const repriced = status === "late" && !teamState.locked;
+  const priced = players.map((player) => {
+    const paid = Number(player.price_at_pick);
+    const today = currentPrices.get(idKey(player.slot_id));
+    return { slot_id: player.slot_id, price_at_pick: paid, price: repriced && today != null ? Number(today) : paid };
+  });
+  const costHalves = priced.reduce((sum, player) => sum + halves(player.price), 0);
+  const overBudget = costHalves > halves(league.budget);
   return {
     id: team.id,
     team_name: team.team_name,
@@ -442,11 +623,15 @@ function teamView(team, players, league, status) {
     locked_at: team.locked_at || null,
     scoring_from: team.scoring_from || null,
     updated_at: team.updated_at,
-    cost,
-    players: players.map((player) => ({ slot_id: player.slot_id, price_at_pick: Number(player.price_at_pick) })),
-    ...describeTeamState(team, players.length, league, status),
+    cost: costHalves / 2,
+    over_budget: overBudget,
+    players: priced,
+    ...teamState,
+    can_commit: teamState.can_commit && !overBudget,
   };
 }
+
+const priceMap = (prices) => new Map([...prices].map(([key, row]) => [key, Number(row.price)]));
 
 export function registerFantasyRoutes(app, {
   db,
@@ -506,11 +691,25 @@ export function registerFantasyRoutes(app, {
     const current = now();
     const status = getFantasyStatus(league, current);
     const accountId = userId(req.user);
-    const [players, team] = await Promise.all([
+    const [pool, team, scores] = await Promise.all([
       loadFantasyPlayers(db, league, current.toISOString()),
       accountId === null ? null : loadTeam(db, league.id, accountId),
+      loadLeagueScores(db, league, current),
     ]);
     const teamPlayers = team ? await loadTeamPlayers(db, team.id) : [];
+    // How many teams picked a player: only once teams are locked, so nobody sees others' picks before the deadline.
+    const afterMain = status === "late" || status === "closed";
+    const pickedBy = new Map();
+    if (afterMain) {
+      for (const entry of scores.teams.filter((item) => item.scoring)) {
+        for (const player of entry.players) pickedBy.set(idKey(player.slot_id), (pickedBy.get(idKey(player.slot_id)) || 0) + 1);
+      }
+    }
+    const players = pool.map((player) => ({
+      ...player,
+      points: scores.playerPoints.get(idKey(player.slot_id)) || 0,
+      ...(afterMain ? { picked_by: pickedBy.get(idKey(player.slot_id)) || 0 } : {}),
+    }));
     return res.json({
       ok: true,
       league: leagueView(league, status),
@@ -519,7 +718,90 @@ export function registerFantasyRoutes(app, {
       viewer: {
         authenticated: Boolean(req.user),
         name: req.user ? ownerName(req.user) : null,
-        team: team ? teamView(team, teamPlayers, league, status) : null,
+        team: team ? teamView(team, teamPlayers, league, status, new Map(players.map((player) => [idKey(player.slot_id), player.price]))) : null,
+      },
+    });
+  }));
+
+  // The owner shown in public: the linked BGA nickname only; without it the page shows "Pending verification".
+  // Account names, emails and user ids never go into public answers.
+  const publicOwner = (team) => text(team.bga_nickname) || null;
+  const committedAt = (team) => (team.entry_type === "late" ? team.locked_at || null : null);
+
+  // Public, from the main deadline: locked teams ranked by points. Before it: { available: false }.
+  app.get("/public/fantasy/:leagueId/leaderboard", handle("Failed to load the leaderboard", async (req, res) => {
+    const { league } = await requireLeague(req.params.leagueId);
+    const current = now();
+    const status = getFantasyStatus(league, current);
+    if (status === "upcoming" || status === "open") {
+      return res.json({ ok: true, league: leagueView(league, status), available: false, opens_at: league.main_deadline, teams: [] });
+    }
+    const scores = await loadLeagueScores(db, league, current);
+    const accountId = userId(req.user);
+    const scoring = scores.teams.filter((entry) => entry.scoring);
+    const mine = accountId === null ? null : scoring.find((entry) => Number(entry.team.user_id) === accountId);
+    return res.json({
+      ok: true,
+      league: leagueView(league, status),
+      available: true,
+      last_result_at: scores.lastResultAt,
+      my_team_id: mine ? mine.team.id : null,
+      teams: rankTeams(scoring.map((entry) => ({
+        team_id: entry.team.id,
+        team_name: entry.team.team_name,
+        owner: publicOwner(entry.team),
+        entry_type: entry.team.entry_type,
+        committed_at: committedAt(entry.team),
+        points: entry.points,
+      }))),
+    });
+  }));
+
+  // Public: one locked team with its players and their matches, for the row opened in the leaderboard.
+  // Drafts, uncommitted late teams and main teams before the deadline answer 404, so nobody learns they exist.
+  app.get("/public/fantasy/:leagueId/teams/:teamId", handle("Failed to load the team", async (req, res) => {
+    const { league } = await requireLeague(req.params.leagueId);
+    const teamId = Number(req.params.teamId);
+    const scores = Number.isInteger(teamId) ? await loadLeagueScores(db, league, now()) : null;
+    const entry = scores?.teams.find((item) => item.scoring && Number(item.team.id) === teamId);
+    if (!entry) throw requestError(404, "Team not found");
+    const [associations, groups] = await Promise.all([loadAssociationsById(db), loadPlayerGroups(db, league.tournament_id)]);
+    const nameOf = new Map(scores.slots.map((slot) => [text(slot.player_id), slot.bga_nickname || slot.profile_name || slot.player_id]));
+    return res.json({
+      ok: true,
+      team: {
+        id: entry.team.id,
+        team_name: entry.team.team_name,
+        owner: publicOwner(entry.team),
+        entry_type: entry.team.entry_type,
+        committed_at: committedAt(entry.team),
+        points: entry.points,
+        spent: entry.players.reduce((sum, player) => sum + halves(player.price_at_pick), 0) / 2,
+        players: entry.players.map((player) => {
+          const slot = player.slot;
+          const association = slot ? associations.get(idKey(slot.association_id)) || null : null;
+          return {
+            slot_id: player.slot_id,
+            nickname: slot ? slot.bga_nickname || slot.profile_name || slot.player_id : player.slot_id,
+            stage: slot?.stage || null,
+            group: slot ? groups.get(`${idKey(slot.stage)}|${text(slot.player_id)}`) || null : null,
+            association: association ? { id: association.id, name: association.name, flag: association.flag } : null,
+            price_at_pick: player.price_at_pick,
+            status: playerStatus(slot),
+            points: player.points,
+            matches: player.results.map((result) => ({
+              duel_id: result.duel_id,
+              score: `${result.own}-${result.opp}`,
+              points: result.points,
+              counted: result.counted,
+              opponent: result.opponent_id ? nameOf.get(result.opponent_id) || null : null,
+              time_utc: result.time_utc,
+              stage: result.stage,
+              group: result.group,
+              round_name: result.round_name,
+            })),
+          };
+        }),
       },
     });
   }));
@@ -549,8 +831,13 @@ export function registerFantasyRoutes(app, {
         throw requestError(409, "Your team is locked and cannot be changed");
       }
 
-      // Players kept in the team keep their price; new ones are bought at today's price.
-      const kept = new Map(existingPlayers.map((player) => [idKey(player.slot_id), Number(player.price_at_pick)]));
+      // Before the main deadline players kept in the team keep their price; new ones are bought at today's price.
+      // A late draft is not a team yet: every player is priced at today's price, so a player who got more
+      // expensive since the draft was saved can push it over the budget, and then neither Save nor Commit
+      // goes through until players are replaced.
+      const kept = status === "open"
+        ? new Map(existingPlayers.map((player) => [idKey(player.slot_id), Number(player.price_at_pick)]))
+        : new Map();
       const prices = await loadCurrentPrices(db, league.id, at);
       const slots = slotIds.length
         ? await dbAll(
@@ -574,7 +861,15 @@ export function registerFantasyRoutes(app, {
       });
       const costHalves = picks.reduce((sum, pick) => sum + halves(pick.price), 0);
       if (costHalves > halves(league.budget)) {
-        throw requestError(400, `The team costs ${costHalves / 2}, over the budget of ${league.budget}`);
+        const repriced = picks.some((pick) => {
+          const paid = existingPlayers.find((player) => idKey(player.slot_id) === idKey(pick.slot_id));
+          return paid && halves(paid.price_at_pick) < halves(pick.price);
+        });
+        throw requestError(
+          400,
+          `The team costs ${costHalves / 2}, over the budget of ${league.budget}`
+            + (repriced ? ". Prices have gone up since you saved it: replace players to bring the team within budget" : "")
+        );
       }
 
       // Before the main deadline a team is a main entry; after it, saving makes it a late one.
@@ -612,7 +907,7 @@ export function registerFantasyRoutes(app, {
         );
       }
       const team = await dbGet(db, "SELECT * FROM fantasy_teams WHERE id = ?", [teamId]);
-      return { team, players: await loadTeamPlayers(db, teamId), created: !existing };
+      return { team, players: await loadTeamPlayers(db, teamId), created: !existing, prices: priceMap(prices) };
     });
 
     audit(req, {
@@ -632,8 +927,8 @@ export function registerFantasyRoutes(app, {
     requireAuthenticated,
     requireTrustedJsonRequest,
     handle("Failed to save the team", async (req, res) => {
-      const { team, players, created, league, status } = await saveTeam(req, { commit: false });
-      return res.status(created ? 201 : 200).json({ ok: true, team: teamView(team, players, league, status) });
+      const { team, players, created, league, status, prices } = await saveTeam(req, { commit: false });
+      return res.status(created ? 201 : 200).json({ ok: true, team: teamView(team, players, league, status, prices) });
     })
   );
 
@@ -643,8 +938,8 @@ export function registerFantasyRoutes(app, {
     requireAuthenticated,
     requireTrustedJsonRequest,
     handle("Failed to commit the team", async (req, res) => {
-      const { team, players, league, status } = await saveTeam(req, { commit: true });
-      return res.json({ ok: true, team: teamView(team, players, league, status) });
+      const { team, players, league, status, prices } = await saveTeam(req, { commit: true });
+      return res.json({ ok: true, team: teamView(team, players, league, status, prices) });
     })
   );
 
@@ -704,8 +999,9 @@ export function registerFantasyRoutes(app, {
   // League admins: every team with its players, for the counters and the CSV export.
   app.get("/fantasy/:leagueId/teams", requireAuthenticated, handle("Failed to load Fantasy teams", async (req, res) => {
     const { league } = await requireLeagueAdmin(req.user, req.params.leagueId);
-    const status = getFantasyStatus(league, now());
-    const [teams, picks] = await Promise.all([
+    const current = now();
+    const status = getFantasyStatus(league, current);
+    const [teams, picks, scores] = await Promise.all([
       dbAll(
         db,
         `
@@ -738,16 +1034,21 @@ export function registerFantasyRoutes(app, {
         `,
         [league.id]
       ),
+      loadLeagueScores(db, league, current),
     ]);
+    // Points only for teams that score (locked); null for drafts.
+    const scoreByTeam = new Map(scores.teams.map((entry) => [entry.team.id, entry]));
     const picksByTeam = new Map();
     for (const pick of picks) {
       if (!picksByTeam.has(pick.team_id)) picksByTeam.set(pick.team_id, []);
+      const scored = scoreByTeam.get(pick.team_id)?.players.find((player) => idKey(player.slot_id) === idKey(pick.slot_id));
       picksByTeam.get(pick.team_id).push({
         slot_id: pick.slot_id,
         player: pick.player || null,
         stage: pick.stage || null,
         record_id: pick.record_id || null,
         price_at_pick: Number(pick.price_at_pick),
+        points: scored ? scored.points : null,
       });
     }
     const counts = { total: teams.length, complete: 0, drafts: 0, late: 0, committed: 0 };
@@ -771,6 +1072,7 @@ export function registerFantasyRoutes(app, {
         locked_at: team.locked_at || (state.state === "locked" ? league.main_deadline : null),
         scoring_from: team.scoring_from || null,
         cost: players.reduce((sum, player) => sum + halves(player.price_at_pick), 0) / 2,
+        points: scoreByTeam.get(team.id)?.points ?? null,
         players,
       };
     });

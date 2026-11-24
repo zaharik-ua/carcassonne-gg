@@ -9,9 +9,12 @@ import {
   describeTeamState,
   ensureFantasySchema,
   getFantasyStatus,
+  matchPoints,
   normalizeLeagueSettings,
   normalizeTeamInput,
+  rankTeams,
   registerFantasyRoutes,
+  resultCounts,
   SEED_LEAGUES,
 } from "./fantasy.js";
 import {
@@ -89,11 +92,12 @@ async function createDatabase(t) {
     INSERT INTO ccl_stage_entries VALUES ('CCL-2027', 'Q1', 's1', 'Seeded'), ('CCL-2027', 'Q1', 's2', 'Unseeded');
     CREATE TABLE duels (
       id TEXT PRIMARY KEY, tournament_id TEXT, source_type TEXT, deleted_at TEXT, stage TEXT, group_name TEXT,
-      player_1_id TEXT, player_2_id TEXT
+      round_name TEXT, player_1_id TEXT, player_2_id TEXT, status TEXT, dw1 INTEGER, dw2 INTEGER, time_utc TEXT,
+      is_test INTEGER NOT NULL DEFAULT 0
     );
-    INSERT INTO duels VALUES
-      ('d1', 'CCL-2027', 'ccl', NULL, 'Q1', 'A', 'p1', 'p2'),
-      ('d2', 'CCL-2027', 'ccl', NULL, 'Q3', 'X', 'p5', 'p6');
+    INSERT INTO duels (id, tournament_id, source_type, deleted_at, stage, group_name, player_1_id, player_2_id, status) VALUES
+      ('d1', 'CCL-2027', 'ccl', NULL, 'Q1', 'A', 'p1', 'p2', 'Planned'),
+      ('d2', 'CCL-2027', 'ccl', NULL, 'Q3', 'X', 'p5', 'p6', 'Planned');
     CREATE TABLE users (id INTEGER PRIMARY KEY, email TEXT, name TEXT, bga_id TEXT);
     INSERT INTO users (id, email, name, bga_id) VALUES
       (1, 'fan@example.com', 'Fan One', NULL), (2, 'jan@example.com', 'Jan Account', 'p1'), (3, NULL, 'Other Fan', NULL),
@@ -379,6 +383,51 @@ test("late entry: save keeps a draft, Commit locks it and starts scoring", async
   assert.equal(direct.body.team.state, "committed");
 });
 
+test("late draft is priced at today's prices: a price rise over the budget blocks Commit until players are replaced", async (t) => {
+  const db = await createDatabase(t);
+  const api = createApi(db, { now: LATE });
+  const draftSlots = ["s1", "s3", "s4", "s5", "s7"]; // 20 + 12 + 8 + 6 + 3.5 = 49.5
+  const draft = await save(api, USERS.fan, draftSlots);
+  assert.equal(draft.status, 201);
+  assert.equal(draft.body.team.cost, 49.5);
+  assert.equal(draft.body.team.can_commit, true);
+
+  await exec(db, `
+    INSERT INTO fantasy_prices (league_id, slot_id, stage, price, effective_from, source_record_id)
+    VALUES ('CCL-2027-Q', 's5', 'Q3', 7, '2026-12-01T00:00:00.000Z', '105');
+  `);
+  api.clock.now = new Date("2026-12-02T12:00:00Z");
+
+  const view = (await state(api, USERS.fan)).body.viewer.team;
+  assert.equal(view.cost, 50.5);
+  assert.equal(view.over_budget, true);
+  assert.equal(view.can_commit, false);
+  assert.deepEqual(view.players.find((player) => player.slot_id === "s5"), { slot_id: "s5", price_at_pick: 6, price: 7 });
+
+  const blocked = await commit(api, USERS.fan, draftSlots);
+  assert.equal(blocked.status, 400);
+  assert.match(blocked.body.message, /costs 50\.5, over the budget of 50\. Prices have gone up/);
+  assert.equal((await save(api, USERS.fan, draftSlots)).status, 400);
+  assert.equal((await all(db, "SELECT locked_at FROM fantasy_teams WHERE user_id = 1"))[0].locked_at, null);
+
+  // s5 (now 7) replaced by s6 (5): 48.5, within budget.
+  const committed = await commit(api, USERS.fan, ["s1", "s3", "s4", "s6", "s7"]);
+  assert.equal(committed.status, 200);
+  assert.equal(committed.body.team.state, "committed");
+  assert.equal(committed.body.team.cost, 48.5);
+});
+
+test("a locked main team keeps the prices it was picked at", async (t) => {
+  const db = await createDatabase(t);
+  const api = createApi(db);
+  await save(api, USERS.fan, CHEAP_FIVE); // s3 at 10
+  api.clock.now = LATE; // s3 now costs 12
+  const view = (await state(api, USERS.fan)).body.viewer.team;
+  assert.equal(view.state, "locked");
+  assert.equal(view.cost, 32.5);
+  assert.equal(view.players.find((player) => player.slot_id === "s3").price, 10);
+});
+
 test("league admins and site admins get every team with its players", async (t) => {
   const db = await createDatabase(t);
   const api = createApi(db);
@@ -396,10 +445,13 @@ test("league admins and site admins get every team with its players", async (t) 
   assert.equal(jan.state, "locked");
   assert.equal(jan.locked_at, LEAGUE.main_deadline);
   assert.equal(jan.cost, 32.5);
-  assert.deepEqual(jan.players[0], { slot_id: "s3", player: "Taras", stage: "Q2", record_id: "103", price_at_pick: 10 });
+  assert.deepEqual(jan.players[0], { slot_id: "s3", player: "Taras", stage: "Q2", record_id: "103", price_at_pick: 10, points: 0 });
+  assert.equal(jan.points, 0);
   const fan = result.body.teams.find((team) => team.team_name === "Fan Draft");
   assert.equal(fan.owner, "Fan One");
   assert.equal(fan.state, "draft");
+  assert.equal(fan.points, null);
+  assert.equal(fan.players[0].points, null);
   assert.equal(result.body.teams.find((team) => team.team_name === "Late One").scoring_from, LATE.toISOString());
   assert.equal((await teams(api, USERS.admin)).status, 200);
 });
@@ -456,6 +508,166 @@ test("site admins add and remove league admins by the email of their site accoun
   assert.equal((await remove(USERS.admin, 1)).status, 200);
   assert.equal((await remove(USERS.admin, 1)).status, 404);
   assert.equal((await teams(api, USERS.fan)).status, 403);
+});
+
+// ---- Phase 2: points, leaderboard, team details
+
+test("match points: 2:0 → 3, 2:1 → 2, 1:2 → 1, 0:2 → 0", () => {
+  assert.equal(matchPoints(2, 0), 3);
+  assert.equal(matchPoints(2, 1), 2);
+  assert.equal(matchPoints(1, 2), 1);
+  assert.equal(matchPoints(0, 2), 0);
+  // A technical win entered as 1:0 still gives the winner 3.
+  assert.equal(matchPoints(1, 0), 3);
+  assert.equal(matchPoints(0, 1), 0);
+});
+
+test("a result counts for a late team from the second of its Commit; for a main team always", () => {
+  const commitAt = "2026-11-30T12:00:00.000Z";
+  assert.equal(resultCounts({ time_utc: "2026-11-30T11:59:59Z" }, commitAt), false);
+  assert.equal(resultCounts({ time_utc: "2026-11-30T12:00:00Z" }, commitAt), true);
+  assert.equal(resultCounts({ time_utc: null }, commitAt), false);
+  assert.equal(resultCounts({ time_utc: null }, null), true);
+});
+
+test("equal points share a place", () => {
+  const ranked = rankTeams([
+    { team_name: "B", points: 5 }, { team_name: "A", points: 5 }, { team_name: "C", points: 9 }, { team_name: "D", points: 1 },
+  ]);
+  assert.deepEqual(ranked.map((row) => [row.rank, row.team_name]), [[1, "C"], [2, "A"], [2, "B"], [4, "D"]]);
+});
+
+// p1 (s1) 3 · p2 (s2) 0 · p3 (s3) 2 · p4 (s4) 4 · p5 (s5) 2 · p6 (s6) 1 · p7 (s7) 3 over all counted matches.
+const SCORED_MATCHES = `
+  INSERT INTO duels (id, tournament_id, source_type, deleted_at, stage, group_name, round_name, player_1_id, player_2_id, status, dw1, dw2, time_utc, is_test) VALUES
+    ('m1', 'CCL-2027', 'ccl', NULL, 'Q1', 'A', 'Round 1', 'p1', 'p2', 'Done', 2, 0, '2026-11-20T18:00:00.000Z', 0),
+    ('m2', 'CCL-2027', 'ccl', NULL, 'Q2', 'B', 'Round 1', 'p3', 'p4', 'Done', 2, 1, '2026-11-21T18:00:00.000Z', 0),
+    ('m4', 'CCL-2027', 'ccl', NULL, 'Q3', 'X', 'Round 1', 'p6', 'p5', 'Done', 1, 2, '2026-11-30T11:00:00.000Z', 0),
+    ('m5', 'CCL-2027', 'ccl', NULL, 'Q2', 'B', 'Upper Final', 'p4', 'p3', 'done', 2, 0, '2026-11-30T12:00:00.000Z', 0),
+    ('m3', 'CCL-2027', 'ccl', NULL, 'Q3', 'X', 'Upper Semifinals', 'p5', 'p7', 'Done', 0, 2, '2026-12-01T10:00:00.000Z', 0),
+    -- None of these count: an Error, a planned match, a draw, a deleted match, a test match, the Main stage, another tournament.
+    ('n1', 'CCL-2027', 'ccl', NULL, 'Q1', 'A', NULL, 'p1', 'p2', 'Error', 2, 0, '2026-11-22T18:00:00.000Z', 0),
+    ('n2', 'CCL-2027', 'ccl', NULL, 'Q1', 'A', NULL, 'p1', 'p2', 'Planned', NULL, NULL, '2026-12-03T18:00:00.000Z', 0),
+    ('n3', 'CCL-2027', 'ccl', NULL, 'Q1', 'A', NULL, 'p1', 'p2', 'Done', 1, 1, '2026-11-23T18:00:00.000Z', 0),
+    ('n4', 'CCL-2027', 'ccl', '2026-11-24', 'Q1', 'A', NULL, 'p1', 'p2', 'Done', 2, 0, '2026-11-24T18:00:00.000Z', 0),
+    ('n5', 'CCL-2027', 'ccl', NULL, 'Q1', 'A', NULL, 'p1', 'p2', 'Done', 2, 0, '2026-11-25T18:00:00.000Z', 1),
+    ('n6', 'CCL-2027', 'ccl', NULL, 'Main', 'M', NULL, 'p9', 'p1', 'Done', 2, 0, '2026-11-26T18:00:00.000Z', 0),
+    ('n7', 'CCL-2026', 'ccl', NULL, 'Q1', 'A', NULL, 'p1', 'p2', 'Done', 2, 0, '2026-11-26T18:00:00.000Z', 0);
+`;
+
+// Main teams: Jan's 14, the fan's 12 and the admin's 12 (same five); a late team that committed at LATE: 6;
+// a draft that does not score.
+async function scoredLeague(t) {
+  const db = await createDatabase(t);
+  await exec(db, SCORED_MATCHES);
+  const api = createApi(db);
+  await save(api, USERS.player, ["s1", "s3", "s4", "s5", "s7"], "Jan's Five");
+  await save(api, USERS.fan, CHEAP_FIVE, "Meeple Masters");
+  await save(api, USERS.admin, CHEAP_FIVE, "Admin Five");
+  await save(api, USERS.other, ["s1"], "Just a Draft");
+  api.clock.now = LATE;
+  const late = await commit(api, USERS.stranger, ["s1", "s3", "s4", "s5", "s7"], "Late Five");
+  assert.equal(late.status, 200);
+  api.clock.now = new Date("2026-12-02T00:00:00Z");
+  const ids = Object.fromEntries((await all(db, "SELECT id, team_name FROM fantasy_teams")).map((row) => [row.team_name, row.id]));
+  return { db, api, ids };
+}
+
+const leaderboard = (api, user = null) => api.call("GET /public/fantasy/:leagueId/leaderboard", { user });
+const teamDetails = (api, teamId) => api.call("GET /public/fantasy/:leagueId/teams/:teamId", { params: { teamId: String(teamId) } });
+
+test("the leaderboard is hidden until the main deadline", async (t) => {
+  const db = await createDatabase(t);
+  const api = createApi(db);
+  await save(api, USERS.fan, CHEAP_FIVE);
+  const result = await leaderboard(api, USERS.fan);
+  assert.equal(result.status, 200);
+  assert.equal(result.body.available, false);
+  assert.equal(result.body.opens_at, LEAGUE.main_deadline);
+  assert.deepEqual(result.body.teams, []);
+});
+
+test("the leaderboard ranks locked teams by the points of their players' matches", async (t) => {
+  const { api, ids } = await scoredLeague(t);
+  const result = await leaderboard(api, USERS.fan);
+  assert.equal(result.status, 200);
+  assert.equal(result.body.available, true);
+  assert.deepEqual(
+    result.body.teams.map((row) => [row.rank, row.team_name, row.points, row.owner, row.entry_type]),
+    [
+      [1, "Jan's Five", 14, "Jan", "main"],
+      [2, "Admin Five", 12, null, "main"],
+      [2, "Meeple Masters", 12, null, "main"],
+      // Only m5 (at the second of its Commit) and m3 count: p4 3 + p7 3.
+      [4, "Late Five", 6, null, "late"],
+    ]
+  );
+  assert.equal(result.body.teams.find((row) => row.team_name === "Late Five").committed_at, LATE.toISOString());
+  assert.equal(result.body.my_team_id, ids["Meeple Masters"]);
+  assert.equal(result.body.last_result_at, "2026-12-01T10:00:00.000Z");
+  // No account names, emails or user ids in public.
+  assert.ok(result.body.teams.every((row) => !("user_id" in row) && !("email" in row)));
+  assert.equal((await leaderboard(api)).body.my_team_id, null);
+  assert.equal((await leaderboard(api, USERS.other)).body.my_team_id, null);
+});
+
+test("team details list each player's matches and mark the ones a late team does not score", async (t) => {
+  const { api, ids } = await scoredLeague(t);
+  const result = await teamDetails(api, ids["Late Five"]);
+  assert.equal(result.status, 200);
+  const team = result.body.team;
+  assert.equal(team.points, 6);
+  assert.equal(team.spent, 49.5); // s3 bought at 12 in the late window
+  assert.equal(team.committed_at, LATE.toISOString());
+  const marek = team.players.find((player) => player.slot_id === "s5");
+  assert.equal(marek.nickname, "Marek");
+  assert.equal(marek.stage, "Q3");
+  assert.equal(marek.group, "X");
+  assert.deepEqual(marek.association, { id: "POL", name: "Poland", flag: "pl.png" });
+  assert.equal(marek.status, "playing");
+  assert.equal(marek.points, 0);
+  assert.deepEqual(
+    marek.matches.map((match) => [match.score, match.points, match.counted, match.opponent, match.round_name]),
+    [["2-1", 2, false, "Ivan", "Round 1"], ["0-2", 0, true, "Zosia", "Upper Semifinals"]]
+  );
+
+  const main = (await teamDetails(api, ids["Meeple Masters"])).body.team;
+  assert.equal(main.points, 12);
+  assert.equal(main.committed_at, null);
+  assert.equal(main.players.find((player) => player.slot_id === "s6").status, "eliminated");
+  assert.ok(main.players.every((player) => player.matches.every((match) => match.counted)));
+});
+
+test("drafts, unknown teams and teams before the main deadline answer 404", async (t) => {
+  const { db, api, ids } = await scoredLeague(t);
+  assert.equal((await teamDetails(api, ids["Just a Draft"])).status, 404);
+  assert.equal((await teamDetails(api, 99999)).status, 404);
+  assert.equal((await teamDetails(api, "abc")).status, 404);
+  const early = createApi(db, { now: OPEN });
+  assert.equal((await teamDetails(early, ids["Meeple Masters"])).status, 404);
+});
+
+test("players carry their points; how many teams picked them shows only after the main deadline", async (t) => {
+  const { db, api } = await scoredLeague(t);
+  const players = (await state(api)).body.players;
+  const bySlot = Object.fromEntries(players.map((player) => [player.slot_id, player]));
+  assert.deepEqual(
+    ["s1", "s2", "s3", "s4", "s5", "s6", "s7"].map((slot) => [slot, bySlot[slot].points, bySlot[slot].picked_by]),
+    [["s1", 3, 2], ["s2", 0, 0], ["s3", 2, 4], ["s4", 4, 4], ["s5", 2, 4], ["s6", 1, 2], ["s7", 3, 4]]
+  );
+  const early = (await state(createApi(db, { now: OPEN }))).body.players;
+  assert.ok(early.every((player) => !("picked_by" in player)));
+  assert.equal(early.find((player) => player.slot_id === "s4").points, 4);
+});
+
+test("league admins see the points of every scoring team and player", async (t) => {
+  const { api } = await scoredLeague(t);
+  const result = await teams(api, USERS.leagueAdmin);
+  const byName = Object.fromEntries(result.body.teams.map((team) => [team.team_name, team]));
+  assert.equal(byName["Jan's Five"].points, 14);
+  assert.equal(byName["Late Five"].points, 6);
+  assert.equal(byName["Just a Draft"].points, null);
+  assert.equal(byName["Late Five"].players.find((player) => player.slot_id === "s7").points, 3);
 });
 
 test("CSV parsing handles quotes, empty lines and a BOM", () => {

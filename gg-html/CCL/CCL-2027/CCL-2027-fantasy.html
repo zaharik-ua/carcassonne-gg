@@ -71,7 +71,7 @@
 
   .ff-grid {
     display: grid;
-    grid-template-columns: minmax(300px, 380px) 1fr;
+    grid-template-columns: minmax(0, 1fr);
     gap: 14px;
     align-items: start;
   }
@@ -216,8 +216,58 @@
   .ff-table tr.out td { color: #8a94a3; }
   .ff-empty { padding: 14px; color: var(--muted); }
 
+  .ff-tabs { display: flex; gap: 6px; border-bottom: 1px solid var(--line); }
+  .ff-tab {
+    border: 1px solid transparent;
+    border-bottom: none;
+    border-radius: 6px 6px 0 0;
+    background: none;
+    padding: 8px 14px;
+    font: inherit;
+    font-weight: 600;
+    color: var(--muted);
+    cursor: pointer;
+    margin-bottom: -1px;
+  }
+  .ff-tab.active { background: #fff; border-color: var(--line); color: var(--main-bg-color); }
+
+  /* Leaderboard: a row opens the team below it, as in GG-Rivals-S1.html. */
+  .ff-lb-row { cursor: pointer; }
+  .ff-lb-row:hover td { background: #e6f2ff; }
+  .ff-lb-row.mine td { background: #fff7e0; font-weight: 600; }
+  .ff-lb-row .chevron { color: var(--muted); width: 18px; }
+  .ff-lb-detail-row td { padding: 0; background: #f5f7fa; }
+  .ff-lb-detail { padding: 10px 12px 12px 34px; display: grid; gap: 6px; }
+  .ff-lb-meta { font-size: 12px; color: var(--muted); }
+  .ff-lb-player {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 10px;
+    align-items: center;
+    padding: 6px 8px;
+    background: #fff;
+    border: 1px solid #eef2f6;
+    border-radius: 4px;
+  }
+  .ff-lb-score { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; justify-content: flex-end; font-variant-numeric: tabular-nums; }
+  .ff-lb-score strong { margin-right: 2px; }
+  .ff-match {
+    padding: 1px 6px;
+    border-radius: 4px;
+    font-size: 12px;
+    font-weight: 600;
+    background: #e0ebf7;
+    color: var(--main-bg-color);
+    cursor: default;
+  }
+  .ff-match.win { background: var(--ok-bg); color: var(--ok-ink); }
+  .ff-match.loss { background: var(--bad-bg); color: var(--bad-ink); }
+  .ff-match.skip { background: #eef0f3; color: #9aa1ab; text-decoration: line-through; }
+
   @media (max-width: 860px) {
-    .ff-grid { grid-template-columns: 1fr; }
+    .ff-lb-detail { padding-left: 12px; }
+    .ff-lb-player { grid-template-columns: 1fr; }
+    .ff-lb-score { justify-content: flex-start; }
     .ff-filters { grid-template-columns: 1fr 1fr; }
     .ff-filters .ff-search { grid-column: 1 / -1; }
     .ff-table-wrap { max-height: none; }
@@ -239,9 +289,19 @@
   const STATE_URL = `${API_BASE}/public/fantasy/${encodeURIComponent(LEAGUE_ID)}`;
   const TEAM_URL = `${API_BASE}/fantasy/${encodeURIComponent(LEAGUE_ID)}/team`;
   const COMMIT_URL = `${TEAM_URL}/commit`;
+  const LEADERBOARD_URL = `${STATE_URL}/leaderboard`;
+  const teamDetailsUrl = (teamId) => `${STATE_URL}/teams/${encodeURIComponent(teamId)}`;
   const root = document.getElementById("cclFantasy");
 
   let data = null;
+  // "team" or "leaderboard"; chosen by the league status on the first load.
+  let tab = null;
+  let leaderboard = null;
+  let leaderboardError = null;
+  let leaderboardLoading = false;
+  // Leaderboard rows opened by the viewer, and the details loaded for them (team id → data or { error }).
+  const expanded = new Set();
+  const teamDetails = new Map();
   // The team being edited: { team_name, slot_ids }. Differs from the saved team until Save.
   let draft = null;
   let busy = false;
@@ -271,13 +331,27 @@
   const team = () => data.viewer?.team || null;
   const playerBySlot = (slotId) => data.players.find((player) => player.slot_id.toUpperCase() === String(slotId).toUpperCase()) || null;
 
-  // Price of a pick: players already in the saved team keep the price they were bought at.
+  const savedPick = (slotId) => (team()?.players || []).find((player) => player.slot_id.toUpperCase() === String(slotId).toUpperCase()) || null;
+
+  // Price of a pick. Before the main deadline (and in a locked team) players already in the saved team keep
+  // the price they were bought at. A late draft is priced at today's prices, as the server does:
+  // a price rise can push it over the budget, and then it cannot be saved or committed until players are replaced.
   function pickPrice(slotId) {
-    const saved = (team()?.players || []).find((player) => player.slot_id.toUpperCase() === String(slotId).toUpperCase());
-    if (saved) return Number(saved.price_at_pick);
+    const saved = savedPick(slotId);
+    if (saved && (season().status === "open" || team()?.locked)) return Number(saved.price_at_pick);
     const player = playerBySlot(slotId);
-    return player ? Number(player.price) : 0;
+    if (player) return Number(player.price);
+    return saved ? Number(saved.price_at_pick) : 0;
   }
+
+  // Late draft: players of the draft who cost more now than when the draft was saved.
+  const repricedPicks = () => (season().status === "late" && !team()?.locked
+    ? draft.slot_ids.filter((slotId) => {
+      const saved = savedPick(slotId);
+      const player = playerBySlot(slotId);
+      return saved && player && halves(player.price) > halves(saved.price_at_pick);
+    })
+    : []);
 
   const draftCost = () => draft.slot_ids.reduce((sum, slotId) => sum + halves(pickPrice(slotId)), 0) / 2;
 
@@ -398,7 +472,7 @@
       const strong = el("strong", "", "Late entry. ");
       note.append(
         strong,
-        `Save keeps a draft that you can still change; it scores nothing. Commit locks your team for good, and it scores only matches that start after you commit. Late entry closes ${formatUtc(season().late_deadline)}.`
+        `Save keeps a draft that you can still change; it scores nothing. A draft is priced at today's prices: if a player in it gets more expensive and the team goes over budget, replace players before you commit. Commit locks your team for good, and it scores only matches that start after you commit. Late entry closes ${formatUtc(season().late_deadline)}.`
       );
       return note;
     }
@@ -530,7 +604,10 @@
     box.appendChild(row);
     const hints = [];
     if (!named) hints.push("Enter a team name.");
-    if (!withinBudget) hints.push(`The team is over the budget of ${credits(season().budget)}.`);
+    if (!withinBudget && repricedPicks().length) {
+      const names = repricedPicks().map((slotId) => playerBySlot(slotId)?.nickname || slotId).join(", ");
+      hints.push(`Prices have gone up since you saved this draft (${names}): the team now costs ${credits(draftCost())}, over the budget of ${credits(season().budget)}. Replace players to save or commit it.`);
+    } else if (!withinBudget) hints.push(`The team is over the budget of ${credits(season().budget)}.`);
     if (!full) hints.push(`A team scores only with ${season().team_size} players; until then it is a draft.`);
     if (status === "late" && full && withinBudget) hints.push("Save keeps a draft; Commit cannot be undone.");
     if (team() && isDirty()) hints.push("You have unsaved changes.");
@@ -560,6 +637,7 @@
     const sorters = {
       "price-desc": (left, right) => right.price - left.price || byName(left, right),
       "price-asc": (left, right) => left.price - right.price || byName(left, right),
+      "points-desc": (left, right) => (right.points || 0) - (left.points || 0) || byName(left, right),
       name: byName,
     };
     return rows.sort(sorters[filters.sort] || sorters["price-desc"]);
@@ -616,7 +694,7 @@
         filters.association = value;
         renderPoolTable(tableBox);
       }, "Association"),
-      select([["price-desc", "Price: high → low"], ["price-asc", "Price: low → high"], ["name", "Name A–Z"]], filters.sort, (value) => {
+      select([["price-desc", "Price: high → low"], ["price-asc", "Price: low → high"], ["points-desc", "Points: high → low"], ["name", "Name A–Z"]], filters.sort, (value) => {
         filters.sort = value;
         renderPoolTable(tableBox);
       }, "Sort")
@@ -638,11 +716,15 @@
     const editable = canEdit();
     const full = draft.slot_ids.length >= season().team_size;
     const remaining = halves(season().budget) - halves(draftCost());
+    // "Picked" (how many teams have the player) comes from the server only after the main deadline.
+    const showPicked = data.players.some((player) => player.picked_by !== undefined);
     const table = el("table", "ff-table");
     const thead = el("thead");
     const headRow = el("tr");
-    [["Player", ""], ["Stage", ""], ["Group", "ff-col-group"], ["Association", "ff-col-assoc"], ["Price", "num"], ["", "num"]]
-      .forEach(([label, className]) => headRow.appendChild(el("th", className, label)));
+    [
+      ["Player", ""], ["Stage", ""], ["Group", "ff-col-group"], ["Association", "ff-col-assoc"], ["Price", "num"], ["Pts", "num"],
+      ...(showPicked ? [["Picked", "num"]] : []), ["", "num"],
+    ].forEach(([label, className]) => headRow.appendChild(el("th", className, label)));
     thead.appendChild(headRow);
     table.appendChild(thead);
     const tbody = el("tbody");
@@ -656,8 +738,10 @@
         el("td", "", player.stage),
         el("td", "ff-col-group", player.group || "—"),
         el("td", "ff-col-assoc", player.association?.name || "—"),
-        el("td", "num", credits(player.price))
+        el("td", "num", credits(player.price)),
+        el("td", "num", String(player.points ?? 0))
       );
+      if (showPicked) tr.appendChild(el("td", "num", String(player.picked_by ?? 0)));
       const actionCell = el("td", "num");
       if (editable) {
         const button = el("button", `ff-btn small${picked ? " light" : ""}`, picked ? "Remove" : "Add");
@@ -679,15 +763,220 @@
     box.appendChild(table);
   }
 
+  const afterMainDeadline = () => season().status === "late" || season().status === "closed";
+
+  function renderTabs() {
+    const bar = el("div", "ff-tabs");
+    bar.setAttribute("role", "tablist");
+    [["team", data.viewer?.authenticated ? "My team" : "Players"], ["leaderboard", "Leaderboard"]].forEach(([key, label]) => {
+      const button = el("button", `ff-tab${tab === key ? " active" : ""}`, label);
+      button.type = "button";
+      button.setAttribute("role", "tab");
+      button.setAttribute("aria-selected", String(tab === key));
+      button.addEventListener("click", () => {
+        if (tab === key) return;
+        tab = key;
+        if (tab === "leaderboard" && afterMainDeadline() && !leaderboard && !leaderboardLoading) loadLeaderboard();
+        render();
+      });
+      bar.appendChild(button);
+    });
+    return bar;
+  }
+
   function render() {
     if (!data) return;
     root.innerHTML = "";
     root.appendChild(renderHead());
     root.appendChild(renderNotice());
+    root.appendChild(renderTabs());
+    if (tab === "leaderboard") {
+      root.appendChild(renderLeaderboard());
+      return;
+    }
     const grid = el("div", "ff-grid");
     grid.appendChild(data.viewer?.authenticated ? renderTeamPanel() : renderGuestPanel());
     grid.appendChild(renderPool());
     root.appendChild(grid);
+  }
+
+  // ---- Leaderboard (public from the main deadline)
+
+  function loadLeaderboard() {
+    leaderboardLoading = true;
+    leaderboardError = null;
+    fetch(LEADERBOARD_URL, { credentials: "include" })
+      .then((response) => response.json().then((result) => {
+        if (!response.ok || !result?.ok) throw new Error(result?.message || "Failed to load the leaderboard");
+        return result;
+      }))
+      .then((result) => {
+        leaderboard = result;
+        // Points may have changed: open rows load their teams again.
+        teamDetails.clear();
+        expanded.forEach((teamId) => loadTeamDetails(teamId));
+      })
+      .catch((error) => {
+        leaderboardError = error.message;
+      })
+      .finally(() => {
+        leaderboardLoading = false;
+        if (tab === "leaderboard") render();
+      });
+  }
+
+  function loadTeamDetails(teamId) {
+    teamDetails.set(teamId, { loading: true });
+    fetch(teamDetailsUrl(teamId), { credentials: "include" })
+      .then((response) => response.json().then((result) => {
+        if (!response.ok || !result?.ok) throw new Error(result?.message || "Failed to load the team");
+        return result.team;
+      }))
+      .then((teamData) => teamDetails.set(teamId, { team: teamData }))
+      .catch((error) => teamDetails.set(teamId, { error: error.message }))
+      .finally(() => {
+        if (tab === "leaderboard") render();
+      });
+  }
+
+  function toggleTeamRow(teamId) {
+    if (expanded.has(teamId)) expanded.delete(teamId);
+    else {
+      expanded.add(teamId);
+      if (!teamDetails.has(teamId) || teamDetails.get(teamId).error) loadTeamDetails(teamId);
+    }
+    render();
+  }
+
+  function renderLeaderboard() {
+    const panel = el("div", "ff-panel");
+    const head = el("div", "ff-panel-head");
+    head.appendChild(el("h3", "", "Leaderboard"));
+    panel.appendChild(head);
+    if (!afterMainDeadline()) {
+      panel.appendChild(el("div", "ff-empty", `The leaderboard appears after the main deadline, ${formatUtc(season().main_deadline)}.`));
+      return panel;
+    }
+    if (leaderboardError) {
+      panel.appendChild(el("div", "ff-note bad", leaderboardError));
+      return panel;
+    }
+    if (!leaderboard) {
+      panel.appendChild(el("div", "ff-empty", "Loading the leaderboard…"));
+      return panel;
+    }
+    if (leaderboard.last_result_at) {
+      head.appendChild(el("span", "ff-tag", `Latest result: ${formatUtc(leaderboard.last_result_at)}`));
+    }
+    if (!leaderboard.teams.length) {
+      panel.appendChild(el("div", "ff-empty", "No teams in the game yet."));
+      return panel;
+    }
+    const wrap = el("div", "ff-table-wrap");
+    wrap.style.maxHeight = "none";
+    const table = el("table", "ff-table");
+    const thead = el("thead");
+    const headRow = el("tr");
+    [["", ""], ["#", "num"], ["Team", ""], ["Owner", ""], ["Points", "num"]]
+      .forEach(([label, className]) => headRow.appendChild(el("th", className, label)));
+    thead.appendChild(headRow);
+    const tbody = el("tbody");
+    leaderboard.teams.forEach((row) => {
+      const open = expanded.has(row.team_id);
+      const tr = el("tr", `ff-lb-row${row.team_id === leaderboard.my_team_id ? " mine" : ""}`);
+      tr.tabIndex = 0;
+      tr.setAttribute("aria-expanded", String(open));
+      const chevron = el("td", "chevron");
+      chevron.appendChild(el("i", `fa-solid fa-chevron-${open ? "down" : "right"}`));
+      const nameCell = el("td");
+      nameCell.appendChild(el("span", "ff-player-name", row.team_name));
+      if (row.entry_type === "late") nameCell.append(" ", el("span", "ff-badge warn", "late"));
+      tr.append(
+        chevron,
+        el("td", "num", String(row.rank)),
+        nameCell,
+        el("td", row.owner ? "" : "ff-tag", row.owner || "Pending verification"),
+        el("td", "num", String(row.points))
+      );
+      tr.addEventListener("click", () => toggleTeamRow(row.team_id));
+      tr.addEventListener("keydown", (event) => {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          toggleTeamRow(row.team_id);
+        }
+      });
+      tbody.appendChild(tr);
+      if (open) {
+        const detailRow = el("tr", "ff-lb-detail-row");
+        const cell = el("td");
+        cell.colSpan = 5;
+        cell.appendChild(renderTeamDetails(row.team_id));
+        detailRow.appendChild(cell);
+        tbody.appendChild(detailRow);
+      }
+    });
+    table.append(thead, tbody);
+    wrap.appendChild(table);
+    panel.appendChild(wrap);
+    return panel;
+  }
+
+  const STATUS_LABELS = { eliminated: "Eliminated", qualified: "Qualified to League", playing: "" };
+
+  function matchTitle(match) {
+    return [
+      match.opponent ? `vs ${match.opponent}` : "",
+      [match.stage, match.group ? `Group ${match.group}` : "", match.round_name].filter(Boolean).join(" · "),
+      match.time_utc ? formatUtc(match.time_utc) : "",
+      `${match.points} pt${match.points === 1 ? "" : "s"}${match.counted ? "" : " · not counted (before Commit)"}`,
+    ].filter(Boolean).join("\n");
+  }
+
+  function renderTeamDetails(teamId) {
+    const box = el("div", "ff-lb-detail");
+    const entry = teamDetails.get(teamId);
+    if (!entry || entry.loading) {
+      box.appendChild(el("div", "ff-lb-meta", "Loading…"));
+      return box;
+    }
+    if (entry.error) {
+      box.appendChild(el("div", "ff-message bad", entry.error));
+      return box;
+    }
+    const details = entry.team;
+    const meta = [`Spent ${credits(details.spent)} / ${credits(season().budget)}`];
+    if (details.committed_at) meta.push(`Committed ${formatUtc(details.committed_at)}: only matches from then on count`);
+    box.appendChild(el("div", "ff-lb-meta", meta.join(" · ")));
+    details.players.forEach((player) => {
+      const row = el("div", "ff-lb-player");
+      const label = el("div", "ff-player");
+      if (player.association?.flag) {
+        const flag = el("img", "ff-flag");
+        flag.src = player.association.flag;
+        flag.alt = player.association.name || "";
+        flag.title = player.association.name || "";
+        label.appendChild(flag);
+      }
+      label.append(
+        el("span", "ff-player-name", player.nickname),
+        el("span", "ff-tag", [player.stage, player.group ? `Group ${player.group}` : ""].filter(Boolean).join(" · ")),
+        el("span", "ff-tag", `${credits(player.price_at_pick)} cr`)
+      );
+      if (STATUS_LABELS[player.status]) label.appendChild(el("span", `ff-tag${player.status === "eliminated" ? " out" : ""}`, STATUS_LABELS[player.status]));
+      // "5 : [2-1] [0-2] [2-0]": the player's points for this team, then the scores of their matches.
+      const score = el("div", "ff-lb-score");
+      score.appendChild(el("strong", "", `${player.points} :`));
+      if (!player.matches.length) score.appendChild(el("span", "ff-tag", "no matches yet"));
+      player.matches.forEach((match) => {
+        const [own, opp] = match.score.split("-").map(Number);
+        const chip = el("span", `ff-match ${match.counted ? (own > opp ? "win" : "loss") : "skip"}`, `[${match.score}]`);
+        chip.title = matchTitle(match);
+        score.appendChild(chip);
+      });
+      row.append(label, score);
+      box.appendChild(row);
+    });
+    return box;
   }
 
   function renderGuestPanel() {
@@ -740,6 +1029,10 @@
         const keepDraft = draft && data && data.viewer?.authenticated === result.viewer?.authenticated && isDirty();
         data = result;
         if (!keepDraft) draft = savedDraft();
+        // From the main deadline the page opens on the leaderboard.
+        if (!tab) tab = afterMainDeadline() ? "leaderboard" : "team";
+        if (tab === "leaderboard" && afterMainDeadline()) loadLeaderboard();
+        else leaderboard = null;
         render();
       })
       .catch((error) => {

@@ -1,8 +1,21 @@
 <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+
 
 <!-- Player Hub → Fantasy: leagues the viewer administers (fantasy.js). League admins see teams and the CSV;
      site admins also change league settings and league admins. -->
 <style>
+  body {
+    font-family: "Montserrat", sans-serif;
+  }
+
+  .fl-wrap button,
+  .fl-wrap input,
+  .fl-wrap select,
+  .fl-wrap textarea {
+    font-family: inherit;
+  }
+
   .fl-wrap {
     --text: #222;
     --muted: #5b6b7c;
@@ -199,7 +212,7 @@
     const quote = (value) => `"${String(value ?? "").replace(/"/g, '""')}"`;
     const rows = [[
       "team_id", "team_name", "user_id", "owner", "bga_nickname", "entry_type", "status", "saved_at", "locked_at",
-      "scoring_from", "record_id", "player", "stage", "price_at_pick",
+      "scoring_from", "record_id", "player", "stage", "price_at_pick", "player_points", "team_points",
     ]];
     teams.forEach((team) => {
       const base = [
@@ -207,7 +220,8 @@
         team.saved_at, team.locked_at, team.scoring_from,
       ];
       (team.players.length ? team.players : [null]).forEach((player) => {
-        rows.push([...base, player?.record_id, player?.player, player?.stage, player?.price_at_pick]);
+        // Points are empty for drafts: only locked teams score.
+        rows.push([...base, player?.record_id, player?.player, player?.stage, player?.price_at_pick, player?.points, team.points]);
       });
     });
     // The BOM lets Excel read the names as UTF-8.
@@ -242,7 +256,7 @@
       const wrap = el("div", "fl-table-wrap");
       const table = el("table", "fl-table");
       const headRow = el("tr");
-      [["Team", ""], ["Owner", ""], ["Status", ""], ["Players", ""], ["Cost", "num"], ["Saved", ""]]
+      [["Team", ""], ["Owner", ""], ["Status", ""], ["Players", ""], ["Cost", "num"], ["Points", "num"], ["Saved", ""]]
         .forEach(([label, className]) => headRow.appendChild(el("th", className, label)));
       const thead = el("thead");
       thead.appendChild(headRow);
@@ -255,6 +269,7 @@
           el("td", "", `${STATE_LABELS[team.state] || team.state}${team.entry_type === "late" ? " (late)" : ""}`),
           el("td", "", team.players.map((player) => player.player || player.slot_id).join(", ") || "—"),
           el("td", "num", team.cost.toFixed(1)),
+          el("td", "num", team.points === null || team.points === undefined ? "—" : String(team.points)),
           el("td", "", formatUtc(team.saved_at))
         );
         tbody.appendChild(tr);
