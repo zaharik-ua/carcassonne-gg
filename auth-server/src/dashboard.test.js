@@ -9,7 +9,10 @@ import {
   buildPlayerCaseLink,
   getPlanningStatus,
   getPlayerDuelAction,
+  matchesProposedTimeWindow,
   parseDaysBeforeDeadline,
+  parsePlanningStatusFilter,
+  parseProposedTimeFilter,
   registerDashboardRoutes,
 } from "./dashboard.js";
 
@@ -31,6 +34,8 @@ async function createDatabase(t) {
     CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT, bga_id TEXT, admin INTEGER, created_at TEXT);
     CREATE TABLE profiles (id TEXT PRIMARY KEY, bga_nickname TEXT, name TEXT, association TEXT, bga_elo INTEGER,
       telegram TEXT, whatsapp TEXT, discord TEXT, contact_email TEXT, deleted_at TEXT);
+    CREATE TABLE associations (code TEXT, name TEXT, flag TEXT);
+    INSERT INTO associations VALUES ('UA', 'Ukraine', 'ua.png'), ('PL', 'Poland', NULL);
     CREATE TABLE tournaments (id TEXT PRIMARY KEY, name TEXT, short_title TEXT, is_test INTEGER DEFAULT 0);
     CREATE TABLE tournament_access_users (tournament_entity_type TEXT, tournament_id TEXT, user_id INTEGER, role TEXT);
     CREATE TABLE matches (id TEXT PRIMARY KEY, time_utc TEXT, deleted_at TEXT);
@@ -82,22 +87,25 @@ async function createDatabase(t) {
   const duel = (values) => run(
     db,
     `INSERT INTO duels (id, tournament_id, match_id, group_id, bracket_no, round_name, status, time_utc, deadline_utc,
-      proposed_time_status, proposed_time_by_player_id, player_1_id, player_2_id, results_last_error, is_test, deleted_at)
+      proposed_time_status, proposed_time_utc, proposed_time_by_player_id, player_1_id, player_2_id, results_last_error,
+      is_test, deleted_at)
      VALUES ($id, $tournament_id, $match_id, $group_id, $bracket_no, $round_name, $status, $time_utc, $deadline_utc,
-      $proposed_time_status, $proposed_by, $p1, $p2, $error, $is_test, $deleted_at)`,
+      $proposed_time_status, $proposed_time_utc, $proposed_by, $p1, $p2, $error, $is_test, $deleted_at)`,
     {
       $id: values.id, $tournament_id: values.tournament_id ?? "CCL-2027", $match_id: values.match_id ?? null,
       $group_id: values.group_id === undefined ? "CCL-2027|Q3|X" : values.group_id, $bracket_no: values.bracket_no ?? 1,
       $round_name: values.round_name ?? "Round 1", $status: values.status ?? "Draft", $time_utc: values.time_utc ?? null,
       $deadline_utc: values.deadline_utc === undefined ? "2026-11-22T23:59:00.000Z" : values.deadline_utc,
-      $proposed_time_status: values.proposed_time_status ?? null, $proposed_by: values.proposed_by ?? null,
+      $proposed_time_status: values.proposed_time_status ?? null, $proposed_time_utc: values.proposed_time_utc ?? null,
+      $proposed_by: values.proposed_by ?? null,
       $p1: values.p1 === undefined ? "p1" : values.p1, $p2: values.p2 === undefined ? "p2" : values.p2,
       $error: values.error ?? null, $is_test: values.is_test ?? 0, $deleted_at: values.deleted_at ?? null,
     }
   );
   await duel({ id: "no-proposal", bracket_no: 1 });
-  await duel({ id: "pending", bracket_no: 2, proposed_time_status: "pending", proposed_by: "p3", p2: "p3" });
-  await duel({ id: "change", bracket_no: 3, time_utc: "2026-11-21T18:00:00.000Z", proposed_time_status: "change_pending", proposed_by: "p1" });
+  await duel({ id: "pending", bracket_no: 2, proposed_time_status: "pending", proposed_time_utc: "2026-11-20T15:00:00.000Z", proposed_by: "p3", p2: "p3" });
+  await duel({ id: "change", bracket_no: 3, time_utc: "2026-11-21T18:00:00.000Z", proposed_time_status: "change_pending",
+    proposed_time_utc: "2026-11-20T10:00:00.000Z", proposed_by: "p1" });
   await duel({ id: "passed", deadline_utc: "2026-11-15T23:59:00.000Z" });
   await duel({ id: "planned", time_utc: "2026-11-21T18:00:00.000Z", status: "Planned", proposed_time_status: "accepted" });
   await duel({ id: "far", deadline_utc: "2026-12-06T23:59:00.000Z" });
@@ -142,6 +150,8 @@ test("player action of a duel", () => {
 
 test("duel links open the place where the duel is managed", () => {
   assert.equal(buildDuelLink({ tournament_id: "CCL-2027" }), "/player-hub/tournaments?id=CCL-2027");
+  assert.equal(buildDuelLink({ id: "D1", tournament_id: "CCL-2027", group_id: "G1" }), "/player-hub/tournaments?id=CCL-2027");
+  assert.equal(buildDuelLink({ id: "D1", tournament_id: "CCL-2027", group_id: "G1" }, { adminPage: true }), "/player-hub/tournaments?id=CCL-2027&edit=1&match_id=D1");
   assert.equal(buildDuelLink({ tournament_id: "WTCOC", match_id: "M1" }), "/player-hub/tournaments?id=WTCOC&edit=1&match_id=M1");
   assert.equal(buildDuelLink({ tournament_id: "RIVALS", challenge_period_id: "cp1" }), "/player-hub/challenges");
   assert.equal(buildDuelLink({}), null);
@@ -206,11 +216,50 @@ test("tournament admin: unplanned duels with a deadline and error duels of their
   assert.equal(pending.days_to_deadline, 2);
   assert.equal(pending.tournament.name, "CCL");
   assert.deepEqual(pending.player_1_contacts, { telegram: "@one" });
-  assert.equal(pending.link, "/player-hub/tournaments?id=CCL-2027");
+  assert.equal(pending.link, "/player-hub/tournaments?id=CCL-2027&edit=1&match_id=pending");
+  assert.equal(pending.player_1.association_flag, "ua.png");
+  assert.equal(pending.player_2.association_flag, null);
+  assert.deepEqual(unplanned.status_counts, { deadline_passed: 1, no_proposal: 1, time_proposed: 1, change_pending: 1 });
 
   assert.deepEqual(dashboard.blocks.error_duels.items.map((item) => item.id), ["error"]);
   assert.equal(dashboard.blocks.error_duels.items[0].error, "BGA table not found");
   assert.equal(dashboard.blocks.error_duels.items[0].link, "/player-hub/tournaments?id=WTCOC&edit=1&match_id=M1");
+});
+
+test("unplanned duel filters: planning status and proposed time", () => {
+  assert.equal(parsePlanningStatusFilter("time_proposed"), "time_proposed");
+  assert.equal(parsePlanningStatusFilter("planned"), null);
+  assert.equal(parseProposedTimeFilter("12H"), "12h");
+  assert.equal(parseProposedTimeFilter("2h"), null);
+  const now = NOW.toISOString();
+  const proposal = (time) => ({ proposed_time_status: "pending", proposed_time_utc: time });
+  assert.equal(matchesProposedTimeWindow({}, null, now), true);
+  assert.equal(matchesProposedTimeWindow({}, "4h", now), false);
+  assert.equal(matchesProposedTimeWindow(proposal("2026-11-20T15:00:00.000Z"), "4h", now), true);
+  assert.equal(matchesProposedTimeWindow(proposal("2026-11-20T17:00:00.000Z"), "4h", now), false);
+  assert.equal(matchesProposedTimeWindow(proposal("2026-11-20T17:00:00.000Z"), "12h", now), true);
+  assert.equal(matchesProposedTimeWindow(proposal("2026-11-21T11:00:00.000Z"), "1d", now), true);
+  assert.equal(matchesProposedTimeWindow(proposal("2026-11-20T10:00:00.000Z"), "passed", now), true);
+  assert.equal(matchesProposedTimeWindow(proposal("2026-11-20T10:00:00.000Z"), "1d", now), false);
+  assert.equal(matchesProposedTimeWindow({ proposed_time_status: "accepted", proposed_time_utc: "2026-11-20T10:00:00.000Z" }, "passed", now), false);
+});
+
+test("unplanned duels filtered by planning status and proposed time", async (t) => {
+  const db = await createDatabase(t);
+  const byStatus = await buildDashboard(db, USERS.tournamentAdmin, { now: NOW, query: { planning_status: "no_proposal" } });
+  assert.deepEqual(byStatus.blocks.unplanned_duels.items.map((item) => item.id), ["no-proposal"]);
+  assert.equal(byStatus.blocks.unplanned_duels.count, 1);
+  assert.equal(byStatus.blocks.unplanned_duels.status_counts.time_proposed, 1);
+  assert.equal(byStatus.filters.planning_status, "no_proposal");
+
+  const soon = await buildDashboard(db, USERS.tournamentAdmin, { now: NOW, query: { proposed_time: "4h" } });
+  assert.deepEqual(soon.blocks.unplanned_duels.items.map((item) => item.id), ["pending"]);
+  assert.deepEqual(soon.blocks.unplanned_duels.status_counts, { deadline_passed: 0, no_proposal: 0, time_proposed: 1, change_pending: 0 });
+  assert.equal(soon.filters.proposed_time, "4h");
+
+  const passed = await buildDashboard(db, USERS.tournamentAdmin, { now: NOW, query: { proposed_time: "passed", planning_status: "time_proposed" } });
+  assert.equal(passed.blocks.unplanned_duels.count, 0);
+  assert.equal(passed.blocks.unplanned_duels.status_counts.change_pending, 1);
 });
 
 test("days and tournament filters", async (t) => {

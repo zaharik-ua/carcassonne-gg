@@ -98,7 +98,15 @@
   }
 
   .dash-filter.days {
-    width: 140px;
+    width: 130px;
+  }
+
+  .dash-filter.status {
+    width: 260px;
+  }
+
+  .dash-filter.proposed {
+    width: 170px;
   }
 
   .cp-dd {
@@ -356,8 +364,13 @@
     background: var(--dash-card);
     border: 1px solid var(--dash-border);
     border-radius: var(--dash-radius);
-    overflow: hidden;
     scroll-margin-top: 16px;
+    transition: opacity var(--dash-ease);
+  }
+
+  .dash-section.is-loading {
+    opacity: 0.55;
+    pointer-events: none;
   }
 
   .dash-section-head {
@@ -367,6 +380,11 @@
     gap: 10px;
     padding: 12px 16px;
     background: var(--dash-soft);
+    border-radius: calc(var(--dash-radius) - 1px) calc(var(--dash-radius) - 1px) 0 0;
+  }
+
+  .dash-section-head:last-child {
+    border-radius: calc(var(--dash-radius) - 1px);
   }
 
   .dash-section-heading {
@@ -512,36 +530,211 @@
   .dash-badge.warn { background: var(--dash-warn); color: #fff; }
   .dash-badge.ok { background: var(--dash-ok); color: #fff; }
 
+  /* Same as the View button of the tournaments page (cp-edit-btn cp-edit-btn-view). */
   .dash-link {
     display: inline-flex;
     align-items: center;
-    gap: 4px;
-    min-height: 32px;
-    padding: 0 12px;
+    justify-content: center;
     box-sizing: border-box;
+    border: 1px solid #c8ced8;
     border-radius: 4px;
-    background: var(--dash-primary-soft);
-    font-size: 13px;
+    background: #f3f4f6;
+    color: #2f3947;
+    padding: 4px 8px;
+    font-size: 12px;
     font-weight: 600;
-    color: var(--dash-primary);
+    line-height: 1;
     text-decoration: none;
     white-space: nowrap;
-    transition: background-color var(--dash-ease), color var(--dash-ease);
-  }
-
-  .dash-link .dash-icon {
-    width: 14px;
-    height: 14px;
+    cursor: pointer;
+    transition: border-color var(--dash-ease);
   }
 
   .dash-link:hover {
-    background: var(--dash-primary);
-    color: #fff;
+    border-color: #9ea7b3;
   }
 
   .dash-link:focus-visible {
     outline: 2px solid var(--dash-primary);
     outline-offset: 2px;
+  }
+
+  /* ---------- Unplanned matches: the match list of the tournaments page (CCL) ---------- */
+
+  .dash-section-filters {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    padding: 12px 16px 0;
+  }
+
+  .dash-section-filters .cp-dd-menu {
+    left: 0;
+    right: auto;
+  }
+
+  .dash-matches {
+    padding: 12px 16px 0;
+  }
+
+  .dash-match-heading {
+    padding: 0 2px;
+    font-size: 14px;
+    font-weight: 600;
+    color: #222;
+  }
+
+  .dash-match-list {
+    border: 1px solid #ccc;
+    border-radius: 6px;
+    margin: 4px 0 12px;
+    background: #fff;
+  }
+
+  .dash-match + .dash-match {
+    border-top: 1px solid #ccc;
+  }
+
+  .dash-match-row {
+    display: flex;
+    align-items: center;
+    min-height: 48px;
+    padding: 4px 8px;
+    box-sizing: border-box;
+  }
+
+  .dash-match-time {
+    width: 58px;
+    min-width: 58px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+  }
+
+  .dash-match-time-text {
+    font-size: 12px;
+    line-height: 14px;
+    font-weight: 600;
+    color: #333;
+    white-space: pre-line;
+  }
+
+  .dash-match-divider {
+    width: 1px;
+    margin: 0 6px;
+    align-self: stretch;
+    border-radius: 1px;
+    background: #dfdfdf;
+  }
+
+  .dash-match-players {
+    flex-grow: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    font-size: 13px;
+    line-height: 1.2;
+  }
+
+  .dash-match-player {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 16px;
+  }
+
+  .dash-match-player span {
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .dash-match-flag {
+    width: 20px;
+    height: 20px;
+    object-fit: contain;
+    flex: 0 0 auto;
+  }
+
+  .dash-match-meta {
+    margin-top: 2px;
+    font-size: 11px;
+    color: #667286;
+    overflow-wrap: anywhere;
+  }
+
+  .dash-match-actions {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 6px;
+    margin-left: 8px;
+  }
+
+  /* Status badge of the tournaments page (cp-status-badge). */
+  .dash-status-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 20px;
+    padding: 0 8px;
+    border: 1px solid #d5dbe4;
+    border-radius: 999px;
+    background: #f3f4f6;
+    color: #475467;
+    font-size: 11px;
+    font-weight: 700;
+    line-height: 1;
+    white-space: nowrap;
+  }
+
+  .dash-status-badge.is-attention {
+    border-color: #f5c2c0;
+    background: #fde8e8;
+    color: #b42318;
+  }
+
+  .dash-status-badge.is-warn {
+    border-color: #f3dc9a;
+    background: #fff8e1;
+    color: #5c4300;
+  }
+
+  /* Time proposal panel of the tournaments page (cp-time-proposal-panel). */
+  .dash-proposal {
+    display: grid;
+    gap: 5px;
+    margin: 0 8px 8px 58px;
+    padding: 8px 10px;
+    border: 1px solid #c9dced;
+    border-radius: 6px;
+    background: #f3f8fd;
+    color: #344054;
+    font-size: 12px;
+    line-height: 1.35;
+  }
+
+  .dash-proposal.is-passed {
+    border-color: #f5c2c0;
+    background: #fff6f5;
+  }
+
+  .dash-proposal-title {
+    font-weight: 700;
+    color: #1f3f5b;
+  }
+
+  .dash-proposal-meta {
+    color: #52606d;
+  }
+
+  .dash-proposal-warning {
+    font-weight: 600;
+    color: #b42318;
   }
 
   .dash-more {
@@ -553,7 +746,8 @@
 
   @media (pointer: coarse) {
     .dash-link {
-      min-height: 44px;
+      min-height: 32px;
+      padding: 4px 12px;
     }
 
     .cp-dd-btn {
@@ -579,8 +773,23 @@
 
     .dash-filters,
     .dash-filter.tournament,
-    .dash-filter.days {
+    .dash-filter.days,
+    .dash-filter.status,
+    .dash-filter.proposed {
       width: 100%;
+    }
+
+    .dash-match-row {
+      flex-wrap: wrap;
+    }
+
+    .dash-match-actions {
+      width: 100%;
+      margin: 6px 0 0;
+    }
+
+    .dash-proposal {
+      margin-right: 6px;
     }
 
     .dash-tiles,
@@ -599,6 +808,7 @@
   }
 
   @media (prefers-reduced-motion: reduce) {
+    .dash-section,
     .dash-tile,
     .dash-link,
     .cp-dd-btn,
@@ -624,10 +834,6 @@
         Tournament
         <div id="dashTournament"></div>
       </div>
-      <div class="dash-filter days">
-        Deadline within
-        <div id="dashDays"></div>
-      </div>
     </div>
   </div>
   <div id="dashContent" aria-live="polite" aria-busy="true"></div>
@@ -642,10 +848,19 @@
   const contentEl = document.getElementById("dashContent");
   const filtersEl = document.getElementById("dashFilters");
   const tournamentSlot = document.getElementById("dashTournament");
-  const daysSlot = document.getElementById("dashDays");
-  const DAY_OPTIONS = [1, 3, 7, 14, 30].map((days) => ({ value: String(days), label: `${days} day${days === 1 ? "" : "s"}` }));
-  const filterState = { tournamentId: "", days: "3" };
+  const DEFAULT_DAYS = "3";
+  const DAY_OPTIONS = [1, 2, 3, 4, 5].map((days) => ({ value: String(days), label: `${days} day${days === 1 ? "" : "s"}` }));
+  // Unplanned matches with an active time proposal, by when the proposed time is (PROPOSED_TIME_WINDOWS on the server).
+  const PROPOSED_TIME_OPTIONS = [
+    { value: "", label: "Any time" },
+    { value: "4h", label: "Within 4 hours" },
+    { value: "12h", label: "Within 12 hours" },
+    { value: "1d", label: "Within 1 day" },
+    { value: "passed", label: "Already passed" },
+  ];
+  const filterState = { tournamentId: "", days: DEFAULT_DAYS, status: "", proposed: "" };
   const dropdowns = [];
+  let loadSeq = 0;
 
   // Lucide-style line icons (static markup, no user data).
   const ICONS = {
@@ -657,7 +872,6 @@
     swords: '<polyline points="14.5 17.5 3 6 3 3 6 3 17.5 14.5"/><path d="M13 19l6-6"/><path d="M16 16l4 4"/><path d="M19 21l2-2"/><polyline points="14.5 6.5 18 3 21 3 21 6 17.5 9.5"/><path d="M5 14l4 4"/><path d="M7 17l-3 3"/><path d="M3 19l2 2"/>',
     fileText: '<path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M10 9H8"/><path d="M16 13H8"/><path d="M16 17H8"/>',
     check: '<path d="M20 6 9 17l-5-5"/>',
-    arrowRight: '<path d="M5 12h14"/><path d="m12 5 7 7-7 7"/>',
     chevronDown: '<path d="m6 9 6 6 6-6"/>',
   };
 
@@ -750,12 +964,14 @@
     if (event.key === "Escape") dropdowns.forEach((dropdown) => dropdown.close());
   });
 
+  // In the order of the Status filter (PLANNING_STATUSES on the server).
   const PLANNING_STATUS = {
     deadline_passed: { label: "Deadline passed", tone: "attention" },
     no_proposal: { label: "No time proposed", tone: "attention" },
     time_proposed: { label: "Time proposed, awaiting reply", tone: "warn" },
     change_pending: { label: "Time being renegotiated", tone: "warn" },
   };
+  const CCL_STAGE_LABELS = { Q1: "Q1", Q2: "Q2", Q3: "Q3", Main: "League Stage", Playoffs: "Playoffs" };
 
   const PLAYER_ACTION = {
     accept_time: { label: "Accept or counter the proposed time", tone: "attention" },
@@ -783,15 +999,21 @@
     return {
       tournamentId: String(params.get("tournament_id") || "").trim(),
       days: String(params.get("days") || "").trim(),
+      status: String(params.get("status") || "").trim(),
+      proposed: String(params.get("proposed_time") || "").trim(),
     };
   }
 
   function writeUrlState(state) {
     const url = new URL(window.location.href);
-    if (state.tournamentId) url.searchParams.set("tournament_id", state.tournamentId);
-    else url.searchParams.delete("tournament_id");
-    if (state.days) url.searchParams.set("days", state.days);
-    else url.searchParams.delete("days");
+    const setParam = (name, value) => {
+      if (value) url.searchParams.set(name, value);
+      else url.searchParams.delete(name);
+    };
+    setParam("tournament_id", state.tournamentId);
+    setParam("days", state.days === DEFAULT_DAYS ? "" : state.days);
+    setParam("status", state.status);
+    setParam("proposed_time", state.proposed);
     window.history.replaceState(null, "", url.toString());
   }
 
@@ -843,10 +1065,9 @@
     return el("span", `dash-badge ${info.tone || ""}`.trim(), info.label);
   }
 
-  function linkTo(href, label = "Open") {
+  function linkTo(href, label = "View") {
     if (!href) return null;
     const anchor = el("a", "dash-link", label);
-    anchor.appendChild(icon("arrowRight"));
     anchor.href = absoluteLink(href);
     if (/^https?:\/\//i.test(href)) {
       anchor.target = "_blank";
@@ -892,21 +1113,151 @@
     return node;
   }
 
-  function renderUnplannedDuel(item) {
-    const lines = [duelContext(item)];
-    if (item.deadline_utc) lines.push(`Play before ${formatDeadline(item.deadline_utc)} (${daysText(item.days_to_deadline)})`);
-    if (item.proposed_time_utc && (item.planning_status === "time_proposed" || item.planning_status === "change_pending")) {
-      const proposer = [item.player_1, item.player_2].find((player) => player?.id === item.proposed_by_player_id);
-      lines.push(`Proposed${proposer ? ` by ${proposer.name}` : ""}: ${formatUtc(item.proposed_time_utc)}`);
+  // Time column of the tournaments page: "25 Nov 18:00" in the viewer's time.
+  function formatMatchTime(iso) {
+    const date = new Date(iso || "");
+    if (!Number.isFinite(date.getTime())) return "Time TBD";
+    const month = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"][date.getMonth()];
+    const pad = (value) => String(value).padStart(2, "0");
+    const dayMonth = `${pad(date.getDate())} ${month}`;
+    const time = `${pad(date.getHours())}:${pad(date.getMinutes())}`;
+    return date.getFullYear() < new Date().getFullYear() ? `${dayMonth}\n${date.getFullYear()}\n${time}` : `${dayMonth} ${time}`;
+  }
+
+  // "in 3 h", "25 min ago", "in 2 days".
+  function relativeTime(ts) {
+    const diff = ts - Date.now();
+    const minutes = Math.round(Math.abs(diff) / 60000);
+    const value = minutes < 60
+      ? `${minutes} min`
+      : minutes < 48 * 60 ? `${Math.round(minutes / 60)} h` : `${Math.round(minutes / 1440)} days`;
+    return diff >= 0 ? `in ${value}` : `${value} ago`;
+  }
+
+  function unplannedHeading(item) {
+    return [
+      item.tournament?.name,
+      CCL_STAGE_LABELS[item.stage] || item.stage,
+      item.round,
+      item.group ? `Group ${item.group}` : "",
+    ].filter(Boolean).join(" · ");
+  }
+
+  function matchPlayerLine(player) {
+    const line = el("div", "dash-match-player");
+    if (player?.association_flag) {
+      const flag = el("img", "dash-match-flag");
+      flag.src = player.association_flag;
+      flag.alt = "";
+      line.appendChild(flag);
     }
-    if (item.planning_status === "change_pending" && item.time_utc) lines.push(`Current time: ${formatUtc(item.time_utc)}`);
-    lines.push(contactsText(item.player_1, item.player_1_contacts));
-    lines.push(contactsText(item.player_2, item.player_2_contacts));
-    return row({
-      title: `${playerName(item.player_1)} vs ${playerName(item.player_2)}`,
-      lines,
-      side: [badge(PLANNING_STATUS[item.planning_status]), linkTo(item.link)],
+    line.appendChild(el("span", "", playerName(player)));
+    return line;
+  }
+
+  function deadlineText(item) {
+    if (!item.deadline_utc) return "";
+    const when = `${formatDeadline(item.deadline_utc)} (${daysText(item.days_to_deadline)})`;
+    return item.planning_status === "deadline_passed" ? `deadline passed ${when}` : `play before ${when}`;
+  }
+
+  function hasActiveProposal(item) {
+    return (item.proposed_time_status === "pending" || item.proposed_time_status === "change_pending")
+      && Number.isFinite(Date.parse(item.proposed_time_utc || ""));
+  }
+
+  // The time proposal panel of the tournaments page, with how soon the proposed time is.
+  function proposalPanel(item) {
+    if (!hasActiveProposal(item)) return null;
+    const players = [item.player_1, item.player_2];
+    const proposer = players.find((player) => player?.id === item.proposed_by_player_id) || null;
+    const awaiting = proposer ? players.find((player) => player && player !== proposer) : null;
+    const ts = Date.parse(item.proposed_time_utc);
+    const passed = ts < Date.now();
+    const panel = el("div", `dash-proposal${passed ? " is-passed" : ""}`);
+    const title = item.proposed_time_status === "change_pending" ? "New time proposed" : "Match time proposed";
+    panel.appendChild(el("div", "dash-proposal-title", `${title}${proposer ? ` by ${playerName(proposer)}` : ""}`));
+    panel.appendChild(el("div", "", `${formatUtc(item.proposed_time_utc)} (${relativeTime(ts)})`));
+    if (item.proposed_time_status === "change_pending" && item.time_utc) {
+      panel.appendChild(el("div", "dash-proposal-meta", `Current time: ${formatUtc(item.time_utc)}`));
+    }
+    if (passed) panel.appendChild(el("div", "dash-proposal-warning", "The proposed time has passed without a reply"));
+    panel.appendChild(el("div", "dash-proposal-meta", awaiting ? `Waiting for ${playerName(awaiting)}` : "Waiting for a reply"));
+    return panel;
+  }
+
+  function renderUnplannedDuel(item) {
+    const wrap = el("div", "dash-match");
+    const matchRow = el("div", "dash-match-row");
+    const time = el("div", "dash-match-time");
+    time.appendChild(el("div", "dash-match-time-text", item.time_utc ? formatMatchTime(item.time_utc) : "Time TBD"));
+    const players = el("div", "dash-match-players");
+    players.appendChild(matchPlayerLine(item.player_1));
+    players.appendChild(matchPlayerLine(item.player_2));
+    [
+      [item.duel_format, deadlineText(item)].filter(Boolean).join(" · "),
+      contactsText(item.player_1, item.player_1_contacts),
+      contactsText(item.player_2, item.player_2_contacts),
+    ].filter(Boolean).forEach((line) => players.appendChild(el("div", "dash-match-meta", line)));
+    const actions = el("div", "dash-match-actions");
+    const status = PLANNING_STATUS[item.planning_status];
+    if (status) actions.appendChild(el("span", `dash-status-badge${status.tone ? ` is-${status.tone}` : ""}`, status.label));
+    const view = linkTo(item.link);
+    if (view) actions.appendChild(view);
+    matchRow.append(time, el("div", "dash-match-divider"), players, actions);
+    wrap.appendChild(matchRow);
+    const proposal = proposalPanel(item);
+    if (proposal) wrap.appendChild(proposal);
+    return wrap;
+  }
+
+  // Matches under "Tournament · Stage · Round · Group" headings, as on the tournaments page.
+  function renderUnplannedList(items) {
+    const body = el("div", "dash-matches");
+    let heading = null;
+    let list = null;
+    items.forEach((item) => {
+      const nextHeading = unplannedHeading(item);
+      if (!list || nextHeading !== heading) {
+        heading = nextHeading;
+        if (heading) body.appendChild(el("div", "dash-match-heading", heading));
+        list = el("div", "dash-match-list");
+        body.appendChild(list);
+      }
+      list.appendChild(renderUnplannedDuel(item));
     });
+    return body;
+  }
+
+  function filterField(label, className, dropdown) {
+    const field = el("div", `dash-filter ${className}`, label);
+    field.appendChild(dropdown.root);
+    return field;
+  }
+
+  function renderUnplannedFilters(block) {
+    const bar = el("div", "dash-section-filters");
+    const counts = block?.status_counts || {};
+    const statusKeys = Object.keys(PLANNING_STATUS);
+    const total = statusKeys.reduce((sum, key) => sum + Number(counts[key] || 0), 0);
+    const statusOptions = [{ value: "", label: `All statuses (${total})` }]
+      .concat(statusKeys.map((key) => ({ value: key, label: `${PLANNING_STATUS[key].label} (${Number(counts[key] || 0)})` })));
+    const dayOptions = DAY_OPTIONS.some((option) => option.value === filterState.days)
+      ? DAY_OPTIONS
+      : DAY_OPTIONS.concat({ value: filterState.days, label: `${filterState.days} days` });
+    bar.appendChild(filterField("Deadline within", "days", createDropdown(filterState.days, dayOptions, (value) => {
+      filterState.days = value;
+      onFilterChange("unplanned_duels");
+    })));
+    bar.appendChild(filterField("Status", "status", createDropdown(filterState.status, statusOptions, (value) => {
+      filterState.status = value;
+      onFilterChange("unplanned_duels");
+    })));
+    bar.appendChild(filterField("Proposed time", "proposed", createDropdown(filterState.proposed, PROPOSED_TIME_OPTIONS, (value) => {
+      filterState.proposed = value;
+      onFilterChange("unplanned_duels");
+    })));
+    return bar;
   }
 
   function renderErrorDuel(item) {
@@ -1082,8 +1433,19 @@
       section.appendChild(el(
         "div",
         "dash-section-note",
-        `Matches with a stage deadline (CCL) due within ${data.filters?.days_before_deadline ?? 3} days or already overdue. Team tournament matches are not included yet.`
+        "Matches with a stage deadline (CCL) that is due soon or already passed. Team tournament matches are not included yet."
       ));
+      section.appendChild(renderUnplannedFilters(block));
+      if (!count) {
+        const filtered = filterState.status || filterState.proposed;
+        section.appendChild(el("div", "dash-section-note", filtered ? "No matches match these filters." : "No unplanned matches."));
+        return section;
+      }
+      section.appendChild(renderUnplannedList(block.items || []));
+      if (count > (block.items || []).length) {
+        section.appendChild(el("div", "dash-more", `Showing ${(block.items || []).length} of ${count}.`));
+      }
+      return section;
     }
     if (!count) return section;
 
@@ -1127,27 +1489,22 @@
     }
     filtersEl.hidden = false;
     filterState.tournamentId = data.filters?.tournament_id || "";
-    filterState.days = String(data.filters?.days_before_deadline ?? 3);
+    filterState.days = String(data.filters?.days_before_deadline ?? DEFAULT_DAYS);
+    filterState.status = data.filters?.planning_status || "";
+    filterState.proposed = data.filters?.proposed_time || "";
     const tournamentOptions = [{ value: "", label: "All my tournaments" }]
       .concat((data.tournaments || []).map((tournament) => ({ value: tournament.id, label: tournament.name })));
-    const dayOptions = DAY_OPTIONS.some((option) => option.value === filterState.days)
-      ? DAY_OPTIONS
-      : DAY_OPTIONS.concat({ value: filterState.days, label: `${filterState.days} days` });
 
-    dropdowns.length = 0;
     tournamentSlot.innerHTML = "";
-    daysSlot.innerHTML = "";
     tournamentSlot.appendChild(createDropdown(filterState.tournamentId, tournamentOptions, (value) => {
       filterState.tournamentId = value;
-      onFilterChange();
-    }).root);
-    daysSlot.appendChild(createDropdown(filterState.days, dayOptions, (value) => {
-      filterState.days = value;
       onFilterChange();
     }).root);
   }
 
   function renderDashboard(data) {
+    // The header and section dropdowns are created again on every render.
+    dropdowns.length = 0;
     renderFilters(data);
     const visibleBlocks = BLOCKS.filter((config) => data.blocks?.[config.key]);
     if (!visibleBlocks.length) {
@@ -1165,27 +1522,36 @@
   }
 
   async function load() {
+    // Only the latest request renders: filters may change before an earlier response arrives.
+    const seq = ++loadSeq;
     const state = readUrlState();
     const url = new URL(DASHBOARD_URL);
     if (state.tournamentId) url.searchParams.set("tournament_id", state.tournamentId);
     if (state.days) url.searchParams.set("days_before_deadline", state.days);
+    if (state.status) url.searchParams.set("planning_status", state.status);
+    if (state.proposed) url.searchParams.set("proposed_time", state.proposed);
     try {
       const response = await fetch(url.toString(), { method: "GET", credentials: "include" });
+      if (seq !== loadSeq) return;
       if (response.status === 401) {
         showMessage("Please sign in to view your dashboard.");
         return;
       }
       const data = await response.json().catch(() => ({}));
+      if (seq !== loadSeq) return;
       if (!response.ok || !data?.ok) throw new Error(data?.message || "Failed to load dashboard");
       renderDashboard(data);
     } catch (_error) {
-      showMessage("Failed to load the dashboard. Please refresh the page.");
+      if (seq === loadSeq) showMessage("Failed to load the dashboard. Please refresh the page.");
     }
   }
 
-  function onFilterChange() {
-    writeUrlState({ tournamentId: filterState.tournamentId, days: filterState.days === "3" ? "" : filterState.days });
-    showLoading();
+  // `sectionKey`: a filter of that section changed; the page stays and only the section dims while loading.
+  function onFilterChange(sectionKey = "") {
+    writeUrlState(filterState);
+    const section = sectionKey ? document.getElementById(`dash-${sectionKey}`) : null;
+    if (section) section.classList.add("is-loading");
+    else showLoading();
     load();
   }
 

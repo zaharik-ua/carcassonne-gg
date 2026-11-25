@@ -11,6 +11,9 @@ export const DASHBOARD_BLOCK_LIMIT = 10;
 export const DEFAULT_DAYS_BEFORE_DEADLINE = 3;
 export const MAX_DAYS_BEFORE_DEADLINE = 60;
 export const NEW_USERS_DAYS = 7;
+export const PLANNING_STATUSES = ["deadline_passed", "no_proposal", "time_proposed", "change_pending"];
+// Unplanned duels with an active time proposal, by when the proposed time is: within N hours, or already passed.
+export const PROPOSED_TIME_WINDOWS = { "4h": 4, "12h": 12, "1d": 24, passed: 0 };
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const OPEN_DUEL_STATUSES = ["draft", "planned", "in progress", "requested new time"];
@@ -33,6 +36,16 @@ export function parseDaysBeforeDeadline(value) {
   return Math.min(days, MAX_DAYS_BEFORE_DEADLINE);
 }
 
+export function parsePlanningStatusFilter(value) {
+  const raw = text(value).toLowerCase();
+  return PLANNING_STATUSES.includes(raw) ? raw : null;
+}
+
+export function parseProposedTimeFilter(value) {
+  const raw = text(value).toLowerCase();
+  return Object.prototype.hasOwnProperty.call(PROPOSED_TIME_WINDOWS, raw) ? raw : null;
+}
+
 function toIso(value) {
   const raw = text(value);
   if (!raw) return null;
@@ -48,14 +61,22 @@ function daysBetween(fromIso, toIsoValue) {
   return Math.floor((to - from) / DAY_MS);
 }
 
-function playerOf(row, prefix) {
+function playerOf(row, prefix, flagsByAssociation = null) {
   const id = text(row[`${prefix}_id`]);
   if (!id) return null;
+  const association = text(row[`${prefix}_association`]) || null;
   return {
     id,
     name: text(row[`${prefix}_nickname`]) || text(row[`${prefix}_name`]) || id,
-    association: text(row[`${prefix}_association`]) || null,
+    association,
+    ...(flagsByAssociation ? { association_flag: flagsByAssociation.get(text(association).toUpperCase()) || null } : {}),
   };
+}
+
+// Flags of the associations by code (upper case), for the player lines of the unplanned duels.
+async function loadAssociationFlags(db) {
+  const rows = await dbAll(db, "SELECT code, flag FROM associations WHERE trim(COALESCE(code, '')) <> ''");
+  return new Map(rows.filter((row) => text(row.flag)).map((row) => [text(row.code).toUpperCase(), text(row.flag)]));
 }
 
 function contactsOf(row, prefix) {
@@ -75,13 +96,14 @@ function tournamentOf(row) {
   };
 }
 
-// Where an admin or a player opens the duel in Player Hub.
-export function buildDuelLink(row) {
+// Where an admin or a player opens the duel in Player Hub. `adminPage`: a duel of a structured
+// tournament (CCL) opens its own match page, which only tournament admins have.
+export function buildDuelLink(row, { adminPage = false } = {}) {
   const tournamentId = text(row.tournament_id);
   if (text(row.challenge_period_id)) return "/player-hub/challenges";
   if (!tournamentId) return null;
   const params = new URLSearchParams({ id: tournamentId });
-  const matchId = text(row.match_id);
+  const matchId = text(row.match_id) || (adminPage && text(row.group_id) ? text(row.id) : "");
   if (matchId) {
     params.set("edit", "1");
     params.set("match_id", matchId);
@@ -110,7 +132,7 @@ const PLAYER_COLUMNS = (alias, prefix, { contacts = false } = {}) => [
 
 const DUEL_BASE_SQL = (options = {}) => `
   SELECT
-    d.id, d.tournament_id, d.match_id, d.challenge_period_id, d.status, d.time_utc, d.deadline_utc,
+    d.id, d.tournament_id, d.match_id, d.challenge_period_id, d.group_id, d.status, d.time_utc, d.deadline_utc,
     d.proposed_time_status, d.proposed_time_utc, d.proposed_time_by_player_id,
     d.round_name, d.group_name, d.stage, d.duel_format, d.results_last_error, d.results_checked_at,
     t.name AS tournament_name, t.short_title AS tournament_short_title, m.time_utc AS match_time_utc,
@@ -129,7 +151,7 @@ const LIVE_DUEL_SQL = `
   AND COALESCE(t.is_test, 0) = 0
 `;
 
-function duelSummary(row) {
+function duelSummary(row, flagsByAssociation = null) {
   return {
     id: row.id,
     tournament: tournamentOf(row),
@@ -139,8 +161,8 @@ function duelSummary(row) {
     status: text(row.status) || null,
     time_utc: toIso(row.time_utc) || toIso(row.match_time_utc),
     deadline_utc: toIso(row.deadline_utc),
-    player_1: playerOf(row, "player_1"),
-    player_2: playerOf(row, "player_2"),
+    player_1: playerOf(row, "player_1", flagsByAssociation),
+    player_2: playerOf(row, "player_2", flagsByAssociation),
     link: buildDuelLink(row),
   };
 }
@@ -166,8 +188,21 @@ export async function loadAdminTournaments(db, userId) {
 
 const placeholders = (values) => values.map(() => "?").join(", ");
 
-export async function loadUnplannedDuels(db, { tournamentIds, nowIso, days }) {
-  if (!tournamentIds.length) return { count: 0, items: [] };
+// The proposed time of an unplanned duel with an active proposal is within the window (or already passed).
+export function matchesProposedTimeWindow(item, window, nowIso) {
+  if (!window) return true;
+  const hasProposal = item.proposed_time_status === "pending" || item.proposed_time_status === "change_pending";
+  const proposedTs = Date.parse(item.proposed_time_utc || "");
+  if (!hasProposal || !Number.isFinite(proposedTs)) return false;
+  const nowTs = Date.parse(nowIso);
+  if (window === "passed") return proposedTs < nowTs;
+  return proposedTs >= nowTs && proposedTs <= nowTs + PROPOSED_TIME_WINDOWS[window] * 60 * 60 * 1000;
+}
+
+const emptyStatusCounts = () => Object.fromEntries(PLANNING_STATUSES.map((status) => [status, 0]));
+
+export async function loadUnplannedDuels(db, { tournamentIds, nowIso, days, planningStatus = null, proposedTime = null }) {
+  if (!tournamentIds.length) return { count: 0, items: [], status_counts: emptyStatusCounts() };
   const limitIso = new Date(Date.parse(nowIso) + days * DAY_MS).toISOString();
   const rows = await dbAll(
     db,
@@ -185,23 +220,33 @@ export async function loadUnplannedDuels(db, { tournamentIds, nowIso, days }) {
     `,
     [...tournamentIds.map((id) => id.toUpperCase()), limitIso]
   );
+  const flagsByAssociation = rows.length ? await loadAssociationFlags(db) : new Map();
   const items = [];
+  // Counts by status follow the proposed time filter, so each status option shows what it would list.
+  const statusCounts = emptyStatusCounts();
   for (const row of rows) {
-    const planningStatus = getPlanningStatus(row, nowIso);
-    if (!planningStatus) continue;
+    const status = getPlanningStatus(row, nowIso);
+    if (!status) continue;
     const deadline = toIso(row.deadline_utc);
     const proposedBy = text(row.proposed_time_by_player_id);
-    items.push({
-      ...duelSummary(row),
-      planning_status: planningStatus,
+    const item = {
+      ...duelSummary(row, flagsByAssociation),
+      link: buildDuelLink(row, { adminPage: true }),
+      duel_format: text(row.duel_format) || null,
+      planning_status: status,
       days_to_deadline: daysBetween(nowIso, deadline),
+      proposed_time_status: text(row.proposed_time_status).toLowerCase() || null,
       proposed_time_utc: toIso(row.proposed_time_utc),
       proposed_by_player_id: proposedBy || null,
       player_1_contacts: contactsOf(row, "player_1"),
       player_2_contacts: contactsOf(row, "player_2"),
-    });
+    };
+    if (!matchesProposedTimeWindow(item, proposedTime, nowIso)) continue;
+    statusCounts[status] += 1;
+    if (planningStatus && status !== planningStatus) continue;
+    items.push(item);
   }
-  return { count: items.length, items: items.slice(0, DASHBOARD_BLOCK_LIMIT) };
+  return { count: items.length, items: items.slice(0, DASHBOARD_BLOCK_LIMIT), status_counts: statusCounts };
 }
 
 export async function loadErrorDuels(db, { tournamentIds }) {
@@ -495,6 +540,8 @@ export async function buildDashboard(db, user, { query = {}, now = new Date() } 
   const userId = Number.isInteger(Number(user?.id)) ? Number(user.id) : null;
   const playerId = text(user?.player_id);
   const days = parseDaysBeforeDeadline(query.days_before_deadline);
+  const planningStatus = parsePlanningStatusFilter(query.planning_status);
+  const proposedTime = parseProposedTimeFilter(query.proposed_time);
 
   const adminTournaments = await loadAdminTournaments(db, userId);
   const requestedTournamentId = text(query.tournament_id);
@@ -514,7 +561,7 @@ export async function buildDashboard(db, user, { query = {}, now = new Date() } 
     blocks.new_users = await loadNewUsers(db, { nowIso });
   }
   if (adminTournaments.length) {
-    blocks.unplanned_duels = await loadUnplannedDuels(db, { tournamentIds, nowIso, days });
+    blocks.unplanned_duels = await loadUnplannedDuels(db, { tournamentIds, nowIso, days, planningStatus, proposedTime });
     blocks.error_duels = await loadErrorDuels(db, { tournamentIds });
   }
   if (playerId) {
@@ -533,6 +580,8 @@ export async function buildDashboard(db, user, { query = {}, now = new Date() } 
     filters: {
       tournament_id: requestedTournamentId ? (selected[0]?.id || null) : null,
       days_before_deadline: days,
+      planning_status: planningStatus,
+      proposed_time: proposedTime,
     },
     tournaments: adminTournaments,
     blocks,
