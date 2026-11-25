@@ -61,7 +61,8 @@ function daysBetween(fromIso, toIsoValue) {
   return Math.floor((to - from) / DAY_MS);
 }
 
-function playerOf(row, prefix, flagsByAssociation = null) {
+// `flagOf(row, playerId, profileAssociation)`: the association flag of the player, when the block shows flags.
+function playerOf(row, prefix, flagOf = null) {
   const id = text(row[`${prefix}_id`]);
   if (!id) return null;
   const association = text(row[`${prefix}_association`]) || null;
@@ -69,14 +70,36 @@ function playerOf(row, prefix, flagsByAssociation = null) {
     id,
     name: text(row[`${prefix}_nickname`]) || text(row[`${prefix}_name`]) || id,
     association,
-    ...(flagsByAssociation ? { association_flag: flagsByAssociation.get(text(association).toUpperCase()) || null } : {}),
+    ...(flagOf ? { association_flag: flagOf(row, id, association) } : {}),
   };
 }
 
-// Flags of the associations by code (upper case), for the player lines of the unplanned duels.
-async function loadAssociationFlags(db) {
-  const rows = await dbAll(db, "SELECT code, flag FROM associations WHERE trim(COALESCE(code, '')) <> ''");
-  return new Map(rows.filter((row) => text(row.flag)).map((row) => [text(row.code).toUpperCase(), text(row.flag)]));
+// Association id as the CCL slots store it (ccl-routes.js ASSOCIATION_ID_SQL): the code, else ASSOCIATION_<rowid>.
+const ASSOCIATION_ID_SQL = "COALESCE(NULLIF(trim(a.code), ''), printf('ASSOCIATION_%s', a.rowid))";
+
+// Flags of the unplanned duels' players, as the tournament page shows them: the association of the
+// player's slot in that tournament (tournament_players), else the association of the profile.
+async function loadFlagResolver(db, tournamentIds) {
+  const [associations, slots] = await Promise.all([
+    dbAll(db, `SELECT ${ASSOCIATION_ID_SQL} AS id, a.flag FROM associations a`),
+    dbAll(
+      db,
+      `
+        SELECT upper(trim(tournament_id)) AS tournament_id, trim(player_id) AS player_id, association_id
+        FROM tournament_players
+        WHERE upper(trim(tournament_id)) IN (${tournamentIds.map(() => "?").join(", ")})
+          AND trim(COALESCE(player_id, '')) <> ''
+          AND trim(COALESCE(association_id, '')) <> ''
+      `,
+      tournamentIds.map((id) => id.toUpperCase())
+    ),
+  ]);
+  const flags = new Map(associations.filter((row) => text(row.flag)).map((row) => [text(row.id).toUpperCase(), text(row.flag)]));
+  const slotAssociations = new Map(slots.map((row) => [`${row.tournament_id}|${row.player_id}`, text(row.association_id)]));
+  return (row, playerId, profileAssociation) => {
+    const slotAssociation = slotAssociations.get(`${text(row.tournament_id).toUpperCase()}|${playerId}`);
+    return flags.get(text(slotAssociation || profileAssociation).toUpperCase()) || null;
+  };
 }
 
 function contactsOf(row, prefix) {
@@ -151,7 +174,7 @@ const LIVE_DUEL_SQL = `
   AND COALESCE(t.is_test, 0) = 0
 `;
 
-function duelSummary(row, flagsByAssociation = null) {
+function duelSummary(row, flagOf = null) {
   return {
     id: row.id,
     tournament: tournamentOf(row),
@@ -161,8 +184,8 @@ function duelSummary(row, flagsByAssociation = null) {
     status: text(row.status) || null,
     time_utc: toIso(row.time_utc) || toIso(row.match_time_utc),
     deadline_utc: toIso(row.deadline_utc),
-    player_1: playerOf(row, "player_1", flagsByAssociation),
-    player_2: playerOf(row, "player_2", flagsByAssociation),
+    player_1: playerOf(row, "player_1", flagOf),
+    player_2: playerOf(row, "player_2", flagOf),
     link: buildDuelLink(row),
   };
 }
@@ -220,7 +243,7 @@ export async function loadUnplannedDuels(db, { tournamentIds, nowIso, days, plan
     `,
     [...tournamentIds.map((id) => id.toUpperCase()), limitIso]
   );
-  const flagsByAssociation = rows.length ? await loadAssociationFlags(db) : new Map();
+  const flagOf = rows.length ? await loadFlagResolver(db, tournamentIds) : null;
   const items = [];
   // Counts by status follow the proposed time filter, so each status option shows what it would list.
   const statusCounts = emptyStatusCounts();
@@ -230,7 +253,7 @@ export async function loadUnplannedDuels(db, { tournamentIds, nowIso, days, plan
     const deadline = toIso(row.deadline_utc);
     const proposedBy = text(row.proposed_time_by_player_id);
     const item = {
-      ...duelSummary(row, flagsByAssociation),
+      ...duelSummary(row, flagOf),
       link: buildDuelLink(row, { adminPage: true }),
       duel_format: text(row.duel_format) || null,
       planning_status: status,

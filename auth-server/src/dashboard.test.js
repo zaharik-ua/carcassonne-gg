@@ -35,7 +35,9 @@ async function createDatabase(t) {
     CREATE TABLE profiles (id TEXT PRIMARY KEY, bga_nickname TEXT, name TEXT, association TEXT, bga_elo INTEGER,
       telegram TEXT, whatsapp TEXT, discord TEXT, contact_email TEXT, deleted_at TEXT);
     CREATE TABLE associations (code TEXT, name TEXT, flag TEXT);
-    INSERT INTO associations VALUES ('UA', 'Ukraine', 'ua.png'), ('PL', 'Poland', NULL);
+    INSERT INTO associations VALUES ('UA', 'Ukraine', 'ua.png'), ('PL', 'Poland', NULL), ('DE', 'Germany', 'de.png'), ('FR', 'France', 'fr.png');
+    CREATE TABLE tournament_players (id INTEGER PRIMARY KEY, tournament_id TEXT, player_id TEXT, association_id TEXT);
+    INSERT INTO tournament_players (tournament_id, player_id, association_id) VALUES ('CCL-2027', 'p3', 'FR');
     CREATE TABLE tournaments (id TEXT PRIMARY KEY, name TEXT, short_title TEXT, is_test INTEGER DEFAULT 0);
     CREATE TABLE tournament_access_users (tournament_entity_type TEXT, tournament_id TEXT, user_id INTEGER, role TEXT);
     CREATE TABLE matches (id TEXT PRIMARY KEY, time_utc TEXT, deleted_at TEXT);
@@ -218,7 +220,9 @@ test("tournament admin: unplanned duels with a deadline and error duels of their
   assert.deepEqual(pending.player_1_contacts, { telegram: "@one" });
   assert.equal(pending.link, "/player-hub/tournaments?id=CCL-2027&edit=1&match_id=pending");
   assert.equal(pending.player_1.association_flag, "ua.png");
-  assert.equal(pending.player_2.association_flag, null);
+  // The slot association (FR) wins over the profile association (DE).
+  assert.equal(pending.player_2.association_flag, "fr.png");
+  assert.equal(unplanned.items.find((item) => item.id === "no-proposal").player_2.association_flag, null);
   assert.deepEqual(unplanned.status_counts, { deadline_passed: 1, no_proposal: 1, time_proposed: 1, change_pending: 1 });
 
   assert.deepEqual(dashboard.blocks.error_duels.items.map((item) => item.id), ["error"]);

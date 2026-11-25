@@ -645,11 +645,35 @@
     font-size: 16px;
   }
 
-  .dash-match-player span {
-    max-width: 100%;
+  .dash-match-player-name {
+    min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+    color: inherit;
+    text-decoration: none;
+  }
+
+  a.dash-match-player-name:hover {
+    color: var(--dash-primary);
+    text-decoration: underline;
+  }
+
+  a.dash-match-player-name:focus-visible {
+    outline: 2px solid var(--dash-primary);
+    outline-offset: 2px;
+  }
+
+  /* Marks the player who sent the time proposal. */
+  .dash-match-proposer {
+    display: inline-flex;
+    flex: 0 0 auto;
+    color: var(--dash-primary);
+  }
+
+  .dash-match-proposer .dash-icon {
+    width: 15px;
+    height: 15px;
   }
 
   .dash-match-flag {
@@ -873,6 +897,7 @@
     fileText: '<path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M10 9H8"/><path d="M16 13H8"/><path d="M16 17H8"/>',
     check: '<path d="M20 6 9 17l-5-5"/>',
     chevronDown: '<path d="m6 9 6 6 6-6"/>',
+    clock: '<circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/>',
   };
 
   function icon(name) {
@@ -971,6 +996,7 @@
     time_proposed: { label: "Time proposed, awaiting reply", tone: "warn" },
     change_pending: { label: "Time being renegotiated", tone: "warn" },
   };
+  const PLAYER_PROFILE_URL = "https://carcassonne.gg/player/?id=";
   const CCL_STAGE_LABELS = { Q1: "Q1", Q2: "Q2", Q3: "Q3", Main: "League Stage", Playoffs: "Playoffs" };
 
   const PLAYER_ACTION = {
@@ -1053,12 +1079,6 @@
       .format(new Date(ts));
   }
 
-  function daysText(days) {
-    if (days === null || days === undefined) return "";
-    if (days < 0) return `${Math.abs(days)} day${Math.abs(days) === 1 ? "" : "s"} ago`;
-    if (days === 0) return "today";
-    return `in ${days} day${days === 1 ? "" : "s"}`;
-  }
 
   function badge(info) {
     if (!info) return null;
@@ -1084,12 +1104,6 @@
     return player?.name || "TBD";
   }
 
-  function contactsText(player, contacts) {
-    const entries = Object.entries(contacts || {});
-    if (!entries.length) return "";
-    const labels = { telegram: "Telegram", whatsapp: "WhatsApp", discord: "Discord", contact_email: "Email" };
-    return `${playerName(player)}: ${entries.map(([key, value]) => `${labels[key] || key} ${value}`).join(", ")}`;
-  }
 
   function row({ title, lines = [], errorLine = "", side = [] }) {
     const node = el("div", "dash-row");
@@ -1143,7 +1157,8 @@
     ].filter(Boolean).join(" · ");
   }
 
-  function matchPlayerLine(player) {
+  // Flag, name with a link to the player's profile, and a clock icon for the player who proposed the time.
+  function matchPlayerLine(player, isProposer) {
     const line = el("div", "dash-match-player");
     if (player?.association_flag) {
       const flag = el("img", "dash-match-flag");
@@ -1151,14 +1166,44 @@
       flag.alt = "";
       line.appendChild(flag);
     }
-    line.appendChild(el("span", "", playerName(player)));
+    const name = el(player?.id ? "a" : "span", "dash-match-player-name", playerName(player));
+    if (player?.id) {
+      name.href = `${PLAYER_PROFILE_URL}${encodeURIComponent(player.id)}`;
+      name.target = "_blank";
+      name.rel = "noopener noreferrer";
+    }
+    line.appendChild(name);
+    if (isProposer) {
+      const mark = el("span", "dash-match-proposer");
+      mark.title = "Proposed the match time";
+      mark.setAttribute("role", "img");
+      mark.setAttribute("aria-label", "Proposed the match time");
+      mark.appendChild(icon("clock"));
+      line.appendChild(mark);
+    }
     return line;
   }
 
+  const plural = (count, word) => `${count} ${word}${count === 1 ? "" : "s"}`;
+
+  // "4 days 5 hours", "1 day", "3 hours 20 minutes", "45 minutes".
+  function durationText(ms) {
+    const totalMinutes = Math.max(0, Math.floor(ms / 60000));
+    const days = Math.floor(totalMinutes / 1440);
+    const hours = Math.floor((totalMinutes % 1440) / 60);
+    const minutes = totalMinutes % 60;
+    if (days) return [plural(days, "day"), hours ? plural(hours, "hour") : ""].filter(Boolean).join(" ");
+    if (hours) return [plural(hours, "hour"), minutes ? plural(minutes, "minute") : ""].filter(Boolean).join(" ");
+    return plural(minutes, "minute");
+  }
+
+  // Time left until the stage deadline (shown as Monday 00:00, see formatDeadline).
   function deadlineText(item) {
-    if (!item.deadline_utc) return "";
-    const when = `${formatDeadline(item.deadline_utc)} (${daysText(item.days_to_deadline)})`;
-    return item.planning_status === "deadline_passed" ? `deadline passed ${when}` : `play before ${when}`;
+    let ts = Date.parse(item.deadline_utc || "");
+    if (!Number.isFinite(ts)) return "";
+    if (new Date(ts).getUTCMinutes() === 59) ts = Math.ceil((ts + 1) / 60000) * 60000;
+    const left = ts - Date.now();
+    return left > 0 ? `Time to play: ${durationText(left)}` : `Deadline passed ${durationText(-left)} ago`;
   }
 
   function hasActiveProposal(item) {
@@ -1189,16 +1234,15 @@
   function renderUnplannedDuel(item) {
     const wrap = el("div", "dash-match");
     const matchRow = el("div", "dash-match-row");
+    // The time column shows the proposed time, or nothing while no time is proposed.
     const time = el("div", "dash-match-time");
-    time.appendChild(el("div", "dash-match-time-text", item.time_utc ? formatMatchTime(item.time_utc) : "Time TBD"));
+    if (hasActiveProposal(item)) time.appendChild(el("div", "dash-match-time-text", formatMatchTime(item.proposed_time_utc)));
+    const proposerId = hasActiveProposal(item) ? item.proposed_by_player_id : null;
     const players = el("div", "dash-match-players");
-    players.appendChild(matchPlayerLine(item.player_1));
-    players.appendChild(matchPlayerLine(item.player_2));
-    [
-      [item.duel_format, deadlineText(item)].filter(Boolean).join(" · "),
-      contactsText(item.player_1, item.player_1_contacts),
-      contactsText(item.player_2, item.player_2_contacts),
-    ].filter(Boolean).forEach((line) => players.appendChild(el("div", "dash-match-meta", line)));
+    players.appendChild(matchPlayerLine(item.player_1, !!proposerId && item.player_1?.id === proposerId));
+    players.appendChild(matchPlayerLine(item.player_2, !!proposerId && item.player_2?.id === proposerId));
+    const meta = [item.duel_format, deadlineText(item)].filter(Boolean).join(" · ");
+    if (meta) players.appendChild(el("div", "dash-match-meta", meta));
     const actions = el("div", "dash-match-actions");
     const status = PLANNING_STATUS[item.planning_status];
     if (status) actions.appendChild(el("span", `dash-status-badge${status.tone ? ` is-${status.tone}` : ""}`, status.label));
