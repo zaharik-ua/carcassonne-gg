@@ -97,17 +97,6 @@
     width: 240px;
   }
 
-  .dash-filter.days {
-    width: 130px;
-  }
-
-  .dash-filter.status {
-    width: 260px;
-  }
-
-  .dash-filter.proposed {
-    width: 170px;
-  }
 
   .cp-dd {
     position: relative;
@@ -559,39 +548,66 @@
     outline-offset: 2px;
   }
 
-  /* ---------- Unplanned matches: the match list of the tournaments page (CCL) ---------- */
+  /* ---------- Unplanned matches: the match list of team-official-matches.html ---------- */
 
-  .dash-section-filters {
+  .dash-om {
+    transition: opacity var(--dash-ease);
+  }
+
+  .dash-om.is-loading {
+    opacity: 0.55;
+    pointer-events: none;
+  }
+
+  /* .section-title */
+  .dash-om-title {
     display: flex;
-    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
     gap: 10px;
-    padding: 12px 16px 0;
+    margin: 0 0 10px;
+    padding: 0 8px;
+    font-size: 17px;
+    font-weight: 700;
+    color: #222;
   }
 
-  .dash-section-filters .cp-dd-menu {
-    left: 0;
-    right: auto;
+  .dash-om-count {
+    font-size: 13px;
+    font-weight: 600;
+    color: #555;
   }
 
-  .dash-matches {
-    padding: 12px 16px 0;
+  /* .tournament-card; no overflow: hidden, so the filter menus are not cut off. */
+  .dash-om-card {
+    background: #fff;
+    border-radius: 4px;
+    box-shadow: 1.4142px 1.4142px 2px 0 #b2b2b2;
   }
 
-  /* Paging of team-official-matches.html (results-controls). */
-  .dash-pager {
+  /* .results-controls */
+  .dash-om-controls {
     display: flex;
     align-items: center;
     justify-content: space-between;
     flex-wrap: wrap;
     gap: 8px;
-    margin-bottom: 12px;
     padding: 6px 8px;
-    border: 1px solid #ccc;
-    border-radius: 4px;
     background: #f7f8fa;
+    border-bottom: 1px solid #ccc;
   }
 
-  .dash-pagesize {
+  .dash-om-controls:first-child {
+    border-radius: 4px 4px 0 0;
+  }
+
+  .dash-om-controls.is-filters {
+    justify-content: flex-start;
+    gap: 8px 16px;
+  }
+
+  /* .results-pagesize: a label with a small dropdown, used for Per page and the filters. */
+  .dash-picker {
     display: inline-flex;
     align-items: center;
     gap: 6px;
@@ -599,14 +615,14 @@
     color: #555;
   }
 
-  .dash-pagesize-picker {
+  .dash-picker-holder {
     position: relative;
     display: inline-flex;
     flex-direction: column;
     min-width: 58px;
   }
 
-  .dash-pagesize-btn {
+  .dash-picker-btn {
     all: unset;
     box-sizing: border-box;
     width: 100%;
@@ -623,35 +639,38 @@
     font-size: 12px;
     font-weight: 600;
     line-height: 1;
+    white-space: nowrap;
     cursor: pointer;
   }
 
-  .dash-pagesize-btn:hover,
-  .dash-pagesize-btn.open {
+  .dash-picker-btn:hover,
+  .dash-picker-btn.open {
     border-color: #9ea7b3;
   }
 
-  .dash-pagesize-btn:focus-visible {
+  .dash-picker-btn:focus-visible {
     outline: 2px solid var(--dash-primary);
     outline-offset: 2px;
   }
 
-  .dash-pagesize-btn .dash-icon {
+  .dash-picker-btn .dash-icon {
     width: 12px;
     height: 12px;
     color: #6f7785;
     transition: transform var(--dash-ease);
   }
 
-  .dash-pagesize-btn.open .dash-icon {
+  .dash-picker-btn.open .dash-icon {
     transform: rotate(180deg);
   }
 
-  .dash-pagesize-menu {
+  .dash-picker-menu {
     position: absolute;
     left: 0;
     top: calc(100% + 4px);
     min-width: 100%;
+    width: max-content;
+    max-width: calc(100vw - 32px);
     max-height: 0;
     overflow: hidden;
     display: flex;
@@ -666,12 +685,12 @@
     z-index: 20;
   }
 
-  .dash-pagesize-menu.open {
+  .dash-picker-menu.open {
     opacity: 1;
     pointer-events: auto;
   }
 
-  .dash-pagesize-option {
+  .dash-picker-option {
     all: unset;
     box-sizing: border-box;
     padding: 5px 8px;
@@ -683,19 +702,20 @@
     cursor: pointer;
   }
 
-  .dash-pagesize-option:first-child {
+  .dash-picker-option:first-child {
     border-top: none;
   }
 
-  .dash-pagesize-option:hover,
-  .dash-pagesize-option:focus-visible {
+  .dash-picker-option:hover,
+  .dash-picker-option:focus-visible {
     background: #f5f5f5;
   }
 
-  .dash-pagesize-option.active {
+  .dash-picker-option.active {
     background: #e4f0fb;
   }
 
+  /* .results-pagination */
   .dash-pagination {
     display: inline-flex;
     align-items: center;
@@ -730,58 +750,61 @@
     text-align: center;
   }
 
-  .dash-match-heading {
-    padding: 0 2px;
-    font-size: 14px;
-    font-weight: 600;
-    color: #222;
-  }
-
-  .dash-match-list {
-    border: 1px solid #ccc;
-    border-radius: 6px;
-    margin: 4px 0 12px;
-    background: #fff;
-  }
-
-  .dash-match + .dash-match {
-    border-top: 1px solid #ccc;
-  }
-
-  .dash-match-row {
+  /* .match-row */
+  .dash-om-row {
     display: flex;
     align-items: center;
     min-height: 48px;
     padding: 4px 8px;
     box-sizing: border-box;
+    border-top: 1px solid #ccc;
   }
 
-  .dash-match-time {
-    width: 58px;
-    min-width: 58px;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    text-align: center;
+  .dash-om-controls + .dash-om-row {
+    border-top: none;
   }
 
-  .dash-match-time-text {
+  .dash-om-row.is-empty {
+    justify-content: center;
+    color: #666;
+    font-size: 13px;
+  }
+
+  .dash-om-time {
+    width: 46px;
+    min-width: 46px;
     font-size: 12px;
     line-height: 14px;
-    font-weight: 600;
+    font-weight: 700;
     color: #333;
+    text-align: center;
     white-space: pre-line;
   }
 
-  .dash-match-divider {
-    width: 1px;
+  .dash-om-divider {
+    width: 2px;
     margin: 0 6px;
     align-self: stretch;
     border-radius: 1px;
     background: #dfdfdf;
   }
 
-  .dash-match-players {
+  .dash-om-logo {
+    min-width: 34px;
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .dash-om-logo img {
+    display: block;
+    width: auto;
+    height: 25px;
+    object-fit: contain;
+  }
+
+  .dash-om-players {
     flex-grow: 1;
     min-width: 0;
     display: flex;
@@ -791,14 +814,21 @@
     line-height: 1.2;
   }
 
-  .dash-match-player {
+  .dash-om-player {
     display: flex;
     align-items: center;
     gap: 6px;
     font-size: 16px;
   }
 
-  .dash-match-player-name {
+  .dash-om-flag {
+    width: 20px;
+    height: 20px;
+    object-fit: contain;
+    flex: 0 0 auto;
+  }
+
+  .dash-om-name {
     min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -807,48 +837,47 @@
     text-decoration: none;
   }
 
-  /* Player links of matches.html (.duel-player-row a). */
-  a.dash-match-player-name:hover {
+  /* .duel-player-row a */
+  a.dash-om-name:hover {
     color: #0277BD;
   }
 
-  a.dash-match-player-name:focus-visible {
+  a.dash-om-name:focus-visible {
     outline: 2px solid var(--dash-primary);
     outline-offset: 2px;
   }
 
   /* Marks the player who sent the time proposal. */
-  .dash-match-proposer {
+  .dash-om-proposer {
     display: inline-flex;
     flex: 0 0 auto;
     color: var(--dash-primary);
   }
 
-  .dash-match-proposer .dash-icon {
+  .dash-om-proposer .dash-icon {
     width: 15px;
     height: 15px;
   }
 
-  .dash-match-flag {
-    width: 20px;
-    height: 20px;
-    object-fit: contain;
-    flex: 0 0 auto;
-  }
-
-  .dash-match-meta {
+  .dash-om-meta {
     margin-top: 2px;
     font-size: 11px;
     color: #667286;
     overflow-wrap: anywhere;
   }
 
-  .dash-match-actions {
+  .dash-om-meta.is-overdue {
+    font-weight: 600;
+    color: #b42318;
+  }
+
+  /* .match-right */
+  .dash-om-right {
     display: flex;
     align-items: center;
     flex-wrap: wrap;
     justify-content: flex-end;
-    gap: 6px;
+    gap: 8px;
     margin-left: 8px;
   }
 
@@ -879,11 +908,6 @@
     border-color: #f3dc9a;
     background: #fff8e1;
     color: #5c4300;
-  }
-
-  .dash-match-meta.is-overdue {
-    font-weight: 600;
-    color: #b42318;
   }
 
   .dash-more {
@@ -921,20 +945,17 @@
     }
 
     .dash-filters,
-    .dash-filter.tournament,
-    .dash-filter.days,
-    .dash-filter.status,
-    .dash-filter.proposed {
+    .dash-filter.tournament {
       width: 100%;
     }
 
-    .dash-match-row {
+    .dash-om-row {
       flex-wrap: wrap;
     }
 
-    .dash-match-actions {
+    .dash-om-right {
       width: 100%;
-      margin: 6px 0 0;
+      margin: 4px 0 0;
     }
 
     .dash-tiles,
@@ -956,8 +977,9 @@
     .dash-section,
     .dash-tile,
     .dash-link,
-    .dash-pagesize-btn .dash-icon,
-    .dash-pagesize-menu,
+    .dash-om,
+    .dash-picker-btn .dash-icon,
+    .dash-picker-menu,
     .cp-dd-btn,
     .cp-dd-chevron,
     .cp-dd-menu {
@@ -1123,7 +1145,6 @@
     change_pending: { label: "Time being renegotiated", tone: "warn" },
   };
   const PLAYER_PROFILE_URL = "https://carcassonne.gg/player/?id=";
-  const CCL_STAGE_LABELS = { Q1: "Q1", Q2: "Q2", Q3: "Q3", Main: "League Stage", Playoffs: "Playoffs" };
 
   const PLAYER_ACTION = {
     accept_time: { label: "Accept or counter the proposed time", tone: "attention" },
@@ -1257,49 +1278,17 @@
     return node;
   }
 
-  // Time column of the tournaments page: "25 Nov 18:00" in the viewer's time.
+  // Time column of team-official-matches.html: "25 Nov" and "18:00" on two lines, in the viewer's time.
   function formatMatchTime(iso) {
     const date = new Date(iso || "");
-    if (!Number.isFinite(date.getTime())) return "Time TBD";
+    if (!Number.isFinite(date.getTime())) return "";
     const month = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"][date.getMonth()];
     const pad = (value) => String(value).padStart(2, "0");
-    const dayMonth = `${pad(date.getDate())} ${month}`;
-    const time = `${pad(date.getHours())}:${pad(date.getMinutes())}`;
-    return date.getFullYear() < new Date().getFullYear() ? `${dayMonth}\n${date.getFullYear()}\n${time}` : `${dayMonth} ${time}`;
-  }
-
-  function unplannedHeading(item) {
     return [
-      item.tournament?.name,
-      CCL_STAGE_LABELS[item.stage] || item.stage,
-      item.round,
-      item.group ? `Group ${item.group}` : "",
-    ].filter(Boolean).join(" · ");
-  }
-
-  // Flag, name with a link to the player's profile, and a clock icon for the player who proposed the time.
-  function matchPlayerLine(player, isProposer) {
-    const line = el("div", "dash-match-player");
-    if (player?.association_flag) {
-      const flag = el("img", "dash-match-flag");
-      flag.src = player.association_flag;
-      flag.alt = "";
-      line.appendChild(flag);
-    }
-    const name = el(player?.id ? "a" : "span", "dash-match-player-name", playerName(player));
-    if (player?.id) {
-      name.href = `${PLAYER_PROFILE_URL}${encodeURIComponent(player.id)}`;
-    }
-    line.appendChild(name);
-    if (isProposer) {
-      const mark = el("span", "dash-match-proposer");
-      mark.title = "Proposed the match time";
-      mark.setAttribute("role", "img");
-      mark.setAttribute("aria-label", "Proposed the match time");
-      mark.appendChild(icon("clock"));
-      line.appendChild(mark);
-    }
-    return line;
+      `${pad(date.getDate())} ${month}`,
+      date.getFullYear() !== new Date().getFullYear() ? String(date.getFullYear()) : "",
+      `${pad(date.getHours())}:${pad(date.getMinutes())}`,
+    ].filter(Boolean).join("\n");
   }
 
   const plural = (count, word) => `${count} ${word}${count === 1 ? "" : "s"}`;
@@ -1333,98 +1322,123 @@
     if (!hasActiveProposal(item)) return null;
     const left = Date.parse(item.proposed_time_utc) - Date.now();
     return left > 0
-      ? el("div", "dash-match-meta", `Match in: ${durationText(left)}`)
-      : el("div", "dash-match-meta is-overdue", `Proposed time passed ${durationText(-left)} ago without a reply`);
+      ? el("div", "dash-om-meta", `Match in: ${durationText(left)}`)
+      : el("div", "dash-om-meta is-overdue", `Proposed time passed ${durationText(-left)} ago`);
   }
 
+  // Flag, name with a link to the player's profile, and a clock icon for the player who proposed the time.
+  function matchPlayerLine(player, isProposer) {
+    const line = el("div", "dash-om-player");
+    if (player?.association_flag) {
+      const flag = el("img", "dash-om-flag");
+      flag.src = player.association_flag;
+      flag.alt = "";
+      line.appendChild(flag);
+    }
+    const name = el(player?.id ? "a" : "span", "dash-om-name", playerName(player));
+    if (player?.id) name.href = `${PLAYER_PROFILE_URL}${encodeURIComponent(player.id)}`;
+    line.appendChild(name);
+    if (isProposer) {
+      const mark = el("span", "dash-om-proposer");
+      mark.title = "Proposed the match time";
+      mark.setAttribute("role", "img");
+      mark.setAttribute("aria-label", "Proposed the match time");
+      mark.appendChild(icon("clock"));
+      line.appendChild(mark);
+    }
+    return line;
+  }
+
+  // A row of team-official-matches.html: time | tournament logo | players | status and View.
   function renderUnplannedDuel(item) {
-    const wrap = el("div", "dash-match");
-    const matchRow = el("div", "dash-match-row");
+    const row = el("div", "dash-om-row");
     // The time column shows the proposed time, or nothing while no time is proposed.
-    const time = el("div", "dash-match-time");
-    if (hasActiveProposal(item)) time.appendChild(el("div", "dash-match-time-text", formatMatchTime(item.proposed_time_utc)));
+    row.appendChild(el("div", "dash-om-time", hasActiveProposal(item) ? formatMatchTime(item.proposed_time_utc) : ""));
+    row.appendChild(el("div", "dash-om-divider"));
+    const logo = el("div", "dash-om-logo");
+    if (item.tournament?.logo) {
+      const img = el("img");
+      img.src = item.tournament.logo;
+      img.alt = item.tournament.name || "";
+      img.title = item.tournament.name || "";
+      logo.appendChild(img);
+    }
+    row.appendChild(logo);
+    row.appendChild(el("div", "dash-om-divider"));
+
     const proposerId = hasActiveProposal(item) ? item.proposed_by_player_id : null;
-    const players = el("div", "dash-match-players");
+    const players = el("div", "dash-om-players");
     players.appendChild(matchPlayerLine(item.player_1, !!proposerId && item.player_1?.id === proposerId));
     players.appendChild(matchPlayerLine(item.player_2, !!proposerId && item.player_2?.id === proposerId));
     const deadline = deadlineText(item);
-    if (deadline) players.appendChild(el("div", "dash-match-meta", deadline));
+    if (deadline) players.appendChild(el("div", "dash-om-meta", deadline));
     const proposedTime = proposedTimeLine(item);
     if (proposedTime) players.appendChild(proposedTime);
-    const actions = el("div", "dash-match-actions");
+    row.appendChild(players);
+
+    const right = el("div", "dash-om-right");
     const status = PLANNING_STATUS[item.planning_status];
-    if (status) actions.appendChild(el("span", `dash-status-badge${status.tone ? ` is-${status.tone}` : ""}`, status.label));
+    if (status) right.appendChild(el("span", `dash-status-badge${status.tone ? ` is-${status.tone}` : ""}`, status.label));
     const view = linkTo(item.link);
-    if (view) actions.appendChild(view);
-    matchRow.append(time, el("div", "dash-match-divider"), players, actions);
-    wrap.appendChild(matchRow);
-    return wrap;
+    if (view) right.appendChild(view);
+    row.appendChild(right);
+    return row;
   }
 
-  // Matches under "Tournament · Stage · Round · Group" headings, as on the tournaments page.
-  function renderUnplannedList(block) {
-    const items = block.items || [];
-    const body = el("div", "dash-matches");
-    body.appendChild(renderUnplannedPager(block));
-    let heading = null;
-    let list = null;
-    items.forEach((item) => {
-      const nextHeading = unplannedHeading(item);
-      if (!list || nextHeading !== heading) {
-        heading = nextHeading;
-        if (heading) body.appendChild(el("div", "dash-match-heading", heading));
-        list = el("div", "dash-match-list");
-        body.appendChild(list);
-      }
-      list.appendChild(renderUnplannedDuel(item));
-    });
-    return body;
-  }
-
-  // Per page picker and Prev / Page N of M / Next, as on team-official-matches.html.
-  function renderUnplannedPager(block) {
-    const totalPages = Math.max(1, Number(block?.total_pages) || 1);
-    const page = Math.min(Math.max(1, Number(block?.page) || 1), totalPages);
-    const bar = el("div", "dash-pager");
-
-    const sizeWrap = el("div", "dash-pagesize", "Per page:");
-    const picker = el("div", "dash-pagesize-picker");
-    const sizeBtn = el("button", "dash-pagesize-btn");
-    sizeBtn.type = "button";
-    sizeBtn.setAttribute("aria-label", `Matches per page: ${filterState.pageSize}`);
-    sizeBtn.appendChild(el("span", "", filterState.pageSize));
-    sizeBtn.appendChild(icon("chevronDown"));
-    const menu = el("div", "dash-pagesize-menu");
+  // "Label: [value ▾]", the Per page dropdown of team-official-matches.html. Option values are strings.
+  function createPicker(label, value, options, onChange) {
+    const wrap = el("div", "dash-picker", `${label}:`);
+    const holder = el("div", "dash-picker-holder");
+    const selected = options.find((option) => option.value === value) || options[0];
+    const btn = el("button", "dash-picker-btn");
+    btn.type = "button";
+    btn.setAttribute("aria-label", `${label}: ${selected.label}`);
+    btn.setAttribute("aria-expanded", "false");
+    btn.appendChild(el("span", "", selected.label));
+    btn.appendChild(icon("chevronDown"));
+    const menu = el("div", "dash-picker-menu");
     const close = () => {
       menu.classList.remove("open");
       menu.style.maxHeight = "0px";
-      sizeBtn.classList.remove("open");
+      btn.classList.remove("open");
+      btn.setAttribute("aria-expanded", "false");
     };
-    PAGE_SIZE_OPTIONS.forEach((size) => {
-      const option = el("button", `dash-pagesize-option${size === filterState.pageSize ? " active" : ""}`, size);
-      option.type = "button";
-      option.addEventListener("click", (event) => {
+    options.forEach((option) => {
+      const optionBtn = el("button", `dash-picker-option${option.value === selected.value ? " active" : ""}`, option.label);
+      optionBtn.type = "button";
+      optionBtn.addEventListener("click", (event) => {
         event.stopPropagation();
         close();
-        if (size === filterState.pageSize) return;
-        filterState.pageSize = size;
-        filterState.page = 1;
-        onFilterChange("unplanned_duels", { keepPage: true });
+        if (option.value !== selected.value) onChange(option.value);
       });
-      menu.appendChild(option);
+      menu.appendChild(optionBtn);
     });
-    sizeBtn.addEventListener("click", (event) => {
+    btn.addEventListener("click", (event) => {
       event.stopPropagation();
       const isOpen = menu.classList.contains("open");
       dropdowns.forEach((dropdown) => dropdown.close());
       if (isOpen) return;
       menu.classList.add("open");
-      menu.style.maxHeight = `${menu.scrollHeight}px`;
-      sizeBtn.classList.add("open");
+      menu.style.maxHeight = `${Math.min(menu.scrollHeight, 280)}px`;
+      btn.classList.add("open");
+      btn.setAttribute("aria-expanded", "true");
     });
     dropdowns.push({ close });
-    picker.append(sizeBtn, menu);
-    sizeWrap.appendChild(picker);
+    holder.append(btn, menu);
+    wrap.appendChild(holder);
+    return wrap;
+  }
+
+  // Per page and Prev / Page N of M / Next (.results-controls).
+  function renderUnplannedPager(block) {
+    const totalPages = Math.max(1, Number(block?.total_pages) || 1);
+    const page = Math.min(Math.max(1, Number(block?.page) || 1), totalPages);
+    const bar = el("div", "dash-om-controls");
+    const sizeOptions = PAGE_SIZE_OPTIONS.map((size) => ({ value: String(size), label: String(size) }));
+    bar.appendChild(createPicker("Per page", String(filterState.pageSize), sizeOptions, (value) => {
+      filterState.pageSize = Number(value);
+      onFilterChange("unplanned_duels");
+    }));
 
     const pagination = el("div", "dash-pagination");
     const goTo = (nextPage) => {
@@ -1440,19 +1454,13 @@
     next.disabled = page >= totalPages;
     next.addEventListener("click", () => goTo(page + 1));
     pagination.append(prev, el("span", "dash-pageinfo", `Page ${page} of ${totalPages}`), next);
-
-    bar.append(sizeWrap, pagination);
+    bar.appendChild(pagination);
     return bar;
   }
 
-  function filterField(label, className, dropdown) {
-    const field = el("div", `dash-filter ${className}`, label);
-    field.appendChild(dropdown.root);
-    return field;
-  }
-
+  // Deadline within, Status and Proposed time, in the style of Per page.
   function renderUnplannedFilters(block) {
-    const bar = el("div", "dash-section-filters");
+    const bar = el("div", "dash-om-controls is-filters");
     const counts = block?.status_counts || {};
     const statusKeys = Object.keys(PLANNING_STATUS);
     const total = statusKeys.reduce((sum, key) => sum + Number(counts[key] || 0), 0);
@@ -1461,19 +1469,41 @@
     const dayOptions = DAY_OPTIONS.some((option) => option.value === filterState.days)
       ? DAY_OPTIONS
       : DAY_OPTIONS.concat({ value: filterState.days, label: `${filterState.days} days` });
-    bar.appendChild(filterField("Deadline within", "days", createDropdown(filterState.days, dayOptions, (value) => {
+    bar.appendChild(createPicker("Deadline within", filterState.days, dayOptions, (value) => {
       filterState.days = value;
       onFilterChange("unplanned_duels");
-    })));
-    bar.appendChild(filterField("Status", "status", createDropdown(filterState.status, statusOptions, (value) => {
+    }));
+    bar.appendChild(createPicker("Status", filterState.status, statusOptions, (value) => {
       filterState.status = value;
       onFilterChange("unplanned_duels");
-    })));
-    bar.appendChild(filterField("Proposed time", "proposed", createDropdown(filterState.proposed, PROPOSED_TIME_OPTIONS, (value) => {
+    }));
+    bar.appendChild(createPicker("Proposed time", filterState.proposed, PROPOSED_TIME_OPTIONS, (value) => {
       filterState.proposed = value;
       onFilterChange("unplanned_duels");
-    })));
+    }));
     return bar;
+  }
+
+  // Title, then a card with the paging row, the filters row and the match rows (team-official-matches.html).
+  function renderUnplannedSection(config, block) {
+    const section = el("section", "dash-om");
+    section.id = `dash-${config.key}`;
+    const count = Number(block?.count || 0);
+    const title = el("h2", "dash-om-title");
+    title.appendChild(el("span", "", config.title));
+    title.appendChild(el("span", "dash-om-count", count));
+    section.appendChild(title);
+    const card = el("div", "dash-om-card");
+    card.appendChild(renderUnplannedPager(block));
+    card.appendChild(renderUnplannedFilters(block));
+    if (count) {
+      (block.items || []).forEach((item) => card.appendChild(renderUnplannedDuel(item)));
+    } else {
+      const filtered = filterState.status || filterState.proposed;
+      card.appendChild(el("div", "dash-om-row is-empty", filtered ? "No matches match these filters." : "No unplanned matches."));
+    }
+    section.appendChild(card);
+    return section;
   }
 
   function renderErrorDuel(item) {
@@ -1645,16 +1675,6 @@
     if (config.key === "my_cases") {
       section.appendChild(el("div", "dash-section-note", "Cases you submitted in all tournaments, open ones first."));
     }
-    if (config.key === "unplanned_duels") {
-      section.appendChild(renderUnplannedFilters(block));
-      if (!count) {
-        const filtered = filterState.status || filterState.proposed;
-        section.appendChild(el("div", "dash-section-note", filtered ? "No matches match these filters." : "No unplanned matches."));
-        return section;
-      }
-      section.appendChild(renderUnplannedList(block));
-      return section;
-    }
     if (!count) return section;
 
     const rows = el("div", "dash-rows");
@@ -1728,7 +1748,10 @@
     const wrap = el("div", "dash-wrap");
     wrap.style.margin = "0";
     wrap.appendChild(renderTiles(data, visibleBlocks));
-    visibleBlocks.forEach((config) => wrap.appendChild(renderSection(config, data.blocks[config.key], data)));
+    visibleBlocks.forEach((config) => {
+      const block = data.blocks[config.key];
+      wrap.appendChild(config.key === "unplanned_duels" ? renderUnplannedSection(config, block) : renderSection(config, block, data));
+    });
     contentEl.appendChild(wrap);
   }
 

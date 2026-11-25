@@ -128,6 +128,7 @@ function tournamentOf(row) {
   return {
     id,
     name: text(row.tournament_short_title) || text(row.tournament_name) || id,
+    logo: text(row.tournament_logo) || null,
   };
 }
 
@@ -170,7 +171,8 @@ const DUEL_BASE_SQL = (options = {}) => `
     d.id, d.tournament_id, d.match_id, d.challenge_period_id, d.group_id, d.status, d.time_utc, d.deadline_utc,
     d.proposed_time_status, d.proposed_time_utc, d.proposed_time_by_player_id,
     d.round_name, d.group_name, d.stage, d.duel_format, d.results_last_error, d.results_checked_at,
-    t.name AS tournament_name, t.short_title AS tournament_short_title, m.time_utc AS match_time_utc,
+    t.name AS tournament_name, t.short_title AS tournament_short_title, t.logo AS tournament_logo,
+    m.time_utc AS match_time_utc,
     ${PLAYER_COLUMNS("p1", "player_1", options)},
     ${PLAYER_COLUMNS("p2", "player_2", options)}
   FROM duels d

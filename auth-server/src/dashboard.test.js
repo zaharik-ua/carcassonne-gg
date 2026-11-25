@@ -41,7 +41,7 @@ async function createDatabase(t) {
     INSERT INTO associations VALUES ('UA', 'Ukraine', 'ua.png'), ('PL', 'Poland', NULL), ('DE', 'Germany', 'de.png'), ('FR', 'France', 'fr.png');
     CREATE TABLE tournament_players (id INTEGER PRIMARY KEY, tournament_id TEXT, player_id TEXT, association_id TEXT);
     INSERT INTO tournament_players (tournament_id, player_id, association_id) VALUES ('CCL-2027', 'p3', 'FR');
-    CREATE TABLE tournaments (id TEXT PRIMARY KEY, name TEXT, short_title TEXT, is_test INTEGER DEFAULT 0);
+    CREATE TABLE tournaments (id TEXT PRIMARY KEY, name TEXT, short_title TEXT, is_test INTEGER DEFAULT 0, logo TEXT);
     CREATE TABLE tournament_access_users (tournament_entity_type TEXT, tournament_id TEXT, user_id INTEGER, role TEXT);
     CREATE TABLE matches (id TEXT PRIMARY KEY, time_utc TEXT, deleted_at TEXT);
     CREATE TABLE tournament_cases (id INTEGER PRIMARY KEY, case_type TEXT, category TEXT, status TEXT, priority TEXT,
@@ -76,7 +76,8 @@ async function createDatabase(t) {
       ('p1', 'one', 'Player One', 'UA', 250, '@one'),
       ('p2', 'two', 'Player Two', 'PL', 260, NULL),
       ('p3', 'three', 'Player Three', 'DE', 240, NULL);
-    INSERT INTO tournaments VALUES ('CCL-2027', 'CCL 2027', 'CCL', 0), ('WTCOC', 'WTCOC 2026', NULL, 0), ('OTHER', 'Other', NULL, 0);
+    INSERT INTO tournaments (id, name, short_title, is_test, logo) VALUES
+      ('CCL-2027', 'CCL 2027', 'CCL', 0, 'ccl.png'), ('WTCOC', 'WTCOC 2026', NULL, 0, NULL), ('OTHER', 'Other', NULL, 0, NULL);
     INSERT INTO tournament_access_users VALUES
       ('tournament', 'ccl-2027', 2, 'admin'),
       ('tournament', 'WTCOC', 2, 'admin'),
@@ -220,6 +221,7 @@ test("tournament admin: unplanned duels with a deadline and error duels of their
   assert.equal(pending.proposed_by_player_id, "p3");
   assert.equal(pending.days_to_deadline, 2);
   assert.equal(pending.tournament.name, "CCL");
+  assert.equal(pending.tournament.logo, "ccl.png");
   assert.deepEqual(pending.player_1_contacts, { telegram: "@one" });
   assert.equal(pending.link, "/player-hub/tournaments?id=CCL-2027&edit=1&match_id=pending");
   assert.equal(pending.player_1.association_flag, "ua.png");
