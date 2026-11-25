@@ -1,72 +1,104 @@
 <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700&display=swap" rel="stylesheet">
 
 <style>
+  /* Design: "Flat Design" from the ui-ux-pro-max skill, in the Player Hub palette:
+     solid fills, no shadows or gradients, small radii, color/opacity hover only. */
   :root {
-    --text: #222;
-    --muted: #666;
-    --border: #e0e0e0;
-    --card: #fff;
-    --link: #1a73b7;
-    --attention: #b23a48;
-    --attention-bg: #fdecee;
-    --warn: #8a5a00;
-    --warn-bg: #fff4dc;
-    --ok: #2d6a3e;
-    --ok-bg: #e8f5ec;
-    --neutral-bg: #eef1f5;
+    --dash-text: #1f2937;
+    --dash-muted: #5b6576;
+    --dash-faint: #8a94a3;
+    --dash-border: #e3e8ef;
+    --dash-border-strong: #c9d1dc;
+    --dash-card: #fff;
+    --dash-soft: #f4f6f9;
+    --dash-primary: #1a73b7;
+    --dash-primary-hover: #155d94;
+    --dash-primary-soft: #e8f1fa;
+    --dash-attention: #b4232f;
+    --dash-attention-hover: #961c27;
+    --dash-attention-bg: #fdecee;
+    --dash-warn: #8a5a00;
+    --dash-ok: #2d6a3e;
+    --dash-neutral-bg: #eef1f5;
+    --dash-radius: 6px;
+    --dash-ease: 160ms ease;
   }
 
   body {
     margin: 0;
     font-family: "Montserrat", sans-serif;
-    color: var(--text);
+    color: var(--dash-text);
   }
 
   .dash-wrap {
     display: grid;
-    gap: 12px;
-    margin: 0 8px 12px;
+    gap: 16px;
+    margin: 0 8px 16px;
   }
+
+  .dash-icon {
+    display: inline-flex;
+    width: 18px;
+    height: 18px;
+    flex-shrink: 0;
+  }
+
+  .dash-icon svg {
+    width: 100%;
+    height: 100%;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 2;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+
+  /* ---------- Header and filters ---------- */
 
   .dash-head {
     display: flex;
     flex-wrap: wrap;
     align-items: flex-end;
     justify-content: space-between;
-    gap: 10px;
+    gap: 12px 16px;
   }
 
   .dash-title {
-    font-size: 22px;
+    font-size: 24px;
     font-weight: 700;
     line-height: 1.2;
   }
 
   .dash-subtitle {
-    font-size: 13px;
-    color: var(--muted);
+    font-size: 14px;
+    color: var(--dash-muted);
     margin-top: 4px;
   }
 
   .dash-filters {
     display: flex;
     flex-wrap: wrap;
-    gap: 8px;
+    gap: 10px;
+  }
+
+  .dash-filters[hidden] {
+    display: none;
   }
 
   .dash-filter {
     display: grid;
-    gap: 3px;
-    font-size: 11px;
-    color: var(--muted);
+    gap: 4px;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--dash-muted);
   }
 
   .dash-filter.tournament {
-    width: 220px;
+    width: 240px;
   }
 
   .dash-filter.days {
-    width: 130px;
+    width: 140px;
   }
 
   .cp-dd {
@@ -80,24 +112,30 @@
     all: unset;
     box-sizing: border-box;
     width: 100%;
-    height: 30px;
-    border: 1px solid #c8ced8;
+    height: 36px;
+    border: 0;
     border-radius: 4px;
-    background: #fff;
-    color: #2f3947;
+    background: var(--dash-neutral-bg);
+    color: var(--dash-text);
     font-size: 14px;
-    padding: 4px 8px;
+    font-weight: 500;
+    padding: 4px 10px;
     display: inline-flex;
     align-items: center;
     justify-content: space-between;
     gap: 8px;
     cursor: pointer;
+    transition: background-color var(--dash-ease);
   }
 
   .cp-dd-btn:hover,
-  .cp-dd-btn:focus-visible,
   .cp-dd-btn.open {
-    border-color: #9ea7b3;
+    background: #e2e7ee;
+  }
+
+  .cp-dd-btn:focus-visible {
+    outline: 2px solid var(--dash-primary);
+    outline-offset: 2px;
   }
 
   .cp-dd-btn-content {
@@ -121,9 +159,10 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    color: #6f7785;
-    font-size: 10px;
-    transition: transform 0.18s ease;
+    width: 16px;
+    height: 16px;
+    color: var(--dash-muted);
+    transition: transform var(--dash-ease);
   }
 
   .cp-dd-btn.open .cp-dd-chevron {
@@ -141,21 +180,19 @@
     overflow: hidden;
     display: flex;
     flex-direction: column;
+    box-sizing: border-box;
     background: #fff;
-    border: 1px solid #d5dbe4;
+    border: 1px solid var(--dash-border-strong);
     border-radius: 4px;
-    box-shadow: 0 8px 18px rgba(15, 28, 48, 0.14);
     opacity: 0;
     pointer-events: none;
-    transform: translateY(4px);
-    transition: opacity 0.16s ease, transform 0.16s ease, max-height 0.16s ease;
+    transition: opacity 0.16s ease, max-height 0.16s ease;
     z-index: 20;
   }
 
   .cp-dd-menu.open {
     opacity: 1;
     pointer-events: auto;
-    transform: translateY(0);
     overflow-y: auto;
     overflow-x: hidden;
   }
@@ -163,12 +200,12 @@
   .cp-dd-option {
     all: unset;
     box-sizing: border-box;
-    padding: 5px 8px;
-    border-top: 1px solid #edf1f6;
+    padding: 8px 10px;
     display: block;
     flex-shrink: 0;
     font-size: 13px;
-    color: #2f3947;
+    font-weight: 500;
+    color: var(--dash-text);
     line-height: 1.2;
     white-space: nowrap;
     overflow: hidden;
@@ -176,119 +213,230 @@
     cursor: pointer;
   }
 
-  .cp-dd-option:first-child {
-    border-top: none;
-  }
-
-  .cp-dd-option:hover {
-    background: #f5f5f5;
+  .cp-dd-option:hover,
+  .cp-dd-option:focus-visible {
+    background: var(--dash-soft);
   }
 
   .cp-dd-option.active {
-    background: #e4f0fb;
+    background: var(--dash-primary);
+    color: #fff;
+    font-weight: 600;
   }
 
+  /* ---------- Messages and loading ---------- */
+
   .dash-alert {
-    background: #fff;
-    border: 1px solid var(--border);
-    border-radius: 6px;
-    padding: 12px;
+    background: var(--dash-soft);
+    border-radius: var(--dash-radius);
+    padding: 16px;
     font-size: 14px;
+    color: var(--dash-muted);
   }
+
+  .dash-skeleton {
+    display: grid;
+    gap: 16px;
+  }
+
+  .dash-skeleton-tiles {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+    gap: 8px;
+  }
+
+  .dash-skeleton-block {
+    height: 84px;
+    border-radius: var(--dash-radius);
+    background: var(--dash-neutral-bg);
+    animation: dash-pulse 1.2s ease-in-out infinite alternate;
+  }
+
+  .dash-skeleton-block.tall {
+    height: 180px;
+  }
+
+  @keyframes dash-pulse {
+    from { opacity: 1; }
+    to { opacity: 0.5; }
+  }
+
+  /* ---------- Counter tiles ---------- */
 
   .dash-tiles {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
     gap: 8px;
   }
 
   .dash-tile {
     display: grid;
-    gap: 2px;
-    padding: 10px 12px;
-    border: 1px solid #d6dbe3;
-    border-radius: 8px;
-    background: var(--card);
-    color: inherit;
-    text-decoration: none;
+    grid-template-columns: 1fr auto;
+    align-items: start;
+    gap: 4px 8px;
+    padding: 14px;
+    border: 0;
+    border-radius: var(--dash-radius);
+    background: var(--dash-neutral-bg);
+    color: var(--dash-muted);
     font: inherit;
     text-align: left;
     cursor: pointer;
+    transition: background-color var(--dash-ease);
   }
 
   .dash-tile:hover {
-    border-color: #aeb7c4;
+    background: #e2e7ee;
+  }
+
+  .dash-tile:focus-visible {
+    outline: 2px solid var(--dash-text);
+    outline-offset: 2px;
+  }
+
+  .dash-tile-icon {
+    grid-column: 2;
+    grid-row: 1;
+    display: inline-flex;
+    opacity: 0.8;
+  }
+
+  .dash-tile-body {
+    grid-column: 1;
+    grid-row: 1;
+    display: grid;
+    gap: 4px;
+    min-width: 0;
   }
 
   .dash-tile-count {
-    font-size: 24px;
+    font-size: 28px;
     font-weight: 700;
-    line-height: 1.1;
-    color: #8a94a3;
-  }
-
-  .dash-tile.has-items .dash-tile-count {
-    color: var(--attention);
-  }
-
-  .dash-tile.is-info.has-items .dash-tile-count {
-    color: #223040;
+    line-height: 1;
+    font-variant-numeric: tabular-nums;
+    color: var(--dash-text);
   }
 
   .dash-tile-label {
     font-size: 12px;
     font-weight: 600;
-    color: #4a5566;
+    line-height: 1.3;
   }
 
+  .dash-tile.is-clear .dash-tile-count {
+    color: var(--dash-faint);
+  }
+
+  .dash-tile.tone-attention {
+    background: var(--dash-attention);
+    color: #fff;
+  }
+
+  .dash-tile.tone-attention:hover {
+    background: var(--dash-attention-hover);
+  }
+
+  .dash-tile.tone-info {
+    background: var(--dash-primary);
+    color: #fff;
+  }
+
+  .dash-tile.tone-info:hover {
+    background: var(--dash-primary-hover);
+  }
+
+  .dash-tile.tone-attention .dash-tile-count,
+  .dash-tile.tone-info .dash-tile-count {
+    color: #fff;
+  }
+
+  /* ---------- Sections ---------- */
+
   .dash-section {
-    background: #fff;
-    border: 1px solid var(--border);
-    border-radius: 8px;
+    background: var(--dash-card);
+    border: 1px solid var(--dash-border);
+    border-radius: var(--dash-radius);
     overflow: hidden;
+    scroll-margin-top: 16px;
   }
 
   .dash-section-head {
     display: flex;
-    align-items: baseline;
+    align-items: center;
     justify-content: space-between;
     gap: 10px;
-    padding: 10px 12px;
-    border-bottom: 1px solid var(--border);
-    background: #fafbfc;
+    padding: 12px 16px;
+    background: var(--dash-soft);
   }
 
-  .dash-section.is-empty .dash-section-head {
-    border-bottom: 0;
+  .dash-section-heading {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+  }
+
+  .dash-section-icon {
+    display: inline-flex;
+    color: var(--dash-primary);
+  }
+
+  .dash-section.is-empty .dash-section-icon {
+    color: var(--dash-faint);
   }
 
   .dash-section-title {
-    font-size: 15px;
+    margin: 0;
+    font-size: 16px;
     font-weight: 700;
+    line-height: 1.25;
+  }
+
+  .dash-section.is-empty .dash-section-title {
+    color: var(--dash-muted);
   }
 
   .dash-section-meta {
-    font-size: 12px;
-    color: var(--muted);
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--dash-muted);
     white-space: nowrap;
   }
 
+  .dash-section-meta .dash-icon {
+    width: 14px;
+    height: 14px;
+  }
+
+  .dash-section.is-empty .dash-section-meta {
+    color: var(--dash-ok);
+  }
+
   .dash-section-note {
-    padding: 8px 12px 0;
-    font-size: 12px;
-    color: var(--muted);
+    padding: 10px 16px 0;
+    font-size: 13px;
+    line-height: 1.45;
+    color: var(--dash-muted);
+  }
+
+  .dash-section.is-empty .dash-section-note {
+    padding-bottom: 12px;
   }
 
   .dash-rows {
     display: grid;
+    padding: 4px 0;
   }
 
   .dash-row {
     display: grid;
     grid-template-columns: minmax(0, 1fr) auto;
-    gap: 4px 12px;
-    padding: 10px 12px;
-    border-top: 1px solid #f0f1f3;
+    gap: 6px 16px;
+    padding: 12px 16px;
+    border-top: 1px solid var(--dash-border);
   }
 
   .dash-row:first-child {
@@ -297,75 +445,127 @@
 
   .dash-row-main {
     display: grid;
-    gap: 3px;
+    gap: 4px;
     min-width: 0;
   }
 
   .dash-row-title {
-    font-size: 14px;
+    font-size: 15px;
     font-weight: 600;
+    line-height: 1.35;
     overflow-wrap: anywhere;
   }
 
   .dash-row-line {
-    font-size: 12px;
-    color: var(--muted);
+    font-size: 13px;
+    line-height: 1.45;
+    color: var(--dash-muted);
     overflow-wrap: anywhere;
   }
 
   /* Texts of repeated submissions of one case, one per line with -- between them. */
   .dash-row-line.dash-case-details {
     white-space: pre-line;
+    color: var(--dash-text);
   }
 
   .dash-row-error {
-    font-size: 12px;
-    color: var(--attention);
+    display: flex;
+    align-items: flex-start;
+    gap: 6px;
+    margin-top: 2px;
+    padding: 6px 10px;
+    border-radius: 4px;
+    background: var(--dash-attention-bg);
+    font-size: 13px;
+    line-height: 1.4;
+    color: var(--dash-attention);
     overflow-wrap: anywhere;
+  }
+
+  .dash-row-error .dash-icon {
+    width: 15px;
+    height: 15px;
+    margin-top: 1px;
   }
 
   .dash-row-side {
     display: grid;
     justify-items: end;
     align-content: start;
-    gap: 6px;
+    gap: 8px;
   }
 
   .dash-badge {
     display: inline-block;
-    padding: 2px 8px;
-    border-radius: 10px;
-    font-size: 11px;
+    padding: 3px 8px;
+    border-radius: 4px;
+    font-size: 12px;
     font-weight: 600;
+    line-height: 1.4;
     white-space: nowrap;
-    background: var(--neutral-bg);
+    background: var(--dash-neutral-bg);
     color: #3d4757;
   }
 
-  .dash-badge.attention { background: var(--attention-bg); color: var(--attention); }
-  .dash-badge.warn { background: var(--warn-bg); color: var(--warn); }
-  .dash-badge.ok { background: var(--ok-bg); color: var(--ok); }
+  .dash-badge.attention { background: var(--dash-attention); color: #fff; }
+  .dash-badge.warn { background: var(--dash-warn); color: #fff; }
+  .dash-badge.ok { background: var(--dash-ok); color: #fff; }
 
   .dash-link {
-    font-size: 12px;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    min-height: 32px;
+    padding: 0 12px;
+    box-sizing: border-box;
+    border-radius: 4px;
+    background: var(--dash-primary-soft);
+    font-size: 13px;
     font-weight: 600;
-    color: var(--link);
+    color: var(--dash-primary);
     text-decoration: none;
     white-space: nowrap;
+    transition: background-color var(--dash-ease), color var(--dash-ease);
+  }
+
+  .dash-link .dash-icon {
+    width: 14px;
+    height: 14px;
   }
 
   .dash-link:hover {
-    text-decoration: underline;
+    background: var(--dash-primary);
+    color: #fff;
+  }
+
+  .dash-link:focus-visible {
+    outline: 2px solid var(--dash-primary);
+    outline-offset: 2px;
   }
 
   .dash-more {
-    padding: 8px 12px 10px;
-    font-size: 12px;
-    color: var(--muted);
-    border-top: 1px solid #f0f1f3;
+    padding: 10px 16px;
+    font-size: 13px;
+    color: var(--dash-muted);
+    border-top: 1px solid var(--dash-border);
+  }
+
+  @media (pointer: coarse) {
+    .dash-link {
+      min-height: 44px;
+    }
+
+    .cp-dd-btn {
+      height: 44px;
+    }
   }
 
   @media (max-width: 560px) {
+    .dash-title {
+      font-size: 22px;
+    }
+
     .dash-row {
       grid-template-columns: minmax(0, 1fr);
     }
@@ -373,7 +573,7 @@
     .dash-row-side {
       justify-items: start;
       grid-auto-flow: column;
-      justify-content: start;
+      justify-content: space-between;
       align-items: center;
     }
 
@@ -383,9 +583,32 @@
       width: 100%;
     }
 
+    .dash-tiles,
+    .dash-skeleton-tiles {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .dash-tile {
+      padding: 12px;
+    }
+
     .cp-dd-menu {
       left: 0;
       right: auto;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .dash-tile,
+    .dash-link,
+    .cp-dd-btn,
+    .cp-dd-chevron,
+    .cp-dd-menu {
+      transition: none;
+    }
+
+    .dash-skeleton-block {
+      animation: none;
     }
   }
 </style>
@@ -407,7 +630,7 @@
       </div>
     </div>
   </div>
-  <div id="dashContent" class="dash-alert">Loading...</div>
+  <div id="dashContent" aria-live="polite" aria-busy="true"></div>
 </div>
 
 <script>
@@ -424,6 +647,43 @@
   const filterState = { tournamentId: "", days: "3" };
   const dropdowns = [];
 
+  // Lucide-style line icons (static markup, no user data).
+  const ICONS = {
+    calendarClock: '<path d="M21 7.5V6a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h3.5"/><path d="M16 2v4"/><path d="M8 2v4"/><path d="M3 10h5"/><circle cx="16" cy="16" r="6"/><path d="M16 14v2l1 1"/>',
+    alert: '<path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/>',
+    inbox: '<polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/>',
+    newspaper: '<path d="M4 22h16a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2H8a2 2 0 0 0-2 2v16a2 2 0 0 1-2 2Zm0 0a2 2 0 0 1-2-2v-9c0-1.1.9-2 2-2h2"/><path d="M18 14h-8"/><path d="M15 18h-5"/><path d="M10 6h8v4h-8V6Z"/>',
+    userPlus: '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M19 8v6"/><path d="M22 11h-6"/>',
+    swords: '<polyline points="14.5 17.5 3 6 3 3 6 3 17.5 14.5"/><path d="M13 19l6-6"/><path d="M16 16l4 4"/><path d="M19 21l2-2"/><polyline points="14.5 6.5 18 3 21 3 21 6 17.5 9.5"/><path d="M5 14l4 4"/><path d="M7 17l-3 3"/><path d="M3 19l2 2"/>',
+    fileText: '<path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M10 9H8"/><path d="M16 13H8"/><path d="M16 17H8"/>',
+    check: '<path d="M20 6 9 17l-5-5"/>',
+    arrowRight: '<path d="M5 12h14"/><path d="m12 5 7 7-7 7"/>',
+    chevronDown: '<path d="m6 9 6 6 6-6"/>',
+  };
+
+  function icon(name) {
+    const node = el("span", "dash-icon");
+    node.setAttribute("aria-hidden", "true");
+    node.innerHTML = `<svg viewBox="0 0 24 24">${ICONS[name] || ""}</svg>`;
+    return node;
+  }
+
+  function showMessage(text) {
+    contentEl.setAttribute("aria-busy", "false");
+    contentEl.className = "dash-alert";
+    contentEl.textContent = text;
+  }
+
+  function showLoading() {
+    contentEl.setAttribute("aria-busy", "true");
+    contentEl.className = "dash-skeleton";
+    contentEl.innerHTML = "";
+    const tiles = el("div", "dash-skeleton-tiles");
+    for (let i = 0; i < 4; i += 1) tiles.appendChild(el("div", "dash-skeleton-block"));
+    contentEl.appendChild(tiles);
+    contentEl.appendChild(el("div", "dash-skeleton-block tall"));
+  }
+
   // Same dropdown as the other Player Hub pages (cp-dd).
   function createDropdown(initialValue, options, onChange) {
     let value = String(initialValue ?? "");
@@ -431,7 +691,8 @@
     const btn = el("button", "cp-dd-btn");
     btn.type = "button";
     const btnContent = el("span", "cp-dd-btn-content");
-    const chevron = el("span", "cp-dd-chevron", "▾");
+    const chevron = el("span", "cp-dd-chevron");
+    chevron.appendChild(icon("chevronDown"));
     btn.appendChild(btnContent);
     btn.appendChild(chevron);
     const menu = el("div", "cp-dd-menu");
@@ -508,13 +769,13 @@
 
   // Block order on the page and in the counter tiles.
   const BLOCKS = [
-    { key: "unplanned_duels", title: "Unplanned matches", tile: "Unplanned matches", render: renderUnplannedDuel },
-    { key: "error_duels", title: "Matches in Error", tile: "Errors", render: renderErrorDuel },
-    { key: "cases", title: "Open cases", tile: "Open cases", render: renderCase },
-    { key: "news_drafts", title: "News proposals in Draft", tile: "News proposals", render: renderNewsDraft },
-    { key: "new_users", title: "New users with a BGA profile", tile: "New users", render: renderNewUser, info: true },
-    { key: "my_duels", title: "My matches", tile: "My matches: action needed", render: renderMyDuel, countKey: "action_count" },
-    { key: "my_cases", title: "My cases", tile: "My open cases", render: renderMyCase, countKey: "active_count" },
+    { key: "unplanned_duels", title: "Unplanned matches", tile: "Unplanned matches", icon: "calendarClock", render: renderUnplannedDuel },
+    { key: "error_duels", title: "Matches in Error", tile: "Errors", icon: "alert", render: renderErrorDuel },
+    { key: "cases", title: "Open cases", tile: "Open cases", icon: "inbox", render: renderCase },
+    { key: "news_drafts", title: "News proposals in Draft", tile: "News proposals", icon: "newspaper", render: renderNewsDraft },
+    { key: "new_users", title: "New users with a BGA profile", tile: "New users", icon: "userPlus", render: renderNewUser, info: true },
+    { key: "my_duels", title: "My matches", tile: "My matches: action needed", icon: "swords", render: renderMyDuel, countKey: "action_count" },
+    { key: "my_cases", title: "My cases", tile: "My open cases", icon: "fileText", render: renderMyCase, countKey: "active_count" },
   ];
 
   function readUrlState() {
@@ -585,6 +846,7 @@
   function linkTo(href, label = "Open") {
     if (!href) return null;
     const anchor = el("a", "dash-link", label);
+    anchor.appendChild(icon("arrowRight"));
     anchor.href = absoluteLink(href);
     if (/^https?:\/\//i.test(href)) {
       anchor.target = "_blank";
@@ -617,7 +879,12 @@
       if (typeof line === "string") main.appendChild(el("div", "dash-row-line", line));
       else main.appendChild(el("div", `dash-row-line ${line.className || ""}`.trim(), line.text));
     });
-    if (errorLine) main.appendChild(el("div", "dash-row-error", errorLine));
+    if (errorLine) {
+      const errorEl = el("div", "dash-row-error");
+      errorEl.appendChild(icon("alert"));
+      errorEl.appendChild(el("span", "", errorLine));
+      main.appendChild(errorEl);
+    }
     const sideEl = el("div", "dash-row-side");
     side.filter(Boolean).forEach((child) => sideEl.appendChild(child));
     node.appendChild(main);
@@ -785,8 +1052,16 @@
     if (!count) section.classList.add("is-empty");
 
     const head = el("div", "dash-section-head");
-    head.appendChild(el("div", "dash-section-title", config.title));
-    head.appendChild(el("div", "dash-section-meta", count ? blockMeta(block, config) : "Nothing here"));
+    const heading = el("div", "dash-section-heading");
+    const headingIcon = el("span", "dash-section-icon");
+    headingIcon.appendChild(icon(config.icon));
+    heading.appendChild(headingIcon);
+    heading.appendChild(el("h2", "dash-section-title", config.title));
+    head.appendChild(heading);
+    const meta = el("div", "dash-section-meta");
+    if (!count) meta.appendChild(icon("check"));
+    meta.appendChild(el("span", "", count ? blockMeta(block, config) : "Nothing here"));
+    head.appendChild(meta);
     section.appendChild(head);
 
     if (config.key === "cases") {
@@ -826,10 +1101,17 @@
     visibleBlocks.forEach((config) => {
       const block = data.blocks[config.key];
       const count = blockCount(block, config);
-      const tile = el("button", `dash-tile${count ? " has-items" : ""}${config.info ? " is-info" : ""}`);
+      const tone = !count ? "is-clear" : config.info ? "tone-info" : "tone-attention";
+      const tile = el("button", `dash-tile ${tone}`);
       tile.type = "button";
-      tile.appendChild(el("div", "dash-tile-count", count));
-      tile.appendChild(el("div", "dash-tile-label", config.tile));
+      tile.setAttribute("aria-label", `${config.tile}: ${count}. Go to section`);
+      const tileIcon = el("span", "dash-tile-icon");
+      tileIcon.appendChild(icon(count ? config.icon : "check"));
+      const body = el("span", "dash-tile-body");
+      body.appendChild(el("span", "dash-tile-count", count));
+      body.appendChild(el("span", "dash-tile-label", config.tile));
+      tile.appendChild(tileIcon);
+      tile.appendChild(body);
       tile.addEventListener("click", () => {
         document.getElementById(`dash-${config.key}`)?.scrollIntoView({ behavior: "smooth", block: "start" });
       });
@@ -868,13 +1150,13 @@
   function renderDashboard(data) {
     renderFilters(data);
     const visibleBlocks = BLOCKS.filter((config) => data.blocks?.[config.key]);
-    contentEl.className = "";
-    contentEl.innerHTML = "";
     if (!visibleBlocks.length) {
-      contentEl.className = "dash-alert";
-      contentEl.textContent = "Nothing to show yet. Link your BGA profile to see your matches here.";
+      showMessage("Nothing to show yet. Link your BGA profile to see your matches here.");
       return;
     }
+    contentEl.setAttribute("aria-busy", "false");
+    contentEl.className = "";
+    contentEl.innerHTML = "";
     const wrap = el("div", "dash-wrap");
     wrap.style.margin = "0";
     wrap.appendChild(renderTiles(data, visibleBlocks));
@@ -890,28 +1172,26 @@
     try {
       const response = await fetch(url.toString(), { method: "GET", credentials: "include" });
       if (response.status === 401) {
-        contentEl.className = "dash-alert";
-        contentEl.textContent = "Please sign in to view your dashboard.";
+        showMessage("Please sign in to view your dashboard.");
         return;
       }
       const data = await response.json().catch(() => ({}));
       if (!response.ok || !data?.ok) throw new Error(data?.message || "Failed to load dashboard");
       renderDashboard(data);
     } catch (_error) {
-      contentEl.className = "dash-alert";
-      contentEl.textContent = "Failed to load the dashboard. Please refresh the page.";
+      showMessage("Failed to load the dashboard. Please refresh the page.");
     }
   }
 
   function onFilterChange() {
     writeUrlState({ tournamentId: filterState.tournamentId, days: filterState.days === "3" ? "" : filterState.days });
-    contentEl.className = "dash-alert";
-    contentEl.textContent = "Loading...";
+    showLoading();
     load();
   }
 
   window.addEventListener("gg-auth-state-change", load);
 
+  showLoading();
   load();
 })();
 </script>

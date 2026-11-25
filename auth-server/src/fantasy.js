@@ -1167,7 +1167,7 @@ export function registerFantasyRoutes(app, {
       dbAll(
         db,
         `
-          SELECT t.*, u.name AS account_name, p.bga_nickname
+          SELECT t.*, u.name AS account_name, u.email AS account_email, p.bga_nickname
           FROM fantasy_teams t
           LEFT JOIN users u ON u.id = t.user_id
           LEFT JOIN profiles p ON p.id = u.bga_id AND p.deleted_at IS NULL
@@ -1227,6 +1227,8 @@ export function registerFantasyRoutes(app, {
         user_id: team.user_id,
         owner: text(team.bga_nickname) || text(team.account_name) || null,
         bga_nickname: team.bga_nickname || null,
+        account_name: text(team.account_name) || null,
+        email: text(team.account_email) || null,
         entry_type: team.entry_type,
         state: state.state,
         saved_at: team.updated_at,
