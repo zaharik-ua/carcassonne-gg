@@ -601,6 +601,13 @@
     border-radius: 4px 4px 0 0;
   }
 
+  /* The paging row under the rows. */
+  .dash-om-controls.is-bottom {
+    border-top: 1px solid #ccc;
+    border-bottom: none;
+    border-radius: 0 0 4px 4px;
+  }
+
   .dash-om-controls.is-filters {
     justify-content: flex-start;
     gap: 8px 16px;
@@ -760,7 +767,8 @@
     border-top: 1px solid #ccc;
   }
 
-  .dash-om-controls + .dash-om-row {
+  .dash-om-controls + .dash-om-row,
+  .dash-om-card > .dash-om-row:first-child {
     border-top: none;
   }
 
@@ -1029,8 +1037,12 @@
   ];
   const PAGE_SIZE_OPTIONS = [10, 20, 50];
   const DEFAULT_PAGE_SIZE = PAGE_SIZE_OPTIONS[0];
-  // `page` and `pageSize`: paging of Unplanned matches (UNPLANNED_PAGE_SIZES on the server).
-  const filterState = { tournamentId: "", days: DEFAULT_DAYS, status: "", proposed: "", page: 1, pageSize: DEFAULT_PAGE_SIZE };
+  // `page` and `pageSize`: paging of Unplanned matches; `usersPage` and `usersPageSize`: of New users
+  // (PAGE_SIZES on the server).
+  const filterState = {
+    tournamentId: "", days: DEFAULT_DAYS, status: "", proposed: "",
+    page: 1, pageSize: DEFAULT_PAGE_SIZE, usersPage: 1, usersPageSize: DEFAULT_PAGE_SIZE,
+  };
   const dropdowns = [];
   let loadSeq = 0;
 
@@ -1162,7 +1174,7 @@
     { key: "error_duels", title: "Matches in Error", tile: "Errors", icon: "alert", render: renderErrorDuel },
     { key: "cases", title: "Open cases", tile: "Open cases", icon: "inbox", render: renderCase },
     { key: "news_drafts", title: "News proposals in Draft", tile: "News proposals", icon: "newspaper", render: renderNewsDraft },
-    { key: "new_users", title: "New users with a BGA profile", tile: "New users", icon: "userPlus", render: renderNewUser, info: true },
+    { key: "new_users", title: "New users", tile: "New users", icon: "userPlus", render: renderNewUser, info: true },
     { key: "my_duels", title: "My matches", tile: "My matches: action needed", icon: "swords", render: renderMyDuel, countKey: "action_count" },
     { key: "my_cases", title: "My cases", tile: "My open cases", icon: "fileText", render: renderMyCase, countKey: "active_count" },
   ];
@@ -1176,6 +1188,8 @@
       proposed: String(params.get("proposed_time") || "").trim(),
       page: String(params.get("page") || "").trim(),
       pageSize: String(params.get("per_page") || "").trim(),
+      usersPage: String(params.get("users_page") || "").trim(),
+      usersPageSize: String(params.get("users_per_page") || "").trim(),
     };
   }
 
@@ -1191,6 +1205,8 @@
     setParam("proposed_time", state.proposed);
     setParam("page", Number(state.page) > 1 ? String(state.page) : "");
     setParam("per_page", Number(state.pageSize) !== DEFAULT_PAGE_SIZE ? String(state.pageSize) : "");
+    setParam("users_page", Number(state.usersPage) > 1 ? String(state.usersPage) : "");
+    setParam("users_per_page", Number(state.usersPageSize) !== DEFAULT_PAGE_SIZE ? String(state.usersPageSize) : "");
     window.history.replaceState(null, "", url.toString());
   }
 
@@ -1429,33 +1445,43 @@
     return wrap;
   }
 
-  // Per page and Prev / Page N of M / Next (.results-controls).
-  function renderUnplannedPager(block) {
+  // Per page and Prev / Page N of M / Next (.results-controls), under the rows of a list.
+  function renderPager(block, { pageSize, onPageSize, onPage }) {
     const totalPages = Math.max(1, Number(block?.total_pages) || 1);
     const page = Math.min(Math.max(1, Number(block?.page) || 1), totalPages);
-    const bar = el("div", "dash-om-controls");
+    const bar = el("div", "dash-om-controls is-bottom");
     const sizeOptions = PAGE_SIZE_OPTIONS.map((size) => ({ value: String(size), label: String(size) }));
-    bar.appendChild(createPicker("Per page", String(filterState.pageSize), sizeOptions, (value) => {
-      filterState.pageSize = Number(value);
-      onFilterChange("unplanned_duels");
-    }));
+    bar.appendChild(createPicker("Per page", String(pageSize), sizeOptions, (value) => onPageSize(Number(value))));
 
     const pagination = el("div", "dash-pagination");
-    const goTo = (nextPage) => {
-      filterState.page = nextPage;
-      onFilterChange("unplanned_duels", { keepPage: true });
-    };
     const prev = el("button", "dash-pagebtn", "Prev");
     prev.type = "button";
     prev.disabled = page <= 1;
-    prev.addEventListener("click", () => goTo(page - 1));
+    prev.addEventListener("click", () => onPage(page - 1));
     const next = el("button", "dash-pagebtn", "Next");
     next.type = "button";
     next.disabled = page >= totalPages;
-    next.addEventListener("click", () => goTo(page + 1));
+    next.addEventListener("click", () => onPage(page + 1));
     pagination.append(prev, el("span", "dash-pageinfo", `Page ${page} of ${totalPages}`), next);
     bar.appendChild(pagination);
     return bar;
+  }
+
+  // Title with the count, then a card: `top` (e.g. filters), the rows, the paging row (team-official-matches.html).
+  function renderListSection(key, titleText, block, { top = null, rows = [], emptyText, pager }) {
+    const section = el("section", "dash-om");
+    section.id = `dash-${key}`;
+    const title = el("h2", "dash-om-title");
+    title.appendChild(el("span", "", titleText));
+    title.appendChild(el("span", "dash-om-count", Number(block?.count || 0)));
+    section.appendChild(title);
+    const card = el("div", "dash-om-card");
+    if (top) card.appendChild(top);
+    if (rows.length) rows.forEach((rowEl) => card.appendChild(rowEl));
+    else card.appendChild(el("div", "dash-om-row is-empty", emptyText));
+    card.appendChild(pager);
+    section.appendChild(card);
+    return section;
   }
 
   // Deadline within, Status and Proposed time, in the style of Per page.
@@ -1484,26 +1510,73 @@
     return bar;
   }
 
-  // Title, then a card with the paging row, the filters row and the match rows (team-official-matches.html).
   function renderUnplannedSection(config, block) {
-    const section = el("section", "dash-om");
-    section.id = `dash-${config.key}`;
-    const count = Number(block?.count || 0);
-    const title = el("h2", "dash-om-title");
-    title.appendChild(el("span", "", config.title));
-    title.appendChild(el("span", "dash-om-count", count));
-    section.appendChild(title);
-    const card = el("div", "dash-om-card");
-    card.appendChild(renderUnplannedPager(block));
-    card.appendChild(renderUnplannedFilters(block));
-    if (count) {
-      (block.items || []).forEach((item) => card.appendChild(renderUnplannedDuel(item)));
-    } else {
-      const filtered = filterState.status || filterState.proposed;
-      card.appendChild(el("div", "dash-om-row is-empty", filtered ? "No matches match these filters." : "No unplanned matches."));
+    const filtered = filterState.status || filterState.proposed;
+    return renderListSection(config.key, config.title, block, {
+      top: renderUnplannedFilters(block),
+      rows: Number(block?.count || 0) ? (block.items || []).map(renderUnplannedDuel) : [],
+      emptyText: filtered ? "No matches match these filters." : "No unplanned matches.",
+      pager: renderPager(block, {
+        pageSize: filterState.pageSize,
+        onPageSize: (size) => {
+          filterState.pageSize = size;
+          onFilterChange(config.key);
+        },
+        onPage: (page) => {
+          filterState.page = page;
+          onFilterChange(config.key, { keepPage: true });
+        },
+      }),
+    });
+  }
+
+  // "Registered 4 days 4 hours ago", in the style of Time to play.
+  function registeredText(iso) {
+    const ts = Date.parse(iso || "");
+    if (!Number.isFinite(ts)) return "";
+    const ago = Date.now() - ts;
+    return ago < 60000 ? "Registered just now" : `Registered ${durationText(ago)} ago`;
+  }
+
+  // Flag and nickname with a link to the player's profile, then when the user registered.
+  function renderNewUser(item) {
+    const rowEl = el("div", "dash-om-row");
+    const info = el("div", "dash-om-players");
+    const line = el("div", "dash-om-player");
+    if (item.association_flag) {
+      const flag = el("img", "dash-om-flag");
+      flag.src = item.association_flag;
+      flag.alt = item.association || "";
+      flag.title = item.association || "";
+      line.appendChild(flag);
     }
-    section.appendChild(card);
-    return section;
+    const name = el(item.link ? "a" : "span", "dash-om-name", item.bga_nickname || item.name || `User #${item.user_id}`);
+    if (item.link) name.href = absoluteLink(item.link);
+    line.appendChild(name);
+    info.appendChild(line);
+    const registered = registeredText(item.created_at);
+    if (registered) info.appendChild(el("div", "dash-om-meta", registered));
+    rowEl.appendChild(info);
+    return rowEl;
+  }
+
+  function renderNewUsersSection(config, block) {
+    return renderListSection(config.key, `New users in the last ${block?.days || 7} days`, block, {
+      rows: Number(block?.count || 0) ? (block.items || []).map(renderNewUser) : [],
+      emptyText: "No new users.",
+      pager: renderPager(block, {
+        pageSize: filterState.usersPageSize,
+        onPageSize: (size) => {
+          filterState.usersPageSize = size;
+          filterState.usersPage = 1;
+          onFilterChange(config.key, { keepPage: true });
+        },
+        onPage: (page) => {
+          filterState.usersPage = page;
+          onFilterChange(config.key, { keepPage: true });
+        },
+      }),
+    });
   }
 
   function renderErrorDuel(item) {
@@ -1603,19 +1676,6 @@
     });
   }
 
-  function renderNewUser(item) {
-    const name = [item.bga_nickname, item.name && item.name !== item.bga_nickname ? `(${item.name})` : ""]
-      .filter(Boolean).join(" ");
-    return row({
-      title: name || `User #${item.user_id}`,
-      lines: [
-        [item.association, item.bga_elo !== null && item.bga_elo !== undefined ? `BGA Elo ${item.bga_elo}` : ""]
-          .filter(Boolean).join(" · "),
-        item.created_at ? `Registered ${formatDate(item.created_at)}` : "",
-      ],
-      side: [linkTo(item.link, "Profile")],
-    });
-  }
 
   function renderMyDuel(item) {
     const lines = [duelContext(item)];
@@ -1636,7 +1696,6 @@
   }
 
   function blockMeta(block, config) {
-    if (config.key === "new_users") return `${block.count} in the last ${block.days || 7} days`;
     if (config.key === "my_duels") return `${block.action_count} need action · ${block.count} active`;
     if (config.key === "my_cases") return `${block.active_count} open · ${block.count} total`;
     return `${block.count}`;
@@ -1720,9 +1779,6 @@
     filterState.days = String(data.filters?.days_before_deadline ?? DEFAULT_DAYS);
     filterState.status = data.filters?.planning_status || "";
     filterState.proposed = data.filters?.proposed_time || "";
-    const unplanned = data.blocks?.unplanned_duels;
-    filterState.page = Number(unplanned?.page) || 1;
-    filterState.pageSize = PAGE_SIZE_OPTIONS.includes(Number(unplanned?.page_size)) ? Number(unplanned.page_size) : DEFAULT_PAGE_SIZE;
     const tournamentOptions = [{ value: "", label: "All my tournaments" }]
       .concat((data.tournaments || []).map((tournament) => ({ value: tournament.id, label: tournament.name })));
 
@@ -1736,6 +1792,12 @@
   function renderDashboard(data) {
     // The header and section dropdowns are created again on every render.
     dropdowns.length = 0;
+    // Paging as the server applied it (it moves a page past the end back to the last page).
+    const pageSizeOf = (block) => (PAGE_SIZE_OPTIONS.includes(Number(block?.page_size)) ? Number(block.page_size) : DEFAULT_PAGE_SIZE);
+    filterState.page = Number(data.blocks?.unplanned_duels?.page) || 1;
+    filterState.pageSize = pageSizeOf(data.blocks?.unplanned_duels);
+    filterState.usersPage = Number(data.blocks?.new_users?.page) || 1;
+    filterState.usersPageSize = pageSizeOf(data.blocks?.new_users);
     renderFilters(data);
     const visibleBlocks = BLOCKS.filter((config) => data.blocks?.[config.key]);
     if (!visibleBlocks.length) {
@@ -1750,7 +1812,8 @@
     wrap.appendChild(renderTiles(data, visibleBlocks));
     visibleBlocks.forEach((config) => {
       const block = data.blocks[config.key];
-      wrap.appendChild(config.key === "unplanned_duels" ? renderUnplannedSection(config, block) : renderSection(config, block, data));
+      const special = { unplanned_duels: renderUnplannedSection, new_users: renderNewUsersSection }[config.key];
+      wrap.appendChild(special ? special(config, block) : renderSection(config, block, data));
     });
     contentEl.appendChild(wrap);
   }
@@ -1766,6 +1829,8 @@
     if (state.proposed) url.searchParams.set("proposed_time", state.proposed);
     if (state.page) url.searchParams.set("unplanned_page", state.page);
     if (state.pageSize) url.searchParams.set("unplanned_page_size", state.pageSize);
+    if (state.usersPage) url.searchParams.set("new_users_page", state.usersPage);
+    if (state.usersPageSize) url.searchParams.set("new_users_page_size", state.usersPageSize);
     try {
       const response = await fetch(url.toString(), { method: "GET", credentials: "include" });
       if (seq !== loadSeq) return;

@@ -14,7 +14,7 @@ import {
   parseDaysBeforeDeadline,
   parsePage,
   parsePlanningStatusFilter,
-  parseUnplannedPageSize,
+  parsePageSize,
   parseProposedTimeFilter,
   registerDashboardRoutes,
 } from "./dashboard.js";
@@ -175,6 +175,9 @@ test("global admin sees global blocks and only the tournaments they were added t
   // Users with a linked profile created in the last 7 days, newest first.
   assert.deepEqual(dashboard.blocks.new_users.items.map((item) => item.bga_nickname), ["one"]);
   assert.equal(dashboard.blocks.new_users.days, 7);
+  assert.equal(dashboard.blocks.new_users.items[0].association_flag, "ua.png");
+  assert.equal(dashboard.blocks.new_users.page, 1);
+  assert.equal(dashboard.blocks.new_users.total_pages, 1);
   // Open cases of every tournament, not only the ones the admin was added to: most urgent, then oldest.
   const cases = dashboard.blocks.cases;
   assert.deepEqual(cases.items.map((item) => item.id), [2, 1, 3]);
@@ -272,8 +275,8 @@ test("unplanned duels filtered by planning status and proposed time", async (t) 
 });
 
 test("unplanned duels are paged", async (t) => {
-  assert.equal(parseUnplannedPageSize("20"), 20);
-  assert.equal(parseUnplannedPageSize("15"), 10);
+  assert.equal(parsePageSize("20"), 20);
+  assert.equal(parsePageSize("15"), 10);
   assert.equal(parsePage("3"), 3);
   assert.equal(parsePage("0"), 1);
   assert.equal(parsePage("x"), 1);

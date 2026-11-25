@@ -11,8 +11,8 @@ export const DASHBOARD_BLOCK_LIMIT = 10;
 export const DEFAULT_DAYS_BEFORE_DEADLINE = 3;
 export const MAX_DAYS_BEFORE_DEADLINE = 60;
 export const NEW_USERS_DAYS = 7;
-// The unplanned duels block is paged; the other blocks show their first DASHBOARD_BLOCK_LIMIT records.
-export const UNPLANNED_PAGE_SIZES = [10, 20, 50];
+// The unplanned duels and new users blocks are paged; the other blocks show their first DASHBOARD_BLOCK_LIMIT records.
+export const PAGE_SIZES = [10, 20, 50];
 export const PLANNING_STATUSES = ["deadline_passed", "no_proposal", "time_proposed", "change_pending"];
 // Unplanned duels with an active time proposal, by when the proposed time is: within N hours, or already passed.
 export const PROPOSED_TIME_WINDOWS = { "4h": 4, "12h": 12, "1d": 24, passed: 0 };
@@ -43,9 +43,21 @@ export function parsePlanningStatusFilter(value) {
   return PLANNING_STATUSES.includes(raw) ? raw : null;
 }
 
-export function parseUnplannedPageSize(value) {
+export function parsePageSize(value) {
   const size = Number(text(value));
-  return UNPLANNED_PAGE_SIZES.includes(size) ? size : UNPLANNED_PAGE_SIZES[0];
+  return PAGE_SIZES.includes(size) ? size : PAGE_SIZES[0];
+}
+
+// One page of `items`; a page past the end (e.g. after a filter narrowed the list) shows the last page.
+export function paginate(items, page, pageSize) {
+  const totalPages = Math.max(1, Math.ceil(items.length / pageSize));
+  const currentPage = Math.min(page, totalPages);
+  return {
+    items: items.slice((currentPage - 1) * pageSize, currentPage * pageSize),
+    page: currentPage,
+    page_size: pageSize,
+    total_pages: totalPages,
+  };
 }
 
 export function parsePage(value) {
@@ -91,9 +103,14 @@ const ASSOCIATION_ID_SQL = "COALESCE(NULLIF(trim(a.code), ''), printf('ASSOCIATI
 
 // Flags of the unplanned duels' players, as the tournament page shows them: the association of the
 // player's slot in that tournament (tournament_players), else the association of the profile.
+async function loadAssociationFlags(db) {
+  const rows = await dbAll(db, `SELECT ${ASSOCIATION_ID_SQL} AS id, a.flag FROM associations a`);
+  return new Map(rows.filter((row) => text(row.flag)).map((row) => [text(row.id).toUpperCase(), text(row.flag)]));
+}
+
 async function loadFlagResolver(db, tournamentIds) {
-  const [associations, slots] = await Promise.all([
-    dbAll(db, `SELECT ${ASSOCIATION_ID_SQL} AS id, a.flag FROM associations a`),
+  const [flags, slots] = await Promise.all([
+    loadAssociationFlags(db),
     dbAll(
       db,
       `
@@ -106,7 +123,6 @@ async function loadFlagResolver(db, tournamentIds) {
       tournamentIds.map((id) => id.toUpperCase())
     ),
   ]);
-  const flags = new Map(associations.filter((row) => text(row.flag)).map((row) => [text(row.id).toUpperCase(), text(row.flag)]));
   const slotAssociations = new Map(slots.map((row) => [`${row.tournament_id}|${row.player_id}`, text(row.association_id)]));
   return (row, playerId, profileAssociation) => {
     const slotAssociation = slotAssociations.get(`${text(row.tournament_id).toUpperCase()}|${playerId}`);
@@ -239,7 +255,7 @@ export function matchesProposedTimeWindow(item, window, nowIso) {
 const emptyStatusCounts = () => Object.fromEntries(PLANNING_STATUSES.map((status) => [status, 0]));
 
 export async function loadUnplannedDuels(db, {
-  tournamentIds, nowIso, days, planningStatus = null, proposedTime = null, page = 1, pageSize = UNPLANNED_PAGE_SIZES[0],
+  tournamentIds, nowIso, days, planningStatus = null, proposedTime = null, page = 1, pageSize = PAGE_SIZES[0],
 }) {
   if (!tournamentIds.length) {
     return { count: 0, items: [], status_counts: emptyStatusCounts(), page: 1, page_size: pageSize, total_pages: 1 };
@@ -287,17 +303,7 @@ export async function loadUnplannedDuels(db, {
     if (planningStatus && status !== planningStatus) continue;
     items.push(item);
   }
-  // A page past the end (e.g. after a filter narrowed the list) shows the last page.
-  const totalPages = Math.max(1, Math.ceil(items.length / pageSize));
-  const currentPage = Math.min(page, totalPages);
-  return {
-    count: items.length,
-    items: items.slice((currentPage - 1) * pageSize, currentPage * pageSize),
-    status_counts: statusCounts,
-    page: currentPage,
-    page_size: pageSize,
-    total_pages: totalPages,
-  };
+  return { count: items.length, status_counts: statusCounts, ...paginate(items, page, pageSize) };
 }
 
 export async function loadErrorDuels(db, { tournamentIds }) {
@@ -358,7 +364,7 @@ export async function loadNewsDrafts(db, { nowIso }) {
   };
 }
 
-export async function loadNewUsers(db, { nowIso }) {
+export async function loadNewUsers(db, { nowIso, page = 1, pageSize = PAGE_SIZES[0] }) {
   const sinceIso = new Date(Date.parse(nowIso) - NEW_USERS_DAYS * DAY_MS).toISOString();
   const rows = await dbAll(
     db,
@@ -372,19 +378,18 @@ export async function loadNewUsers(db, { nowIso }) {
     `,
     [sinceIso]
   );
-  return {
-    count: rows.length,
-    days: NEW_USERS_DAYS,
-    items: rows.slice(0, DASHBOARD_BLOCK_LIMIT).map((row) => ({
-      user_id: row.user_id,
-      name: text(row.profile_name) || text(row.user_name) || null,
-      bga_nickname: text(row.bga_nickname) || null,
-      association: text(row.association) || null,
-      bga_elo: row.bga_elo ?? null,
-      created_at: toIso(row.created_at),
-      link: `https://carcassonne.gg/player/?id=${encodeURIComponent(row.profile_id)}`,
-    })),
-  };
+  const flags = rows.length ? await loadAssociationFlags(db) : new Map();
+  const items = rows.map((row) => ({
+    user_id: row.user_id,
+    name: text(row.profile_name) || text(row.user_name) || null,
+    bga_nickname: text(row.bga_nickname) || null,
+    association: text(row.association) || null,
+    association_flag: flags.get(text(row.association).toUpperCase()) || null,
+    bga_elo: row.bga_elo ?? null,
+    created_at: toIso(row.created_at),
+    link: `https://carcassonne.gg/player/?id=${encodeURIComponent(row.profile_id)}`,
+  }));
+  return { count: items.length, days: NEW_USERS_DAYS, ...paginate(items, page, pageSize) };
 }
 
 const OPEN_CASE_STATUSES = ["open", "in_progress"];
@@ -594,7 +599,7 @@ export async function buildDashboard(db, user, { query = {}, now = new Date() } 
   const planningStatus = parsePlanningStatusFilter(query.planning_status);
   const proposedTime = parseProposedTimeFilter(query.proposed_time);
   const unplannedPage = parsePage(query.unplanned_page);
-  const unplannedPageSize = parseUnplannedPageSize(query.unplanned_page_size);
+  const unplannedPageSize = parsePageSize(query.unplanned_page_size);
 
   const adminTournaments = await loadAdminTournaments(db, userId);
   const requestedTournamentId = text(query.tournament_id);
@@ -611,7 +616,9 @@ export async function buildDashboard(db, user, { query = {}, now = new Date() } 
   }
   if (isGlobalAdmin) {
     blocks.news_drafts = await loadNewsDrafts(db, { nowIso });
-    blocks.new_users = await loadNewUsers(db, { nowIso });
+    blocks.new_users = await loadNewUsers(db, {
+      nowIso, page: parsePage(query.new_users_page), pageSize: parsePageSize(query.new_users_page_size),
+    });
   }
   if (adminTournaments.length) {
     blocks.unplanned_duels = await loadUnplannedDuels(db, {
