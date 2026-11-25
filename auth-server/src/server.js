@@ -4871,6 +4871,18 @@ function syncUserBgaIdFromEmail(userId, email, options, done) {
   );
 }
 
+// Links the site account with the profile's Login Email to a profile that was just created or restored,
+// as an edit of the Login Email does. Without it the account stays unlinked until its next Google sign-in.
+// A failed link does not fail the request: the next sign-in links the account.
+function linkUsersToProfile(profileId, email, actorUser, source) {
+  return new Promise((resolve) => {
+    syncUsersBgaIdForProfile(profileId, email, { actor: getAuditActor(actorUser), source }, (error) => {
+      if (error) console.error(`Failed to link the site account to profile ${profileId}`, error);
+      resolve();
+    });
+  });
+}
+
 function syncUsersBgaIdForProfile(profileId, email, options, done) {
   const callback = typeof done === "function"
     ? done
@@ -9214,7 +9226,8 @@ app.post("/profiles", (req, res) => {
                 if (selectErr) {
                   return res.status(500).json({ ok: false, message: "Failed to load restored profile" });
                 }
-                return syncCaptainNewsEditorForProfile(playerId, actorPlayerId)
+                return linkUsersToProfile(playerId, row?.email, req.user, "profile_restore")
+                  .then(() => syncCaptainNewsEditorForProfile(playerId, actorPlayerId))
                   .then(() => logAuditEvent(
                     {
                       ...getAuditActor(req.user),
@@ -9312,7 +9325,8 @@ app.post("/profiles", (req, res) => {
               if (selectErr) {
                 return res.status(500).json({ ok: false, message: "Failed to load created profile" });
               }
-              return syncCaptainNewsEditorForProfile(playerId, actorPlayerId)
+              return linkUsersToProfile(playerId, row?.email, req.user, "profile_create")
+                .then(() => syncCaptainNewsEditorForProfile(playerId, actorPlayerId))
                 .then(() => logAuditEvent(
                   {
                     ...getAuditActor(req.user),
