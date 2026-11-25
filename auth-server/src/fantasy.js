@@ -72,6 +72,9 @@ const FANTASY_SQL = `
     locked_at TEXT,
     -- Matches that start before this time do not count; NULL = every match of the stages.
     scoring_from TEXT,
+    -- The BGA nickname the owner typed while their account had no linked BGA profile. Not verified:
+    -- league admins see it and ask the association captains to link the account to that player.
+    claimed_bga_nickname TEXT,
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
     UNIQUE (league_id, user_id),
@@ -111,6 +114,7 @@ export const SEED_LEAGUES = [
 
 export const FANTASY_STAGES = ["Q1", "Q2", "Q3", "Main"];
 export const TEAM_NAME_MAX = 40;
+export const BGA_NICKNAME_MAX = 40;
 const LEAGUE_NAME_MAX = 80;
 
 const text = (value) => String(value ?? "").trim().replace(/\s+/g, " ");
@@ -165,6 +169,9 @@ const isUniqueViolation = (error) => String(error?.code) === "SQLITE_CONSTRAINT"
 
 export async function ensureFantasySchema(db) {
   await dbExec(db, FANTASY_SQL);
+  // Columns added after the table was first created.
+  const teamColumns = new Set((await dbAll(db, "PRAGMA table_info(fantasy_teams)")).map((column) => column.name));
+  if (!teamColumns.has("claimed_bga_nickname")) await dbRun(db, "ALTER TABLE fantasy_teams ADD COLUMN claimed_bga_nickname TEXT");
   for (const league of SEED_LEAGUES) {
     await dbRun(
       db,
@@ -241,7 +248,30 @@ export function normalizeTeamInput(body, league) {
   if (slotIds.some((id) => !id)) return { error: "slot_ids must not contain empty values" };
   if (new Set(slotIds.map(idKey)).size !== slotIds.length) return { error: "A player can be picked only once" };
   if (slotIds.length > league.team_size) return { error: `A team has at most ${league.team_size} players` };
-  return { value: { team_name: teamName, slot_ids: slotIds } };
+  const nickname = normalizeClaimedNickname(body);
+  if (nickname.error) return nickname;
+  return { value: { team_name: teamName, slot_ids: slotIds, bga_nickname: nickname.value } };
+}
+
+// The BGA nickname typed by an owner without a linked BGA profile: { value } (null when not sent) or { error }.
+export function normalizeClaimedNickname(body) {
+  const nickname = text(body?.bga_nickname);
+  if (nickname.length > BGA_NICKNAME_MAX) return { error: `BGA nickname must be at most ${BGA_NICKNAME_MAX} characters` };
+  return { value: nickname || null };
+}
+
+// An account is linked to BGA when it has a player profile (users.bga_id → profiles).
+const hasLinkedBga = (user) => Boolean(text(user?.player_id));
+
+// The claimed nickname to store for a team: none for a linked account; otherwise the one sent,
+// else the one saved before. Without either the team cannot be saved.
+function claimedNicknameFor(user, sent, existing) {
+  if (hasLinkedBga(user)) return null;
+  const nickname = sent || text(existing?.claimed_bga_nickname) || null;
+  if (!nickname) {
+    throw requestError(400, "Enter your BGA nickname: your account is not linked to a BGA profile yet");
+  }
+  return nickname;
 }
 
 function parseIsoTime(value, field) {
@@ -698,6 +728,7 @@ function teamView(team, players, league, status, currentPrices = new Map()) {
     entry_type: team.entry_type,
     locked_at: team.locked_at || null,
     scoring_from: team.scoring_from || null,
+    claimed_bga_nickname: team.claimed_bga_nickname || null,
     updated_at: team.updated_at,
     cost: costHalves / 2,
     over_budget: overBudget,
@@ -802,6 +833,8 @@ export function registerFantasyRoutes(app, {
       viewer: {
         authenticated: Boolean(req.user),
         name: req.user ? ownerName(req.user) : null,
+        // Without a linked BGA profile the page asks for the BGA nickname before a team is saved.
+        bga_linked: req.user ? hasLinkedBga(req.user) : false,
         team: team ? teamView(team, teamPlayers, league, status, new Map(players.map((player) => [idKey(player.slot_id), player.price]))) : null,
       },
     });
@@ -909,7 +942,7 @@ export function registerFantasyRoutes(app, {
     if (commit && status !== "late") throw requestError(409, "Commit is only for teams entered after the main deadline");
     const input = normalizeTeamInput(req.body, league);
     if (input.error) throw requestError(400, input.error);
-    const { team_name: teamName, slot_ids: slotIds } = input.value;
+    const { team_name: teamName, slot_ids: slotIds, bga_nickname: sentNickname } = input.value;
     if (commit && slotIds.length !== league.team_size) {
       throw requestError(400, `Pick ${league.team_size} players before you commit the team`);
     }
@@ -921,6 +954,7 @@ export function registerFantasyRoutes(app, {
       if (existing && describeTeamState(existing, existingPlayers.length, league, status).locked) {
         throw requestError(409, "Your team is locked and cannot be changed");
       }
+      const claimedNickname = claimedNicknameFor(req.user, sentNickname, existing);
 
       // Before the main deadline players kept in the team keep their price; new ones are bought at today's price.
       // A late draft is not a team yet: every player is priced at today's price, so a player who got more
@@ -970,8 +1004,12 @@ export function registerFantasyRoutes(app, {
       if (existing) {
         await dbRun(
           db,
-          "UPDATE fantasy_teams SET team_name = ?, entry_type = ?, locked_at = ?, scoring_from = ?, updated_at = ? WHERE id = ?",
-          [teamName, entryType, lockedAt, lockedAt, at, existing.id]
+          `
+            UPDATE fantasy_teams
+            SET team_name = ?, entry_type = ?, locked_at = ?, scoring_from = ?, claimed_bga_nickname = ?, updated_at = ?
+            WHERE id = ?
+          `,
+          [teamName, entryType, lockedAt, lockedAt, claimedNickname, at, existing.id]
         );
         await dbRun(db, "DELETE FROM fantasy_team_players WHERE team_id = ?", [existing.id]);
       } else {
@@ -979,10 +1017,12 @@ export function registerFantasyRoutes(app, {
           const inserted = await dbRun(
             db,
             `
-              INSERT INTO fantasy_teams (league_id, user_id, team_name, entry_type, locked_at, scoring_from, created_at, updated_at)
-              VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+              INSERT INTO fantasy_teams (
+                league_id, user_id, team_name, entry_type, locked_at, scoring_from, claimed_bga_nickname, created_at, updated_at
+              )
+              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             `,
-            [league.id, accountId, teamName, entryType, lockedAt, lockedAt, at, at]
+            [league.id, accountId, teamName, entryType, lockedAt, lockedAt, claimedNickname, at, at]
           );
           teamId = inserted.lastID;
         } catch (error) {
@@ -1006,7 +1046,11 @@ export function registerFantasyRoutes(app, {
       entity_type: "fantasy_team",
       action: result.created ? "create" : "update",
       record_id: String(result.team.id),
-      changes: { slot_ids: { new: result.players.map((player) => player.slot_id) }, team_name: { new: result.team.team_name } },
+      changes: {
+        slot_ids: { new: result.players.map((player) => player.slot_id) },
+        team_name: { new: result.team.team_name },
+        claimed_bga_nickname: { new: result.team.claimed_bga_nickname || null },
+      },
       metadata: { league_id: league.id, entry_type: result.team.entry_type, locked_at: result.team.locked_at },
     });
     return { ...result, league, status };
@@ -1034,7 +1078,8 @@ export function registerFantasyRoutes(app, {
     })
   );
 
-  // Signed-in user: changes only the team name, at any time (also of a locked team: the players stay).
+  // Signed-in user: changes only the team name, at any time (also of a locked team: the players stay),
+  // and the claimed BGA nickname of an account without a linked BGA profile.
   app.patch(
     "/fantasy/:leagueId/team/name",
     requireAuthenticated,
@@ -1046,18 +1091,30 @@ export function registerFantasyRoutes(app, {
       const teamName = text(req.body?.team_name);
       if (!teamName) throw requestError(400, "Enter a team name");
       if (teamName.length > TEAM_NAME_MAX) throw requestError(400, `Team name must be at most ${TEAM_NAME_MAX} characters`);
+      const nickname = normalizeClaimedNickname(req.body);
+      if (nickname.error) throw requestError(400, nickname.error);
       const existing = await loadTeam(db, league.id, accountId);
       if (!existing) throw requestError(404, "You have no team in this league");
+      const claimedNickname = claimedNicknameFor(req.user, nickname.value, existing);
       const current = now();
       const status = getFantasyStatus(league, current);
-      if (existing.team_name !== teamName) {
-        await dbRun(db, "UPDATE fantasy_teams SET team_name = ?, updated_at = ? WHERE id = ?", [teamName, current.toISOString(), existing.id]);
+      const changes = {};
+      if (existing.team_name !== teamName) changes.team_name = { old: existing.team_name, new: teamName };
+      if ((existing.claimed_bga_nickname || null) !== claimedNickname) {
+        changes.claimed_bga_nickname = { old: existing.claimed_bga_nickname || null, new: claimedNickname };
+      }
+      if (Object.keys(changes).length) {
+        await dbRun(
+          db,
+          "UPDATE fantasy_teams SET team_name = ?, claimed_bga_nickname = ?, updated_at = ? WHERE id = ?",
+          [teamName, claimedNickname, current.toISOString(), existing.id]
+        );
         audit(req, {
           event_type: "fantasy_team.renamed",
           entity_type: "fantasy_team",
           action: "update",
           record_id: String(existing.id),
-          changes: { team_name: { old: existing.team_name, new: teamName } },
+          changes,
           metadata: { league_id: league.id },
         });
       }
@@ -1228,6 +1285,8 @@ export function registerFantasyRoutes(app, {
         owner: text(team.bga_nickname) || text(team.account_name) || null,
         bga_nickname: team.bga_nickname || null,
         account_name: text(team.account_name) || null,
+        // Typed by the owner while the account had no linked BGA profile; not verified.
+        claimed_bga_nickname: team.bga_nickname ? null : text(team.claimed_bga_nickname) || null,
         email: text(team.account_email) || null,
         entry_type: team.entry_type,
         state: state.state,

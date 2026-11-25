@@ -90,6 +90,7 @@
   .fl-table { width: 100%; border-collapse: collapse; font-size: 13px; }
   .fl-table th, .fl-table td { padding: 6px 8px; border-bottom: 1px solid #eef2f6; text-align: left; vertical-align: top; }
   .fl-table th { color: var(--muted); font-weight: 600; background: #f5f7fa; }
+  .fl-tag { font-size: 11px; font-weight: 600; padding: 1px 6px; border-radius: 999px; background: #fef3c7; color: #92400e; white-space: nowrap; }
   .fl-table .num { text-align: right; font-variant-numeric: tabular-nums; }
 </style>
 
@@ -211,12 +212,12 @@
   function downloadCsv(league, teams) {
     const quote = (value) => `"${String(value ?? "").replace(/"/g, '""')}"`;
     const rows = [[
-      "team_id", "team_name", "user_id", "owner", "bga_nickname", "account_name", "email", "entry_type", "status", "saved_at", "locked_at",
+      "team_id", "team_name", "user_id", "owner", "bga_nickname", "claimed_bga_nickname", "account_name", "email", "entry_type", "status", "saved_at", "locked_at",
       "scoring_from", "record_id", "player", "stage", "price_at_pick", "player_points", "team_points",
     ]];
     teams.forEach((team) => {
       const base = [
-        team.team_id, team.team_name, team.user_id, team.owner, team.bga_nickname, team.account_name, team.email, team.entry_type, team.state,
+        team.team_id, team.team_name, team.user_id, team.owner, team.bga_nickname, team.claimed_bga_nickname, team.account_name, team.email, team.entry_type, team.state,
         team.saved_at, team.locked_at, team.scoring_from,
       ];
       (team.players.length ? team.players : [null]).forEach((player) => {
@@ -233,6 +234,20 @@
     link.click();
     link.remove();
     setTimeout(() => URL.revokeObjectURL(link.href), 1000);
+  }
+
+  // The linked BGA nickname; without a link, the nickname the owner typed, marked as not verified,
+  // so the association captain can link the account to that player.
+  function bgaCell(team) {
+    const cell = el("td");
+    if (team.bga_nickname) cell.textContent = team.bga_nickname;
+    else if (team.claimed_bga_nickname) {
+      cell.append(team.claimed_bga_nickname, " ");
+      const tag = el("span", "fl-tag", "not verified");
+      tag.title = "Typed by the owner. The account is not linked to a BGA profile yet.";
+      cell.appendChild(tag);
+    } else cell.appendChild(el("span", "fl-muted", "—"));
+    return cell;
   }
 
   function renderTeams(league) {
@@ -265,7 +280,7 @@
         const tr = el("tr");
         tr.append(
           el("td", "", team.team_name),
-          el("td", "", team.bga_nickname || ""),
+          bgaCell(team),
           // The account is shown only when no BGA profile is linked: "Name (email)".
           el("td", "", team.bga_nickname ? "" : (team.account_name && team.email ? `${team.account_name} (${team.email})`
             : team.email || team.account_name || `user ${team.user_id}`)),

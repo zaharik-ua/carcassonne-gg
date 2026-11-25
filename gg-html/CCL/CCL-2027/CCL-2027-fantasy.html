@@ -981,7 +981,7 @@
   // Leaderboard rows opened by the viewer, and the details loaded for them (team id → data or { error }).
   const expanded = new Set();
   const teamDetails = new Map();
-  // The team being edited: { team_name, slot_ids }. Differs from the saved team until Save.
+  // The team being edited: { team_name, bga_nickname, slot_ids }. Differs from the saved team until Save.
   let draft = null;
   let busy = false;
   let message = null;
@@ -1039,6 +1039,7 @@
     const saved = team();
     return {
       team_name: saved?.team_name || "",
+      bga_nickname: saved?.claimed_bga_nickname || "",
       slot_ids: (saved?.players || []).map((player) => player.slot_id),
     };
   }
@@ -1046,8 +1047,16 @@
   function isDirty() {
     const saved = savedDraft();
     const key = (value) => [...value.slot_ids].map((id) => id.toUpperCase()).sort().join("|");
-    return saved.team_name.trim() !== draft.team_name.trim() || key(saved) !== key(draft);
+    return saved.team_name.trim() !== draft.team_name.trim()
+      || (needsNickname() && saved.bga_nickname.trim() !== draft.bga_nickname.trim())
+      || key(saved) !== key(draft);
   }
+
+  // An account without a linked BGA profile gives its BGA nickname with the team; the organisers
+  // then ask the association captain to link the account to that player.
+  const needsNickname = () => Boolean(data.viewer?.authenticated && !data.viewer.bga_linked);
+  const nicknameMissing = () => needsNickname() && !draft.bga_nickname.trim();
+  const NICKNAME_HINT = "Enter your BGA nickname.";
 
   function canEdit() {
     const status = season().status;
@@ -1212,6 +1221,30 @@
     field.append(label, input);
     panel.appendChild(field);
 
+    if (needsNickname()) {
+      const nicknameField = el("div", "ff-field");
+      const nicknameLabel = el("label", "", "Your BGA nickname");
+      nicknameLabel.htmlFor = "ffBgaNickname";
+      const nicknameInput = el("input", "ff-input");
+      nicknameInput.id = "ffBgaNickname";
+      nicknameInput.maxLength = 40;
+      nicknameInput.autocomplete = "nickname";
+      nicknameInput.placeholder = "Your nickname on Board Game Arena";
+      nicknameInput.value = draft.bga_nickname;
+      nicknameInput.disabled = !editable && !canRename();
+      nicknameInput.addEventListener("input", () => {
+        draft.bga_nickname = nicknameInput.value;
+        message = null;
+        renderActions(panel.querySelector(".ff-actions-box"));
+      });
+      nicknameField.append(
+        nicknameLabel,
+        nicknameInput,
+        el("div", "ff-hint", "Your account is not linked to a BGA profile yet. Your association captain will link it by this nickname.")
+      );
+      panel.appendChild(nicknameField);
+    }
+
     const cost = draftCost();
     const budget = Number(season().budget);
     const metrics = el("div", "ff-metrics");
@@ -1281,15 +1314,16 @@
       // A locked team keeps its players, but its name can still be changed.
       if (canRename()) {
         const named = draft.team_name.trim().length > 0;
-        const changed = draft.team_name.trim() !== String(team().team_name || "").trim();
+        const changed = isDirty();
         const row = el("div", "ff-actions");
-        const renameButton = el("button", "ff-btn", "Save name");
+        const renameButton = el("button", "ff-btn", needsNickname() ? "Save" : "Save name");
         renameButton.type = "button";
-        renameButton.disabled = busy || !named || !changed;
+        renameButton.disabled = busy || !named || nicknameMissing() || !changed;
         renameButton.addEventListener("click", () => submit("rename"));
         row.appendChild(renameButton);
         box.appendChild(row);
         if (!named) box.appendChild(el("div", "ff-hint", "Enter a team name."));
+        else if (nicknameMissing()) box.appendChild(el("div", "ff-hint", NICKNAME_HINT));
         else box.appendChild(el("div", "ff-hint", "The players of a locked team cannot change, but you can rename it."));
       }
       if (message) box.appendChild(el("div", `ff-message ${message.kind}`, message.text));
@@ -1302,13 +1336,13 @@
     const row = el("div", "ff-actions");
     const saveButton = el("button", "ff-btn", "Save");
     saveButton.type = "button";
-    saveButton.disabled = busy || !named || !withinBudget || (!isDirty() && Boolean(team()));
+    saveButton.disabled = busy || !named || nicknameMissing() || !withinBudget || (!isDirty() && Boolean(team()));
     saveButton.addEventListener("click", () => submit("save"));
     row.appendChild(saveButton);
     if (status === "late") {
       const commitButton = el("button", "ff-btn commit", "Commit");
       commitButton.type = "button";
-      commitButton.disabled = busy || !named || !withinBudget || !full;
+      commitButton.disabled = busy || !named || nicknameMissing() || !withinBudget || !full;
       commitButton.addEventListener("click", () => {
         const ok = window.confirm("Commit locks your team for good. It scores only matches that start after now. Commit?");
         if (ok) submit("commit");
@@ -1329,6 +1363,7 @@
     box.appendChild(row);
     const hints = [];
     if (!named) hints.push("Enter a team name.");
+    if (nicknameMissing()) hints.push(NICKNAME_HINT);
     if (!withinBudget && repricedPicks().length) {
       const names = repricedPicks().map((slotId) => playerBySlot(slotId)?.nickname || slotId).join(", ");
       hints.push(`Prices have gone up since you saved this draft (${names}): the team now costs ${credits(draftCost())}, over the budget of ${credits(season().budget)}. Replace players to save or commit it.`);
@@ -2479,7 +2514,7 @@
   const REQUESTS = {
     save: { url: TEAM_URL, method: "PUT", done: "Team saved." },
     commit: { url: COMMIT_URL, method: "POST", done: "Your team is committed." },
-    rename: { url: RENAME_URL, method: "PATCH", done: "Team name saved." },
+    rename: { url: RENAME_URL, method: "PATCH", done: "Saved." },
     delete: { url: TEAM_URL, method: "DELETE", done: "Your team is deleted." },
   };
 
@@ -2490,9 +2525,10 @@
     message = null;
     render();
     try {
+      const nickname = needsNickname() ? { bga_nickname: draft.bga_nickname.trim() } : {};
       const body = kind === "delete" ? {}
-        : kind === "rename" ? { team_name: draft.team_name.trim() }
-          : { team_name: draft.team_name.trim(), slot_ids: draft.slot_ids };
+        : kind === "rename" ? { team_name: draft.team_name.trim(), ...nickname }
+          : { team_name: draft.team_name.trim(), slot_ids: draft.slot_ids, ...nickname };
       const response = await fetch(request.url, {
         method: request.method,
         credentials: "include",

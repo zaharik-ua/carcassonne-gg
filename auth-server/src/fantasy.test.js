@@ -164,11 +164,12 @@ function createApi(db, { now = OPEN } = {}) {
 }
 
 const state = (api, user = null) => api.call("GET /public/fantasy/:leagueId", { user });
-const save = (api, user, slotIds, teamName = "Meeple Masters") => (
-  api.call("PUT /fantasy/:leagueId/team", { user, body: { team_name: teamName, slot_ids: slotIds } })
+// Accounts without a linked BGA profile must give a BGA nickname; a linked account's one is ignored.
+const save = (api, user, slotIds, teamName = "Meeple Masters", nickname = "fan_bga") => (
+  api.call("PUT /fantasy/:leagueId/team", { user, body: { team_name: teamName, slot_ids: slotIds, bga_nickname: nickname } })
 );
-const commit = (api, user, slotIds, teamName = "Meeple Masters") => (
-  api.call("POST /fantasy/:leagueId/team/commit", { user, body: { team_name: teamName, slot_ids: slotIds } })
+const commit = (api, user, slotIds, teamName = "Meeple Masters", nickname = "fan_bga") => (
+  api.call("POST /fantasy/:leagueId/team/commit", { user, body: { team_name: teamName, slot_ids: slotIds, bga_nickname: nickname } })
 );
 const teams = (api, user) => api.call("GET /fantasy/:leagueId/teams", { user });
 
@@ -364,6 +365,44 @@ test("a locked team can still be renamed; its players stay", async (t) => {
   assert.equal(result.body.team.state, "locked");
   assert.deepEqual(result.body.team.players.map((player) => player.slot_id).sort(), [...CHEAP_FIVE].sort());
   assert.equal(api.audit.at(-1).event_type, "fantasy_team.renamed");
+});
+
+test("an account without a linked BGA profile gives its BGA nickname; league admins see it", async (t) => {
+  const db = await createDatabase(t);
+  const api = createApi(db);
+  assert.equal((await state(api, USERS.fan)).body.viewer.bga_linked, false);
+  assert.equal((await state(api, USERS.player)).body.viewer.bga_linked, true);
+
+  const missing = await save(api, USERS.fan, ["s3"], "Meeple Masters", "  ");
+  assert.equal(missing.status, 400);
+  assert.match(missing.body.message, /BGA nickname/);
+  assert.equal((await save(api, USERS.fan, ["s3"], "Meeple Masters", "x".repeat(41))).status, 400);
+  const saved = await save(api, USERS.fan, ["s3"], "Meeple Masters", "  Ludo  J ");
+  assert.equal(saved.status, 201);
+  assert.equal(saved.body.team.claimed_bga_nickname, "Ludo J");
+  // A later save without the field keeps the nickname given before.
+  const kept = await api.call("PUT /fantasy/:leagueId/team", { user: USERS.fan, body: { team_name: "Meeple Masters", slot_ids: ["s3", "s4"] } });
+  assert.equal(kept.body.team.claimed_bga_nickname, "Ludo J");
+  // A linked account needs no nickname and stores none.
+  const linked = await api.call("PUT /fantasy/:leagueId/team", { user: USERS.player, body: { team_name: "Jan's Five", slot_ids: ["s3"], bga_nickname: "fake" } });
+  assert.equal(linked.status, 201);
+  assert.equal(linked.body.team.claimed_bga_nickname, null);
+
+  // The rename route changes the nickname too, also of a locked team.
+  api.clock.now = new Date(LEAGUE.late_deadline);
+  const renamed = await api.call("PATCH /fantasy/:leagueId/team/name", {
+    user: USERS.fan, body: { team_name: "Meeple Masters", bga_nickname: "LudoJ" },
+  });
+  assert.equal(renamed.status, 200);
+  assert.equal(renamed.body.team.claimed_bga_nickname, "LudoJ");
+  assert.deepEqual(api.audit.at(-1).changes, { claimed_bga_nickname: { old: "Ludo J", new: "LudoJ" } });
+
+  const rows = Object.fromEntries((await teams(api, USERS.admin)).body.teams.map((row) => [row.team_name, row]));
+  assert.equal(rows["Meeple Masters"].claimed_bga_nickname, "LudoJ");
+  assert.equal(rows["Meeple Masters"].bga_nickname, null);
+  assert.equal(rows["Meeple Masters"].email, "fan@example.com");
+  assert.equal(rows["Jan's Five"].claimed_bga_nickname, null);
+  assert.equal(rows["Jan's Five"].bga_nickname, "Jan");
 });
 
 test("a team can be deleted while it can be changed, not once it is locked", async (t) => {
