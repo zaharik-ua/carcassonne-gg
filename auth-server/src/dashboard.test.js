@@ -9,9 +9,12 @@ import {
   buildPlayerCaseLink,
   getPlanningStatus,
   getPlayerDuelAction,
+  loadUnplannedDuels,
   matchesProposedTimeWindow,
   parseDaysBeforeDeadline,
+  parsePage,
   parsePlanningStatusFilter,
+  parseUnplannedPageSize,
   parseProposedTimeFilter,
   registerDashboardRoutes,
 } from "./dashboard.js";
@@ -264,6 +267,31 @@ test("unplanned duels filtered by planning status and proposed time", async (t) 
   const passed = await buildDashboard(db, USERS.tournamentAdmin, { now: NOW, query: { proposed_time: "passed", planning_status: "time_proposed" } });
   assert.equal(passed.blocks.unplanned_duels.count, 0);
   assert.equal(passed.blocks.unplanned_duels.status_counts.change_pending, 1);
+});
+
+test("unplanned duels are paged", async (t) => {
+  assert.equal(parseUnplannedPageSize("20"), 20);
+  assert.equal(parseUnplannedPageSize("15"), 10);
+  assert.equal(parsePage("3"), 3);
+  assert.equal(parsePage("0"), 1);
+  assert.equal(parsePage("x"), 1);
+
+  const db = await createDatabase(t);
+  const first = await buildDashboard(db, USERS.tournamentAdmin, { now: NOW });
+  assert.equal(first.blocks.unplanned_duels.page, 1);
+  assert.equal(first.blocks.unplanned_duels.page_size, 10);
+  assert.equal(first.blocks.unplanned_duels.total_pages, 1);
+
+  const second = await loadUnplannedDuels(db, { tournamentIds: ["CCL-2027"], nowIso: NOW.toISOString(), days: 3, page: 2, pageSize: 2 });
+  assert.deepEqual(second.items.map((item) => item.id), ["pending", "change"]);
+  assert.equal(second.count, 4);
+  assert.equal(second.total_pages, 2);
+
+  // Page 9 of a one-page list shows that page.
+  const past = await buildDashboard(db, USERS.tournamentAdmin, { now: NOW, query: { unplanned_page: "9", unplanned_page_size: "50" } });
+  assert.equal(past.blocks.unplanned_duels.page, 1);
+  assert.equal(past.blocks.unplanned_duels.page_size, 50);
+  assert.equal(past.blocks.unplanned_duels.items.length, 4);
 });
 
 test("days and tournament filters", async (t) => {

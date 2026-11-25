@@ -577,6 +577,159 @@
     padding: 12px 16px 0;
   }
 
+  /* Paging of team-official-matches.html (results-controls). */
+  .dash-pager {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 12px;
+    padding: 6px 8px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    background: #f7f8fa;
+  }
+
+  .dash-pagesize {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    color: #555;
+  }
+
+  .dash-pagesize-picker {
+    position: relative;
+    display: inline-flex;
+    flex-direction: column;
+    min-width: 58px;
+  }
+
+  .dash-pagesize-btn {
+    all: unset;
+    box-sizing: border-box;
+    width: 100%;
+    min-height: 24px;
+    padding: 4px 7px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 6px;
+    border: 1px solid #c8ced8;
+    border-radius: 4px;
+    background: #fff;
+    color: #2f3947;
+    font-size: 12px;
+    font-weight: 600;
+    line-height: 1;
+    cursor: pointer;
+  }
+
+  .dash-pagesize-btn:hover,
+  .dash-pagesize-btn.open {
+    border-color: #9ea7b3;
+  }
+
+  .dash-pagesize-btn:focus-visible {
+    outline: 2px solid var(--dash-primary);
+    outline-offset: 2px;
+  }
+
+  .dash-pagesize-btn .dash-icon {
+    width: 12px;
+    height: 12px;
+    color: #6f7785;
+    transition: transform var(--dash-ease);
+  }
+
+  .dash-pagesize-btn.open .dash-icon {
+    transform: rotate(180deg);
+  }
+
+  .dash-pagesize-menu {
+    position: absolute;
+    left: 0;
+    top: calc(100% + 4px);
+    min-width: 100%;
+    max-height: 0;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    box-sizing: border-box;
+    border: 1px solid #d5dbe4;
+    border-radius: 4px;
+    background: #fff;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.16s ease, max-height 0.16s ease;
+    z-index: 20;
+  }
+
+  .dash-pagesize-menu.open {
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  .dash-pagesize-option {
+    all: unset;
+    box-sizing: border-box;
+    padding: 5px 8px;
+    border-top: 1px solid #edf1f6;
+    font-size: 12px;
+    line-height: 1.2;
+    color: #2f3947;
+    white-space: nowrap;
+    cursor: pointer;
+  }
+
+  .dash-pagesize-option:first-child {
+    border-top: none;
+  }
+
+  .dash-pagesize-option:hover,
+  .dash-pagesize-option:focus-visible {
+    background: #f5f5f5;
+  }
+
+  .dash-pagesize-option.active {
+    background: #e4f0fb;
+  }
+
+  .dash-pagination {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .dash-pagebtn {
+    font: inherit;
+    font-size: 12px;
+    color: #333;
+    background: #fff;
+    border: 1px solid #cfcfcf;
+    border-radius: 4px;
+    padding: 2px 8px;
+    cursor: pointer;
+  }
+
+  .dash-pagebtn:disabled {
+    opacity: 0.45;
+    cursor: default;
+  }
+
+  .dash-pagebtn:focus-visible {
+    outline: 2px solid var(--dash-primary);
+    outline-offset: 2px;
+  }
+
+  .dash-pageinfo {
+    min-width: 72px;
+    font-size: 12px;
+    color: #555;
+    text-align: center;
+  }
+
   .dash-match-heading {
     padding: 0 2px;
     font-size: 14px;
@@ -654,9 +807,9 @@
     text-decoration: none;
   }
 
+  /* Player links of matches.html (.duel-player-row a). */
   a.dash-match-player-name:hover {
-    color: var(--dash-primary);
-    text-decoration: underline;
+    color: #0277BD;
   }
 
   a.dash-match-player-name:focus-visible {
@@ -728,35 +881,7 @@
     color: #5c4300;
   }
 
-  /* Time proposal panel of the tournaments page (cp-time-proposal-panel). */
-  .dash-proposal {
-    display: grid;
-    gap: 5px;
-    margin: 0 8px 8px 58px;
-    padding: 8px 10px;
-    border: 1px solid #c9dced;
-    border-radius: 6px;
-    background: #f3f8fd;
-    color: #344054;
-    font-size: 12px;
-    line-height: 1.35;
-  }
-
-  .dash-proposal.is-passed {
-    border-color: #f5c2c0;
-    background: #fff6f5;
-  }
-
-  .dash-proposal-title {
-    font-weight: 700;
-    color: #1f3f5b;
-  }
-
-  .dash-proposal-meta {
-    color: #52606d;
-  }
-
-  .dash-proposal-warning {
+  .dash-match-meta.is-overdue {
     font-weight: 600;
     color: #b42318;
   }
@@ -812,10 +937,6 @@
       margin: 6px 0 0;
     }
 
-    .dash-proposal {
-      margin-right: 6px;
-    }
-
     .dash-tiles,
     .dash-skeleton-tiles {
       grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -835,6 +956,8 @@
     .dash-section,
     .dash-tile,
     .dash-link,
+    .dash-pagesize-btn .dash-icon,
+    .dash-pagesize-menu,
     .cp-dd-btn,
     .cp-dd-chevron,
     .cp-dd-menu {
@@ -882,7 +1005,10 @@
     { value: "1d", label: "Within 1 day" },
     { value: "passed", label: "Already passed" },
   ];
-  const filterState = { tournamentId: "", days: DEFAULT_DAYS, status: "", proposed: "" };
+  const PAGE_SIZE_OPTIONS = [10, 20, 50];
+  const DEFAULT_PAGE_SIZE = PAGE_SIZE_OPTIONS[0];
+  // `page` and `pageSize`: paging of Unplanned matches (UNPLANNED_PAGE_SIZES on the server).
+  const filterState = { tournamentId: "", days: DEFAULT_DAYS, status: "", proposed: "", page: 1, pageSize: DEFAULT_PAGE_SIZE };
   const dropdowns = [];
   let loadSeq = 0;
 
@@ -993,7 +1119,7 @@
   const PLANNING_STATUS = {
     deadline_passed: { label: "Deadline passed", tone: "attention" },
     no_proposal: { label: "No time proposed", tone: "attention" },
-    time_proposed: { label: "Time proposed, awaiting reply", tone: "warn" },
+    time_proposed: { label: "Time proposed", tone: "warn" },
     change_pending: { label: "Time being renegotiated", tone: "warn" },
   };
   const PLAYER_PROFILE_URL = "https://carcassonne.gg/player/?id=";
@@ -1027,6 +1153,8 @@
       days: String(params.get("days") || "").trim(),
       status: String(params.get("status") || "").trim(),
       proposed: String(params.get("proposed_time") || "").trim(),
+      page: String(params.get("page") || "").trim(),
+      pageSize: String(params.get("per_page") || "").trim(),
     };
   }
 
@@ -1040,6 +1168,8 @@
     setParam("days", state.days === DEFAULT_DAYS ? "" : state.days);
     setParam("status", state.status);
     setParam("proposed_time", state.proposed);
+    setParam("page", Number(state.page) > 1 ? String(state.page) : "");
+    setParam("per_page", Number(state.pageSize) !== DEFAULT_PAGE_SIZE ? String(state.pageSize) : "");
     window.history.replaceState(null, "", url.toString());
   }
 
@@ -1138,16 +1268,6 @@
     return date.getFullYear() < new Date().getFullYear() ? `${dayMonth}\n${date.getFullYear()}\n${time}` : `${dayMonth} ${time}`;
   }
 
-  // "in 3 h", "25 min ago", "in 2 days".
-  function relativeTime(ts) {
-    const diff = ts - Date.now();
-    const minutes = Math.round(Math.abs(diff) / 60000);
-    const value = minutes < 60
-      ? `${minutes} min`
-      : minutes < 48 * 60 ? `${Math.round(minutes / 60)} h` : `${Math.round(minutes / 1440)} days`;
-    return diff >= 0 ? `in ${value}` : `${value} ago`;
-  }
-
   function unplannedHeading(item) {
     return [
       item.tournament?.name,
@@ -1169,8 +1289,6 @@
     const name = el(player?.id ? "a" : "span", "dash-match-player-name", playerName(player));
     if (player?.id) {
       name.href = `${PLAYER_PROFILE_URL}${encodeURIComponent(player.id)}`;
-      name.target = "_blank";
-      name.rel = "noopener noreferrer";
     }
     line.appendChild(name);
     if (isProposer) {
@@ -1186,15 +1304,14 @@
 
   const plural = (count, word) => `${count} ${word}${count === 1 ? "" : "s"}`;
 
-  // "4 days 5 hours", "1 day", "3 hours 20 minutes", "45 minutes".
+  // "4 days 5 hours", "1 day", "5 hours", "45 minutes": minutes only when less than an hour is left.
   function durationText(ms) {
     const totalMinutes = Math.max(0, Math.floor(ms / 60000));
     const days = Math.floor(totalMinutes / 1440);
     const hours = Math.floor((totalMinutes % 1440) / 60);
-    const minutes = totalMinutes % 60;
     if (days) return [plural(days, "day"), hours ? plural(hours, "hour") : ""].filter(Boolean).join(" ");
-    if (hours) return [plural(hours, "hour"), minutes ? plural(minutes, "minute") : ""].filter(Boolean).join(" ");
-    return plural(minutes, "minute");
+    if (hours) return plural(hours, "hour");
+    return plural(totalMinutes, "minute");
   }
 
   // Time left until the stage deadline (shown as Monday 00:00, see formatDeadline).
@@ -1211,24 +1328,13 @@
       && Number.isFinite(Date.parse(item.proposed_time_utc || ""));
   }
 
-  // The time proposal panel of the tournaments page, with how soon the proposed time is.
-  function proposalPanel(item) {
+  // "Match in: 6 hours" for the proposed time; a proposed time that has passed is shown in red.
+  function proposedTimeLine(item) {
     if (!hasActiveProposal(item)) return null;
-    const players = [item.player_1, item.player_2];
-    const proposer = players.find((player) => player?.id === item.proposed_by_player_id) || null;
-    const awaiting = proposer ? players.find((player) => player && player !== proposer) : null;
-    const ts = Date.parse(item.proposed_time_utc);
-    const passed = ts < Date.now();
-    const panel = el("div", `dash-proposal${passed ? " is-passed" : ""}`);
-    const title = item.proposed_time_status === "change_pending" ? "New time proposed" : "Match time proposed";
-    panel.appendChild(el("div", "dash-proposal-title", `${title}${proposer ? ` by ${playerName(proposer)}` : ""}`));
-    panel.appendChild(el("div", "", `${formatUtc(item.proposed_time_utc)} (${relativeTime(ts)})`));
-    if (item.proposed_time_status === "change_pending" && item.time_utc) {
-      panel.appendChild(el("div", "dash-proposal-meta", `Current time: ${formatUtc(item.time_utc)}`));
-    }
-    if (passed) panel.appendChild(el("div", "dash-proposal-warning", "The proposed time has passed without a reply"));
-    panel.appendChild(el("div", "dash-proposal-meta", awaiting ? `Waiting for ${playerName(awaiting)}` : "Waiting for a reply"));
-    return panel;
+    const left = Date.parse(item.proposed_time_utc) - Date.now();
+    return left > 0
+      ? el("div", "dash-match-meta", `Match in: ${durationText(left)}`)
+      : el("div", "dash-match-meta is-overdue", `Proposed time passed ${durationText(-left)} ago without a reply`);
   }
 
   function renderUnplannedDuel(item) {
@@ -1241,8 +1347,10 @@
     const players = el("div", "dash-match-players");
     players.appendChild(matchPlayerLine(item.player_1, !!proposerId && item.player_1?.id === proposerId));
     players.appendChild(matchPlayerLine(item.player_2, !!proposerId && item.player_2?.id === proposerId));
-    const meta = [item.duel_format, deadlineText(item)].filter(Boolean).join(" · ");
-    if (meta) players.appendChild(el("div", "dash-match-meta", meta));
+    const deadline = deadlineText(item);
+    if (deadline) players.appendChild(el("div", "dash-match-meta", deadline));
+    const proposedTime = proposedTimeLine(item);
+    if (proposedTime) players.appendChild(proposedTime);
     const actions = el("div", "dash-match-actions");
     const status = PLANNING_STATUS[item.planning_status];
     if (status) actions.appendChild(el("span", `dash-status-badge${status.tone ? ` is-${status.tone}` : ""}`, status.label));
@@ -1250,14 +1358,14 @@
     if (view) actions.appendChild(view);
     matchRow.append(time, el("div", "dash-match-divider"), players, actions);
     wrap.appendChild(matchRow);
-    const proposal = proposalPanel(item);
-    if (proposal) wrap.appendChild(proposal);
     return wrap;
   }
 
   // Matches under "Tournament · Stage · Round · Group" headings, as on the tournaments page.
-  function renderUnplannedList(items) {
+  function renderUnplannedList(block) {
+    const items = block.items || [];
     const body = el("div", "dash-matches");
+    body.appendChild(renderUnplannedPager(block));
     let heading = null;
     let list = null;
     items.forEach((item) => {
@@ -1271,6 +1379,70 @@
       list.appendChild(renderUnplannedDuel(item));
     });
     return body;
+  }
+
+  // Per page picker and Prev / Page N of M / Next, as on team-official-matches.html.
+  function renderUnplannedPager(block) {
+    const totalPages = Math.max(1, Number(block?.total_pages) || 1);
+    const page = Math.min(Math.max(1, Number(block?.page) || 1), totalPages);
+    const bar = el("div", "dash-pager");
+
+    const sizeWrap = el("div", "dash-pagesize", "Per page:");
+    const picker = el("div", "dash-pagesize-picker");
+    const sizeBtn = el("button", "dash-pagesize-btn");
+    sizeBtn.type = "button";
+    sizeBtn.setAttribute("aria-label", `Matches per page: ${filterState.pageSize}`);
+    sizeBtn.appendChild(el("span", "", filterState.pageSize));
+    sizeBtn.appendChild(icon("chevronDown"));
+    const menu = el("div", "dash-pagesize-menu");
+    const close = () => {
+      menu.classList.remove("open");
+      menu.style.maxHeight = "0px";
+      sizeBtn.classList.remove("open");
+    };
+    PAGE_SIZE_OPTIONS.forEach((size) => {
+      const option = el("button", `dash-pagesize-option${size === filterState.pageSize ? " active" : ""}`, size);
+      option.type = "button";
+      option.addEventListener("click", (event) => {
+        event.stopPropagation();
+        close();
+        if (size === filterState.pageSize) return;
+        filterState.pageSize = size;
+        filterState.page = 1;
+        onFilterChange("unplanned_duels", { keepPage: true });
+      });
+      menu.appendChild(option);
+    });
+    sizeBtn.addEventListener("click", (event) => {
+      event.stopPropagation();
+      const isOpen = menu.classList.contains("open");
+      dropdowns.forEach((dropdown) => dropdown.close());
+      if (isOpen) return;
+      menu.classList.add("open");
+      menu.style.maxHeight = `${menu.scrollHeight}px`;
+      sizeBtn.classList.add("open");
+    });
+    dropdowns.push({ close });
+    picker.append(sizeBtn, menu);
+    sizeWrap.appendChild(picker);
+
+    const pagination = el("div", "dash-pagination");
+    const goTo = (nextPage) => {
+      filterState.page = nextPage;
+      onFilterChange("unplanned_duels", { keepPage: true });
+    };
+    const prev = el("button", "dash-pagebtn", "Prev");
+    prev.type = "button";
+    prev.disabled = page <= 1;
+    prev.addEventListener("click", () => goTo(page - 1));
+    const next = el("button", "dash-pagebtn", "Next");
+    next.type = "button";
+    next.disabled = page >= totalPages;
+    next.addEventListener("click", () => goTo(page + 1));
+    pagination.append(prev, el("span", "dash-pageinfo", `Page ${page} of ${totalPages}`), next);
+
+    bar.append(sizeWrap, pagination);
+    return bar;
   }
 
   function filterField(label, className, dropdown) {
@@ -1474,21 +1646,13 @@
       section.appendChild(el("div", "dash-section-note", "Cases you submitted in all tournaments, open ones first."));
     }
     if (config.key === "unplanned_duels") {
-      section.appendChild(el(
-        "div",
-        "dash-section-note",
-        "Matches with a stage deadline (CCL) that is due soon or already passed. Team tournament matches are not included yet."
-      ));
       section.appendChild(renderUnplannedFilters(block));
       if (!count) {
         const filtered = filterState.status || filterState.proposed;
         section.appendChild(el("div", "dash-section-note", filtered ? "No matches match these filters." : "No unplanned matches."));
         return section;
       }
-      section.appendChild(renderUnplannedList(block.items || []));
-      if (count > (block.items || []).length) {
-        section.appendChild(el("div", "dash-more", `Showing ${(block.items || []).length} of ${count}.`));
-      }
+      section.appendChild(renderUnplannedList(block));
       return section;
     }
     if (!count) return section;
@@ -1536,6 +1700,9 @@
     filterState.days = String(data.filters?.days_before_deadline ?? DEFAULT_DAYS);
     filterState.status = data.filters?.planning_status || "";
     filterState.proposed = data.filters?.proposed_time || "";
+    const unplanned = data.blocks?.unplanned_duels;
+    filterState.page = Number(unplanned?.page) || 1;
+    filterState.pageSize = PAGE_SIZE_OPTIONS.includes(Number(unplanned?.page_size)) ? Number(unplanned.page_size) : DEFAULT_PAGE_SIZE;
     const tournamentOptions = [{ value: "", label: "All my tournaments" }]
       .concat((data.tournaments || []).map((tournament) => ({ value: tournament.id, label: tournament.name })));
 
@@ -1574,6 +1741,8 @@
     if (state.days) url.searchParams.set("days_before_deadline", state.days);
     if (state.status) url.searchParams.set("planning_status", state.status);
     if (state.proposed) url.searchParams.set("proposed_time", state.proposed);
+    if (state.page) url.searchParams.set("unplanned_page", state.page);
+    if (state.pageSize) url.searchParams.set("unplanned_page_size", state.pageSize);
     try {
       const response = await fetch(url.toString(), { method: "GET", credentials: "include" });
       if (seq !== loadSeq) return;
@@ -1591,7 +1760,9 @@
   }
 
   // `sectionKey`: a filter of that section changed; the page stays and only the section dims while loading.
-  function onFilterChange(sectionKey = "") {
+  // A filter change starts Unplanned matches from its first page; paging itself passes `keepPage`.
+  function onFilterChange(sectionKey = "", { keepPage = false } = {}) {
+    if (!keepPage) filterState.page = 1;
     writeUrlState(filterState);
     const section = sectionKey ? document.getElementById(`dash-${sectionKey}`) : null;
     if (section) section.classList.add("is-loading");

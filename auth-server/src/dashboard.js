@@ -11,6 +11,8 @@ export const DASHBOARD_BLOCK_LIMIT = 10;
 export const DEFAULT_DAYS_BEFORE_DEADLINE = 3;
 export const MAX_DAYS_BEFORE_DEADLINE = 60;
 export const NEW_USERS_DAYS = 7;
+// The unplanned duels block is paged; the other blocks show their first DASHBOARD_BLOCK_LIMIT records.
+export const UNPLANNED_PAGE_SIZES = [10, 20, 50];
 export const PLANNING_STATUSES = ["deadline_passed", "no_proposal", "time_proposed", "change_pending"];
 // Unplanned duels with an active time proposal, by when the proposed time is: within N hours, or already passed.
 export const PROPOSED_TIME_WINDOWS = { "4h": 4, "12h": 12, "1d": 24, passed: 0 };
@@ -39,6 +41,16 @@ export function parseDaysBeforeDeadline(value) {
 export function parsePlanningStatusFilter(value) {
   const raw = text(value).toLowerCase();
   return PLANNING_STATUSES.includes(raw) ? raw : null;
+}
+
+export function parseUnplannedPageSize(value) {
+  const size = Number(text(value));
+  return UNPLANNED_PAGE_SIZES.includes(size) ? size : UNPLANNED_PAGE_SIZES[0];
+}
+
+export function parsePage(value) {
+  const page = Number(text(value));
+  return Number.isInteger(page) && page > 0 ? page : 1;
 }
 
 export function parseProposedTimeFilter(value) {
@@ -224,8 +236,12 @@ export function matchesProposedTimeWindow(item, window, nowIso) {
 
 const emptyStatusCounts = () => Object.fromEntries(PLANNING_STATUSES.map((status) => [status, 0]));
 
-export async function loadUnplannedDuels(db, { tournamentIds, nowIso, days, planningStatus = null, proposedTime = null }) {
-  if (!tournamentIds.length) return { count: 0, items: [], status_counts: emptyStatusCounts() };
+export async function loadUnplannedDuels(db, {
+  tournamentIds, nowIso, days, planningStatus = null, proposedTime = null, page = 1, pageSize = UNPLANNED_PAGE_SIZES[0],
+}) {
+  if (!tournamentIds.length) {
+    return { count: 0, items: [], status_counts: emptyStatusCounts(), page: 1, page_size: pageSize, total_pages: 1 };
+  }
   const limitIso = new Date(Date.parse(nowIso) + days * DAY_MS).toISOString();
   const rows = await dbAll(
     db,
@@ -269,7 +285,17 @@ export async function loadUnplannedDuels(db, { tournamentIds, nowIso, days, plan
     if (planningStatus && status !== planningStatus) continue;
     items.push(item);
   }
-  return { count: items.length, items: items.slice(0, DASHBOARD_BLOCK_LIMIT), status_counts: statusCounts };
+  // A page past the end (e.g. after a filter narrowed the list) shows the last page.
+  const totalPages = Math.max(1, Math.ceil(items.length / pageSize));
+  const currentPage = Math.min(page, totalPages);
+  return {
+    count: items.length,
+    items: items.slice((currentPage - 1) * pageSize, currentPage * pageSize),
+    status_counts: statusCounts,
+    page: currentPage,
+    page_size: pageSize,
+    total_pages: totalPages,
+  };
 }
 
 export async function loadErrorDuels(db, { tournamentIds }) {
@@ -565,6 +591,8 @@ export async function buildDashboard(db, user, { query = {}, now = new Date() } 
   const days = parseDaysBeforeDeadline(query.days_before_deadline);
   const planningStatus = parsePlanningStatusFilter(query.planning_status);
   const proposedTime = parseProposedTimeFilter(query.proposed_time);
+  const unplannedPage = parsePage(query.unplanned_page);
+  const unplannedPageSize = parseUnplannedPageSize(query.unplanned_page_size);
 
   const adminTournaments = await loadAdminTournaments(db, userId);
   const requestedTournamentId = text(query.tournament_id);
@@ -584,7 +612,9 @@ export async function buildDashboard(db, user, { query = {}, now = new Date() } 
     blocks.new_users = await loadNewUsers(db, { nowIso });
   }
   if (adminTournaments.length) {
-    blocks.unplanned_duels = await loadUnplannedDuels(db, { tournamentIds, nowIso, days, planningStatus, proposedTime });
+    blocks.unplanned_duels = await loadUnplannedDuels(db, {
+      tournamentIds, nowIso, days, planningStatus, proposedTime, page: unplannedPage, pageSize: unplannedPageSize,
+    });
     blocks.error_duels = await loadErrorDuels(db, { tournamentIds });
   }
   if (playerId) {
