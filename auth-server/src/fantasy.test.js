@@ -350,6 +350,39 @@ test("a full main team is locked from the main deadline", async (t) => {
   assert.equal((await commit(api, USERS.fan, CHEAP_FIVE)).status, 409);
 });
 
+test("a locked team can still be renamed; its players stay", async (t) => {
+  const db = await createDatabase(t);
+  const api = createApi(db);
+  const rename = (user, teamName) => api.call("PATCH /fantasy/:leagueId/team/name", { user, body: { team_name: teamName } });
+  assert.equal((await rename(USERS.fan, "Nobody")).status, 404);
+  await save(api, USERS.fan, CHEAP_FIVE);
+  api.clock.now = new Date(LEAGUE.late_deadline);
+  assert.equal((await rename(USERS.fan, "  ")).status, 400);
+  const result = await rename(USERS.fan, "  Road  Builders ");
+  assert.equal(result.status, 200);
+  assert.equal(result.body.team.team_name, "Road Builders");
+  assert.equal(result.body.team.state, "locked");
+  assert.deepEqual(result.body.team.players.map((player) => player.slot_id).sort(), [...CHEAP_FIVE].sort());
+  assert.equal(api.audit.at(-1).event_type, "fantasy_team.renamed");
+});
+
+test("a team can be deleted while it can be changed, not once it is locked", async (t) => {
+  const db = await createDatabase(t);
+  const api = createApi(db);
+  const remove = (user) => api.call("DELETE /fantasy/:leagueId/team", { user });
+  assert.equal((await remove(USERS.fan)).status, 404);
+  await save(api, USERS.fan, CHEAP_FIVE);
+  assert.equal((await remove(USERS.fan)).status, 200);
+  assert.equal((await state(api, USERS.fan)).body.viewer.team, null);
+  assert.equal(api.audit.at(-1).event_type, "fantasy_team.deleted");
+  // A new team can be built after the delete.
+  assert.equal((await save(api, USERS.fan, CHEAP_FIVE)).status, 201);
+  api.clock.now = new Date(LEAGUE.main_deadline);
+  const locked = await remove(USERS.fan);
+  assert.equal(locked.status, 409);
+  assert.equal(locked.body.message, "Your team is locked and cannot be deleted");
+});
+
 test("late entry: save keeps a draft, Commit locks it and starts scoring", async (t) => {
   const db = await createDatabase(t);
   const api = createApi(db);

@@ -123,7 +123,7 @@
 
   .ff-metrics {
     display: grid;
-    grid-template-columns: repeat(3, 1fr);
+    grid-template-columns: repeat(4, 1fr);
     gap: 6px;
     margin: 12px 0;
     padding: 8px;
@@ -136,6 +136,31 @@
 
   .ff-metrics strong { display: block; font-size: 15px; color: #16202a; font-variant-numeric: tabular-nums; }
   .ff-metrics .over strong { color: var(--bad-ink); }
+  .ff-info { position: relative; display: inline-block; color: #9aa1ab; font-size: 11px; cursor: help; outline: none; }
+  .ff-info:hover, .ff-info:focus-visible { color: var(--main-bg-color); }
+  .ff-info::after {
+    content: attr(data-tip);
+    position: absolute;
+    right: -6px;
+    bottom: calc(100% + 6px);
+    width: max-content;
+    max-width: 220px;
+    padding: 6px 8px;
+    border-radius: 4px;
+    background: #16202a;
+    color: #fff;
+    font-size: 12px;
+    font-weight: 500;
+    line-height: 1.35;
+    white-space: normal;
+    box-shadow: 0 6px 14px rgba(15, 28, 48, 0.2);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.12s ease;
+    z-index: 30;
+  }
+  .ff-info:hover::after, .ff-info:focus::after { opacity: 1; }
+  @media (max-width: 480px) { .ff-metrics { grid-template-columns: repeat(2, 1fr); } }
 
   .ff-slot {
     display: grid;
@@ -189,6 +214,8 @@
   .ff-btn.icon:hover:not(:disabled) { background: var(--bad-bg); color: var(--bad-ink); }
 
   .ff-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+  .ff-btn.ff-delete { margin-left: auto; color: var(--bad-ink); border-color: #fecaca; }
+  .ff-btn.ff-delete:hover:not(:disabled) { background: var(--bad-bg); }
   .ff-hint { font-size: 12px; color: var(--muted); margin-top: 8px; }
   .ff-message { font-size: 13px; margin-top: 8px; }
   .ff-message.bad { color: var(--bad-ink); }
@@ -291,6 +318,9 @@
   .ff-sort:hover, .ff-sort:focus-visible { color: var(--main-bg-color); }
   .ff-sort .ff-sort-arrow { font-size: 10px; color: #9aa1ab; }
   .ff-sort.active .ff-sort-arrow { color: var(--main-bg-color); }
+
+  /* Add / Remove in the player list: text on wide screens, an icon on mobile. */
+  .ff-pick-icon { display: none; }
 
   /* [Next match]: a small outline button next to the player. */
   .ff-next-btn {
@@ -908,7 +938,18 @@
     .ff-filters { grid-template-columns: 1fr 1fr; }
     .ff-filters .ff-search { grid-column: 1 / -1; }
     .ff-table-wrap { max-height: none; }
-    .ff-table .ff-group-cell, .ff-table .ff-assoc-cell { display: none; }
+    .ff-table .ff-group-cell, .ff-table .ff-assoc-cell, .ff-table .ff-stage-cell { display: none; }
+    .ff-sort .ff-sort-arrow.idle { display: none; }
+    .ff-pick-btn { width: 28px; padding: 0; }
+    .ff-pick-icon { display: inline; font-size: 12px; }
+    .ff-pick-text { display: none; }
+    .ff-pick-btn.ff-pick-remove { background: #fff; color: var(--muted); border-color: #c8ced8; }
+    .ff-pick-btn.ff-pick-remove:hover:not(:disabled) { background: var(--bad-bg); color: var(--bad-ink); }
+    .ff-pick-btn.ff-pick-remove .ff-pick-icon { font-size: 14px; }
+    /* Flag and nickname on one line, [Next match] under them. */
+    .ff-table .ff-player-name { flex: 1 1 calc(100% - 26px); min-width: 0; }
+    .ff-table .ff-next-btn { margin-left: 26px; }
+    .ff-table th, .ff-table td { padding: 7px 6px; }
   }
 </style>
 
@@ -926,6 +967,7 @@
   const STATE_URL = `${API_BASE}/public/fantasy/${encodeURIComponent(LEAGUE_ID)}`;
   const TEAM_URL = `${API_BASE}/fantasy/${encodeURIComponent(LEAGUE_ID)}/team`;
   const COMMIT_URL = `${TEAM_URL}/commit`;
+  const RENAME_URL = `${TEAM_URL}/name`;
   const LEADERBOARD_URL = `${STATE_URL}/leaderboard`;
   const teamDetailsUrl = (teamId) => `${STATE_URL}/teams/${encodeURIComponent(teamId)}`;
   const root = document.getElementById("cclFantasy");
@@ -1013,6 +1055,9 @@
     if (status !== "open" && status !== "late") return false;
     return !team() || team().can_edit;
   }
+
+  // A locked team (main or committed late) can still change its name, at any time.
+  const canRename = () => Boolean(data.viewer?.authenticated && team()?.locked && !canEdit());
 
   // The deadline the countdown runs to, for the current status.
   function clockTarget() {
@@ -1146,7 +1191,7 @@
   function renderTeamPanel() {
     const panel = el("div", "ff-panel");
     const head = el("div", "ff-panel-head");
-    head.append(el("h3", "", "Your team"), teamBadge());
+    head.append(el("h3", "", "My team"), teamBadge());
     panel.appendChild(head);
     const editable = canEdit();
 
@@ -1158,7 +1203,7 @@
     input.maxLength = 40;
     input.placeholder = "e.g. Meeple Masters";
     input.value = draft.team_name;
-    input.disabled = !editable;
+    input.disabled = !editable && !canRename();
     input.addEventListener("input", () => {
       draft.team_name = input.value;
       message = null;
@@ -1170,15 +1215,33 @@
     const cost = draftCost();
     const budget = Number(season().budget);
     const metrics = el("div", "ff-metrics");
-    const metric = (name, value, className = "") => {
+    const metric = (name, value, className = "", tip = "") => {
       const box = el("div", className);
-      box.append(el("span", "", name), el("strong", "", value));
+      const caption = el("span", "", name);
+      if (tip) {
+        // (i) with a tooltip on hover (and on tap / keyboard focus).
+        const info = el("span", "ff-info");
+        info.tabIndex = 0;
+        info.setAttribute("role", "img");
+        info.setAttribute("aria-label", tip);
+        info.dataset.tip = tip;
+        info.appendChild(el("i", "fa-solid fa-circle-info"));
+        caption.append(" ", info);
+      }
+      box.append(caption, el("strong", "", value));
       return box;
     };
+    // Points the picked players have already earned in the qualifiers.
+    const earned = draft.slot_ids.reduce((sum, slotId) => sum + (Number(playerBySlot(slotId)?.points) || 0), 0);
+    const lateEntry = season().status === "late" || team()?.state === "committed";
+    const pointsTip = lateEntry
+      ? "Points your players have already earned. A late team scores only matches that start after it is committed."
+      : "Points your players have already earned count towards your future ranking.";
     metrics.append(
       metric("Players", `${draft.slot_ids.length} / ${season().team_size}`),
       metric("Cost", `${credits(cost)} / ${credits(budget)}`, halves(cost) > halves(budget) ? "over" : ""),
-      metric("Remaining", credits(budget - cost), halves(cost) > halves(budget) ? "over" : "")
+      metric("Remaining", credits(budget - cost), halves(cost) > halves(budget) ? "over" : ""),
+      metric("Points", String(earned), "", pointsTip)
     );
     panel.appendChild(metrics);
 
@@ -1215,6 +1278,20 @@
     if (!box) return;
     box.innerHTML = "";
     if (!canEdit()) {
+      // A locked team keeps its players, but its name can still be changed.
+      if (canRename()) {
+        const named = draft.team_name.trim().length > 0;
+        const changed = draft.team_name.trim() !== String(team().team_name || "").trim();
+        const row = el("div", "ff-actions");
+        const renameButton = el("button", "ff-btn", "Save name");
+        renameButton.type = "button";
+        renameButton.disabled = busy || !named || !changed;
+        renameButton.addEventListener("click", () => submit("rename"));
+        row.appendChild(renameButton);
+        box.appendChild(row);
+        if (!named) box.appendChild(el("div", "ff-hint", "Enter a team name."));
+        else box.appendChild(el("div", "ff-hint", "The players of a locked team cannot change, but you can rename it."));
+      }
       if (message) box.appendChild(el("div", `ff-message ${message.kind}`, message.text));
       return;
     }
@@ -1226,7 +1303,7 @@
     const saveButton = el("button", "ff-btn", "Save");
     saveButton.type = "button";
     saveButton.disabled = busy || !named || !withinBudget || (!isDirty() && Boolean(team()));
-    saveButton.addEventListener("click", () => submit(false));
+    saveButton.addEventListener("click", () => submit("save"));
     row.appendChild(saveButton);
     if (status === "late") {
       const commitButton = el("button", "ff-btn commit", "Commit");
@@ -1234,9 +1311,20 @@
       commitButton.disabled = busy || !named || !withinBudget || !full;
       commitButton.addEventListener("click", () => {
         const ok = window.confirm("Commit locks your team for good. It scores only matches that start after now. Commit?");
-        if (ok) submit(true);
+        if (ok) submit("commit");
       });
       row.appendChild(commitButton);
+    }
+    // A saved team that is not locked yet can be deleted (and a new one built).
+    if (team()) {
+      const deleteButton = el("button", "ff-btn light ff-delete", "Delete team");
+      deleteButton.type = "button";
+      deleteButton.disabled = busy;
+      deleteButton.addEventListener("click", () => {
+        const ok = window.confirm("Delete your team? Its players and name are removed. You can build a new team afterwards.");
+        if (ok) submit("delete");
+      });
+      row.appendChild(deleteButton);
     }
     box.appendChild(row);
     const hints = [];
@@ -1480,7 +1568,7 @@
     const thead = el("thead");
     const headRow = el("tr");
     [
-      ["Player", "", "player"], ["Stage", ""], ["Group", "ff-group-cell"], ["Association", "ff-assoc-cell"], ["Price", "num", "price"],
+      ["Player", "", "player"], ["Stage", "ff-stage-cell"], ["Group", "ff-group-cell"], ["Association", "ff-assoc-cell"], ["Price", "num", "price"],
       ["Pts", "num", "points"], ...(showPicked ? [["Picked", "num", "picked"]] : []), ["", "num"],
     ].forEach(([label, className, sortColumn]) => {
       const th = el("th", className);
@@ -1489,7 +1577,7 @@
         const button = el("button", `ff-sort${arrow ? " active" : ""}`);
         button.type = "button";
         button.title = "Sort";
-        button.append(el("span", "", label), el("span", "ff-sort-arrow", arrow || "↕"));
+        button.append(el("span", "", label), el("span", `ff-sort-arrow${arrow ? "" : " idle"}`, arrow || "↕"));
         th.setAttribute("aria-sort", arrow === "▲" ? "ascending" : arrow === "▼" ? "descending" : "none");
         button.addEventListener("click", () => {
           nextSort(sortColumn);
@@ -1520,7 +1608,7 @@
       nameCell.appendChild(label);
       tr.append(
         nameCell,
-        el("td", "", player.stage),
+        el("td", "ff-stage-cell", player.stage),
         el("td", "ff-group-cell", player.group || "—"),
         el("td", "ff-assoc-cell", player.association?.name || "—"),
         el("td", "num", credits(player.price)),
@@ -1529,8 +1617,14 @@
       if (showPicked) tr.appendChild(el("td", "num", String(player.picked_by ?? 0)));
       const actionCell = el("td", "num");
       if (editable) {
-        const button = el("button", `ff-btn small${picked ? " light" : ""}`, picked ? "Remove" : "Add");
+        // Text on wide screens, an icon on mobile: + to add, × to remove (as in the My team list).
+        const button = el("button", `ff-btn small ff-pick-btn${picked ? " light ff-pick-remove" : ""}`);
         button.type = "button";
+        button.setAttribute("aria-label", `${picked ? "Remove" : "Add"} ${player.nickname}`);
+        button.append(
+          el("i", `fa-solid ${picked ? "fa-xmark" : "fa-plus"} ff-pick-icon`),
+          el("span", "ff-pick-text", picked ? "Remove" : "Add")
+        );
         if (!picked && full) {
           button.disabled = true;
           button.title = "Your team is full";
@@ -2375,29 +2469,41 @@
   function renderGuestPanel() {
     const panel = el("div", "ff-panel");
     panel.append(
-      el("h3", "", "Your team"),
+      el("h3", "", "My team"),
       el("div", "ff-hint", `Sign in to pick ${season().team_size} players within a budget of ${credits(season().budget)} credits.`)
     );
     return panel;
   }
 
-  async function submit(commit) {
+  // kind: "save" | "commit" | "rename" (the name only, also of a locked team) | "delete".
+  const REQUESTS = {
+    save: { url: TEAM_URL, method: "PUT", done: "Team saved." },
+    commit: { url: COMMIT_URL, method: "POST", done: "Your team is committed." },
+    rename: { url: RENAME_URL, method: "PATCH", done: "Team name saved." },
+    delete: { url: TEAM_URL, method: "DELETE", done: "Your team is deleted." },
+  };
+
+  async function submit(kind) {
     if (busy) return;
+    const request = REQUESTS[kind];
     busy = true;
     message = null;
     render();
     try {
-      const response = await fetch(commit ? COMMIT_URL : TEAM_URL, {
-        method: commit ? "POST" : "PUT",
+      const body = kind === "delete" ? {}
+        : kind === "rename" ? { team_name: draft.team_name.trim() }
+          : { team_name: draft.team_name.trim(), slot_ids: draft.slot_ids };
+      const response = await fetch(request.url, {
+        method: request.method,
         credentials: "include",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ team_name: draft.team_name.trim(), slot_ids: draft.slot_ids }),
+        body: JSON.stringify(body),
       });
       const result = await response.json().catch(() => ({}));
       if (!response.ok || !result.ok) throw new Error(result.message || "Saving failed. Please try again.");
-      data.viewer.team = result.team;
+      data.viewer.team = kind === "delete" ? null : result.team;
       draft = savedDraft();
-      message = { kind: "ok", text: commit ? "Your team is committed." : "Team saved." };
+      message = { kind: "ok", text: request.done };
     } catch (error) {
       message = { kind: "bad", text: error.message };
     } finally {

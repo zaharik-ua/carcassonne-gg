@@ -1034,6 +1034,77 @@ export function registerFantasyRoutes(app, {
     })
   );
 
+  // Signed-in user: changes only the team name, at any time (also of a locked team: the players stay).
+  app.patch(
+    "/fantasy/:leagueId/team/name",
+    requireAuthenticated,
+    requireTrustedJsonRequest,
+    handle("Failed to rename the team", async (req, res) => {
+      const { league } = await requireLeague(req.params.leagueId);
+      const accountId = userId(req.user);
+      if (accountId === null) throw requestError(401, "Unauthorized");
+      const teamName = text(req.body?.team_name);
+      if (!teamName) throw requestError(400, "Enter a team name");
+      if (teamName.length > TEAM_NAME_MAX) throw requestError(400, `Team name must be at most ${TEAM_NAME_MAX} characters`);
+      const existing = await loadTeam(db, league.id, accountId);
+      if (!existing) throw requestError(404, "You have no team in this league");
+      const current = now();
+      const status = getFantasyStatus(league, current);
+      if (existing.team_name !== teamName) {
+        await dbRun(db, "UPDATE fantasy_teams SET team_name = ?, updated_at = ? WHERE id = ?", [teamName, current.toISOString(), existing.id]);
+        audit(req, {
+          event_type: "fantasy_team.renamed",
+          entity_type: "fantasy_team",
+          action: "update",
+          record_id: String(existing.id),
+          changes: { team_name: { old: existing.team_name, new: teamName } },
+          metadata: { league_id: league.id },
+        });
+      }
+      const team = await dbGet(db, "SELECT * FROM fantasy_teams WHERE id = ?", [existing.id]);
+      const players = await loadTeamPlayers(db, existing.id);
+      const prices = status === "late" ? priceMap(await loadCurrentPrices(db, league.id, current.toISOString())) : new Map();
+      return res.json({ ok: true, team: teamView(team, players, league, status, prices) });
+    })
+  );
+
+  // Signed-in user: deletes their team while it can still be changed (before the main deadline,
+  // or an uncommitted late draft). A locked team cannot be deleted.
+  app.delete(
+    "/fantasy/:leagueId/team",
+    requireAuthenticated,
+    requireTrustedJsonRequest,
+    handle("Failed to delete the team", async (req, res) => {
+      const { league } = await requireLeague(req.params.leagueId);
+      const accountId = userId(req.user);
+      if (accountId === null) throw requestError(401, "Unauthorized");
+      const status = getFantasyStatus(league, now());
+      const removed = await inTransaction(db, async () => {
+        const existing = await loadTeam(db, league.id, accountId);
+        if (!existing) throw requestError(404, "You have no team in this league");
+        const players = await loadTeamPlayers(db, existing.id);
+        if (!describeTeamState(existing, players.length, league, status).can_edit) {
+          throw requestError(409, "Your team is locked and cannot be deleted");
+        }
+        await dbRun(db, "DELETE FROM fantasy_team_players WHERE team_id = ?", [existing.id]);
+        await dbRun(db, "DELETE FROM fantasy_teams WHERE id = ?", [existing.id]);
+        return { team: existing, players };
+      });
+      audit(req, {
+        event_type: "fantasy_team.deleted",
+        entity_type: "fantasy_team",
+        action: "delete",
+        record_id: String(removed.team.id),
+        changes: {
+          team_name: { old: removed.team.team_name },
+          slot_ids: { old: removed.players.map((player) => player.slot_id) },
+        },
+        metadata: { league_id: league.id, entry_type: removed.team.entry_type },
+      });
+      return res.json({ ok: true });
+    })
+  );
+
   // Leagues the viewer administers (all of them for site admins), for the Player Hub menu and page.
   app.get("/fantasy/leagues/managed", requireAuthenticated, handle("Failed to load Fantasy leagues", async (req, res) => {
     const globalAdmin = isGlobalAdmin(req.user);

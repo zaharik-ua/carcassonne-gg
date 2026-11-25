@@ -387,6 +387,115 @@
     margin-top: 10px;
   }
 
+  .noprofile-details {
+    display: grid;
+    gap: 7px;
+    margin-top: 10px;
+    color: #5f6b7a;
+    font-size: 13px;
+    line-height: 1.5;
+  }
+
+  .noprofile-details p,
+  .noprofile-details ul {
+    margin: 0;
+  }
+
+  .noprofile-details ul {
+    display: grid;
+    gap: 4px;
+    padding-left: 18px;
+  }
+
+  .noprofile-details a {
+    color: #1a73b7;
+    overflow-wrap: anywhere;
+  }
+
+  .noprofile-email-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    max-width: 100%;
+    margin: 2px 3px;
+    padding: 4px 6px;
+    border: 1px solid #d6e2f0;
+    border-radius: 4px;
+    background: #fff;
+    color: #222;
+    font-size: 13px;
+    font-weight: 600;
+    vertical-align: middle;
+  }
+
+  .noprofile-email-text {
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+
+  .noprofile-copy-wrap {
+    position: relative;
+    display: inline-flex;
+  }
+
+  .noprofile-copy-btn {
+    position: relative;
+    width: 26px;
+    height: 24px;
+    min-height: 24px;
+    padding: 0;
+  }
+
+  .noprofile-copy-btn::before,
+  .noprofile-copy-btn::after {
+    content: "";
+    position: absolute;
+    width: 9px;
+    height: 11px;
+    border: 1.5px solid currentColor;
+    border-radius: 2px;
+    box-sizing: border-box;
+  }
+
+  .noprofile-copy-btn::before {
+    left: 8px;
+    top: 5px;
+    opacity: 0.75;
+  }
+
+  .noprofile-copy-btn::after {
+    left: 11px;
+    top: 8px;
+    background: #1a73b7;
+  }
+
+  .noprofile-copy-tip {
+    position: absolute;
+    left: 50%;
+    bottom: calc(100% + 6px);
+    z-index: 2;
+    padding: 4px 7px;
+    border-radius: 4px;
+    background: #222;
+    color: #fff;
+    font-size: 11px;
+    font-weight: 600;
+    line-height: 1.2;
+    white-space: nowrap;
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+    transform: translateX(-50%) translateY(4px);
+    transition: opacity 0.15s ease, transform 0.15s ease, visibility 0s linear 0.15s;
+  }
+
+  .noprofile-copy-tip.show {
+    opacity: 1;
+    visibility: visible;
+    transform: translateX(-50%) translateY(0);
+    transition-delay: 0s;
+  }
+
   .cp-match-row {
     display: flex;
     align-items: center;
@@ -1195,6 +1304,18 @@
     background: #1a73b7;
     color: #fff;
     border-color: #1a73b7;
+  }
+
+  .cp-google-sign-in {
+    align-items: center;
+    display: inline-flex;
+    gap: 8px;
+    margin-top: 10px;
+  }
+
+  .cp-google-sign-in img {
+    height: 17px;
+    width: 17px;
   }
 
   .cp-btn-secondary {
@@ -2192,6 +2313,7 @@
 (function () {
   const AUTH_BASE = window.AUTH_BASE_URL || "https://api.carcassonne.gg";
   const ME_URL = `${AUTH_BASE}/auth/me`;
+  const GOOGLE_ICON_URL = "https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg";
   const MATCHES_URL = `${AUTH_BASE}/matches`;
   const MY_LINEUP_URL = (matchId, includePlayers = false) => (
     `${MATCHES_URL}/${encodeURIComponent(matchId)}/my-lineup${includePlayers ? "?include_players=1" : ""}`
@@ -4282,9 +4404,27 @@
     contentEl.className = "captain-alert";
     contentEl.style.display = "";
     contentEl.style.gap = "";
-    contentEl.textContent = "Please sign in to view this page.";
+    contentEl.innerHTML = "";
+    const text = document.createElement("div");
+    text.textContent = "Please sign in to view this page.";
+    contentEl.appendChild(text);
+    const signInButton = document.createElement("button");
+    signInButton.type = "button";
+    signInButton.className = "cp-btn cp-btn-secondary cp-google-sign-in";
+    signInButton.innerHTML = `<img src="${GOOGLE_ICON_URL}" alt="">Sign in with Google`;
+    signInButton.addEventListener("click", openGoogleAuth);
+    contentEl.appendChild(signInButton);
     countEl.textContent = "";
     hintEl.textContent = "";
+  }
+
+  function openGoogleAuth() {
+    const popup = window.open(
+      `${AUTH_BASE}/auth/google`,
+      "googleAuth",
+      "width=520,height=640,left=100,top=100"
+    );
+    if (!popup) window.location.href = `${AUTH_BASE}/auth/google`;
   }
 
   function renderRestrictedSectionMessage(text) {
@@ -4305,7 +4445,7 @@
     hintEl.textContent = "";
   }
 
-  function renderNoProfileInfoCard() {
+  function renderNoProfileInfoCard(email = "") {
     setPageHeading("Player Hub");
     countEl.textContent = "";
     hintEl.textContent = "";
@@ -4319,83 +4459,103 @@
 
     const warning = document.createElement("div");
     warning.className = "player-stats-line noprofile-warning";
-    warning.textContent = "The email address you used to log in to GG is not linked to a BGA account.";
+    warning.textContent = "Your carcassonne.gg account needs to be linked to your BGA account.";
     infoCard.appendChild(warning);
 
-    const gap1 = document.createElement("div");
-    gap1.className = "noprofile-gap";
-    infoCard.appendChild(gap1);
+    const details = document.createElement("div");
+    details.className = "noprofile-details";
 
-    const intro = document.createElement("div");
-    intro.className = "player-stats-line";
-    intro.textContent = "What to do:";
-    infoCard.appendChild(intro);
+    const intro = document.createElement("p");
+    intro.textContent = "To do this, ask your association captain to link it:";
+    details.appendChild(intro);
 
-    const gapIntroToStep1 = document.createElement("div");
-    gapIntroToStep1.className = "noprofile-gap";
-    infoCard.appendChild(gapIntroToStep1);
+    const loginEmail = String(email || "").trim();
+    if (loginEmail) {
+      const line = document.createElement("div");
+      line.className = "noprofile-email-line";
+      line.appendChild(document.createTextNode("Send your email "));
+      const chip = document.createElement("span");
+      chip.className = "noprofile-email-chip";
+      const emailText = document.createElement("span");
+      emailText.className = "noprofile-email-text";
+      emailText.textContent = loginEmail;
+      chip.appendChild(emailText);
+      const copyWrap = document.createElement("span");
+      copyWrap.className = "noprofile-copy-wrap";
+      const copyButton = document.createElement("button");
+      copyButton.type = "button";
+      copyButton.className = "cp-btn cp-btn-primary noprofile-copy-btn";
+      copyButton.setAttribute("aria-label", "Copy email");
+      copyButton.title = "Copy email";
+      const copyTip = document.createElement("span");
+      copyTip.className = "noprofile-copy-tip";
+      copyTip.textContent = "Copied";
+      let copyTipTimer = null;
+      copyButton.addEventListener("click", async () => {
+        try {
+          await navigator.clipboard.writeText(loginEmail);
+          copyTip.classList.add("show");
+          window.clearTimeout(copyTipTimer);
+          copyTipTimer = window.setTimeout(() => copyTip.classList.remove("show"), 2000);
+        } catch (_error) {
+          copyButton.title = "Select and copy email";
+          window.setTimeout(() => {
+            copyButton.title = "Copy email";
+          }, 1400);
+        }
+      });
+      copyWrap.appendChild(copyButton);
+      copyWrap.appendChild(copyTip);
+      chip.appendChild(copyWrap);
+      line.appendChild(chip);
+      line.appendChild(document.createTextNode(" to your association captain."));
+      details.appendChild(line);
+    } else {
+      const first = document.createElement("p");
+      first.textContent = "Send the email you use on carcassonne.gg to your association captain.";
+      details.appendChild(first);
+    }
 
-    const step1 = document.createElement("div");
-    step1.className = "player-stats-line compact";
-    step1.textContent = "1. Contact your association captain.";
-    infoCard.appendChild(step1);
+    const captains = document.createElement("p");
+    captains.appendChild(document.createTextNode("Not sure who your captain is? Find them in the "));
+    const captainsLink = document.createElement("a");
+    captainsLink.href = "https://carcassonne.gg/players/?captains=1";
+    captainsLink.target = "_blank";
+    captainsLink.rel = "noopener noreferrer";
+    captainsLink.textContent = "captains list";
+    captains.appendChild(captainsLink);
+    captains.appendChild(document.createTextNode("."));
+    details.appendChild(captains);
 
-    const step1Hint = document.createElement("div");
-    step1Hint.className = "player-stats-line compact";
-    step1Hint.innerHTML = 'If you don\'t know who it is, check here: <a href="https://carcassonne.gg/players/?captains=1" target="_blank" rel="noopener noreferrer">https://carcassonne.gg/players/?captains=1</a>';
-    infoCard.appendChild(step1Hint);
+    const captainIntro = document.createElement("p");
+    captainIntro.textContent = "Your captain needs to:";
+    details.appendChild(captainIntro);
+    const list = document.createElement("ul");
+    const openPlayersItem = document.createElement("li");
+    openPlayersItem.appendChild(document.createTextNode("Open User Menu → Player Hub → "));
+    const playersLink = document.createElement("a");
+    playersLink.href = "https://carcassonne.gg/player-hub/players/";
+    playersLink.target = "_blank";
+    playersLink.rel = "noopener noreferrer";
+    playersLink.textContent = "Players";
+    openPlayersItem.appendChild(playersLink);
+    openPlayersItem.appendChild(document.createTextNode("."));
+    list.appendChild(openPlayersItem);
+    [
+      "Open your player profile for editing (or create it if needed).",
+      "Add your carcassonne.gg sign-in email to Login Email and save the profile.",
+    ].forEach((text) => {
+      const item = document.createElement("li");
+      item.textContent = text;
+      list.appendChild(item);
+    });
+    details.appendChild(list);
 
-    const gapStep1ToStep2 = document.createElement("div");
-    gapStep1ToStep2.className = "noprofile-gap";
-    infoCard.appendChild(gapStep1ToStep2);
+    const contact = document.createElement("p");
+    contact.textContent = "If you cannot reach a captain, contact carcassonne.gg@gmail.com.";
+    details.appendChild(contact);
 
-    const step2 = document.createElement("div");
-    step2.className = "player-stats-line compact";
-    step2.textContent = "2. Send your captain the email you used to log in to carcassonne.gg.";
-    infoCard.appendChild(step2);
-
-    const gapStep2ToStep3 = document.createElement("div");
-    gapStep2ToStep3.className = "noprofile-gap";
-    infoCard.appendChild(gapStep2ToStep3);
-
-    const step3 = document.createElement("div");
-    step3.className = "player-stats-line compact";
-    step3.textContent = "3. Your captain will:";
-    infoCard.appendChild(step3);
-
-    const step3a = document.createElement("div");
-    step3a.className = "player-stats-line compact";
-    step3a.textContent = "• Open Menu → Manage Team";
-    infoCard.appendChild(step3a);
-
-    const step3b = document.createElement("div");
-    step3b.className = "player-stats-line compact";
-    step3b.textContent = "• Edit your profile (or create one if needed)";
-    infoCard.appendChild(step3b);
-
-    const step3c = document.createElement("div");
-    step3c.className = "player-stats-line compact";
-    step3c.textContent = "• Add your email to Login Email";
-    infoCard.appendChild(step3c);
-
-    const gapStep3ToOutro = document.createElement("div");
-    gapStep3ToOutro.className = "noprofile-gap";
-    infoCard.appendChild(gapStep3ToOutro);
-
-    const outro = document.createElement("div");
-    outro.className = "player-stats-line compact";
-    outro.textContent = "After that, you will get access to edit your profile.";
-    infoCard.appendChild(outro);
-
-    const contactGap = document.createElement("div");
-    contactGap.className = "noprofile-gap";
-    infoCard.appendChild(contactGap);
-
-    const contact = document.createElement("div");
-    contact.className = "player-stats-line compact";
-    contact.textContent = "If you cannot find a captain, contact us at carcassonne.gg@gmail.com.";
-    infoCard.appendChild(contact);
-
+    infoCard.appendChild(details);
     contentEl.appendChild(infoCard);
   }
 
@@ -10944,6 +11104,7 @@
       let currentUserAuthId = "";
       let currentUserPlayerId = "";
       let hasLinkedBgaId = false;
+      let currentUserEmail = "";
 
       try {
         const meRes = await fetch(ME_URL, { method: "GET", credentials: "include" });
@@ -10963,6 +11124,7 @@
           currentUserAuthId = getCurrentUserAuthId(meUser);
           currentUserPlayerId = getCurrentUserProfileId(meUser);
           hasLinkedBgaId = !!currentUserPlayerId;
+          currentUserEmail = String(meUser?.email || "").trim();
           captainAssociationCode = meAssociation;
           isCaptainUser = meIsCaptain;
         }
@@ -11003,7 +11165,7 @@
           .filter((item) => item.id && item.label);
 
         if (!sectionItems.length && isAuthenticatedUser && !hasLinkedBgaId) {
-          renderNoProfileInfoCard();
+          renderNoProfileInfoCard(currentUserEmail);
           return;
         }
 
@@ -11320,6 +11482,10 @@
 
       if (activeView === CAPTAIN_VIEWS.MATCHES && isCreateMode) {
         if (!currentTournament) {
+          if (isAuthenticatedUser && !hasLinkedBgaId) {
+            renderNoProfileInfoCard(currentUserEmail);
+            return;
+          }
           contentEl.className = "captain-alert";
           contentEl.textContent = "Tournament not found or unavailable.";
           countEl.textContent = "";
@@ -11355,6 +11521,10 @@
       }
 
       if (activeView === CAPTAIN_VIEWS.MATCHES && !filtered.length && !currentTournament) {
+        if (isAuthenticatedUser && !hasLinkedBgaId) {
+          renderNoProfileInfoCard(currentUserEmail);
+          return;
+        }
         renderNoMatchesMessage("Tournament not found or unavailable.");
         return;
       }
