@@ -75,6 +75,11 @@ const FANTASY_SQL = `
     -- The BGA nickname the owner typed while their account had no linked BGA profile. Not verified:
     -- league admins see it and ask the association captains to link the account to that player.
     claimed_bga_nickname TEXT,
+    -- Set by a league admin: a deactivated team does not score, is left out of the leaderboard and
+    -- cannot be changed or deleted by its owner, who sees the reason.
+    deactivated_at TEXT,
+    deactivation_reason TEXT,
+    deactivated_by TEXT,
     created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
     UNIQUE (league_id, user_id),
@@ -115,6 +120,7 @@ export const SEED_LEAGUES = [
 export const FANTASY_STAGES = ["Q1", "Q2", "Q3", "Main"];
 export const TEAM_NAME_MAX = 40;
 export const BGA_NICKNAME_MAX = 40;
+export const DEACTIVATION_REASON_MAX = 300;
 const LEAGUE_NAME_MAX = 80;
 
 const text = (value) => String(value ?? "").trim().replace(/\s+/g, " ");
@@ -171,7 +177,9 @@ export async function ensureFantasySchema(db) {
   await dbExec(db, FANTASY_SQL);
   // Columns added after the table was first created.
   const teamColumns = new Set((await dbAll(db, "PRAGMA table_info(fantasy_teams)")).map((column) => column.name));
-  if (!teamColumns.has("claimed_bga_nickname")) await dbRun(db, "ALTER TABLE fantasy_teams ADD COLUMN claimed_bga_nickname TEXT");
+  for (const column of ["claimed_bga_nickname", "deactivated_at", "deactivation_reason", "deactivated_by"]) {
+    if (!teamColumns.has(column)) await dbRun(db, `ALTER TABLE fantasy_teams ADD COLUMN ${column} TEXT`);
+  }
   for (const league of SEED_LEAGUES) {
     await dbRun(
       db,
@@ -228,9 +236,14 @@ export function describeTeamState(team, playerCount, league, status) {
   else if (status === "closed") state = "not_entered";
   else if (status === "open" && complete) state = "complete";
   else state = "draft";
+  // A deactivated team neither scores nor changes; reactivation brings back the state it would have.
+  if (team.deactivated_at) {
+    return { state: "deactivated", deactivated: true, locked: false, can_edit: false, can_commit: false };
+  }
   const locked = state === "committed" || state === "locked";
   return {
     state,
+    deactivated: false,
     locked,
     can_edit: !locked && (status === "open" || status === "late"),
     can_commit: !locked && status === "late" && complete,
@@ -259,6 +272,8 @@ export function normalizeClaimedNickname(body) {
   if (nickname.length > BGA_NICKNAME_MAX) return { error: `BGA nickname must be at most ${BGA_NICKNAME_MAX} characters` };
   return { value: nickname || null };
 }
+
+const DEACTIVATED_MESSAGE = "Your team has been deactivated by the league organisers and cannot be changed";
 
 // An account is linked to BGA when it has a player profile (users.bga_id → profiles).
 const hasLinkedBga = (user) => Boolean(text(user?.player_id));
@@ -729,6 +744,8 @@ function teamView(team, players, league, status, currentPrices = new Map()) {
     locked_at: team.locked_at || null,
     scoring_from: team.scoring_from || null,
     claimed_bga_nickname: team.claimed_bga_nickname || null,
+    deactivated_at: team.deactivated_at || null,
+    deactivation_reason: team.deactivated_at ? team.deactivation_reason || null : null,
     updated_at: team.updated_at,
     cost: costHalves / 2,
     over_budget: overBudget,
@@ -811,7 +828,7 @@ export function registerFantasyRoutes(app, {
     // managers can follow or avoid the crowd; after it only the teams that score count.
     const afterMain = status === "late" || status === "closed";
     const pickedBy = new Map();
-    for (const entry of scores.teams.filter((item) => !afterMain || item.scoring)) {
+    for (const entry of scores.teams.filter((item) => !item.state.deactivated && (!afterMain || item.scoring))) {
       for (const player of entry.players) pickedBy.set(idKey(player.slot_id), (pickedBy.get(idKey(player.slot_id)) || 0) + 1);
     }
     const players = pool.map((player) => ({
@@ -823,7 +840,7 @@ export function registerFantasyRoutes(app, {
     // Teams formed: before the main deadline the complete saved teams, after it the teams that score.
     const teamsFormed = scores.teams.filter((entry) => (afterMain
       ? entry.scoring
-      : entry.players.length === Number(league.team_size))).length;
+      : !entry.state.deactivated && entry.players.length === Number(league.team_size))).length;
     return res.json({
       ok: true,
       league: leagueView(league, status),
@@ -951,9 +968,9 @@ export function registerFantasyRoutes(app, {
     const result = await inTransaction(db, async () => {
       const existing = await loadTeam(db, league.id, accountId);
       const existingPlayers = existing ? await loadTeamPlayers(db, existing.id) : [];
-      if (existing && describeTeamState(existing, existingPlayers.length, league, status).locked) {
-        throw requestError(409, "Your team is locked and cannot be changed");
-      }
+      const existingState = existing ? describeTeamState(existing, existingPlayers.length, league, status) : null;
+      if (existingState?.deactivated) throw requestError(409, DEACTIVATED_MESSAGE);
+      if (existingState?.locked) throw requestError(409, "Your team is locked and cannot be changed");
       const claimedNickname = claimedNicknameFor(req.user, sentNickname, existing);
 
       // Before the main deadline players kept in the team keep their price; new ones are bought at today's price.
@@ -1095,6 +1112,7 @@ export function registerFantasyRoutes(app, {
       if (nickname.error) throw requestError(400, nickname.error);
       const existing = await loadTeam(db, league.id, accountId);
       if (!existing) throw requestError(404, "You have no team in this league");
+      if (existing.deactivated_at) throw requestError(409, DEACTIVATED_MESSAGE);
       const claimedNickname = claimedNicknameFor(req.user, nickname.value, existing);
       const current = now();
       const status = getFantasyStatus(league, current);
@@ -1140,6 +1158,7 @@ export function registerFantasyRoutes(app, {
         const existing = await loadTeam(db, league.id, accountId);
         if (!existing) throw requestError(404, "You have no team in this league");
         const players = await loadTeamPlayers(db, existing.id);
+        if (existing.deactivated_at) throw requestError(409, DEACTIVATED_MESSAGE);
         if (!describeTeamState(existing, players.length, league, status).can_edit) {
           throw requestError(409, "Your team is locked and cannot be deleted");
         }
@@ -1270,7 +1289,7 @@ export function registerFantasyRoutes(app, {
         points: scored ? scored.points : null,
       });
     }
-    const counts = { total: teams.length, complete: 0, drafts: 0, late: 0, committed: 0 };
+    const counts = { total: teams.length, complete: 0, drafts: 0, late: 0, committed: 0, deactivated: 0 };
     const rows = teams.map((team) => {
       const players = picksByTeam.get(team.id) || [];
       const state = describeTeamState(team, players.length, league, status);
@@ -1278,6 +1297,7 @@ export function registerFantasyRoutes(app, {
       else counts.drafts += 1;
       if (team.entry_type === "late") counts.late += 1;
       if (state.state === "committed") counts.committed += 1;
+      if (state.deactivated) counts.deactivated += 1;
       return {
         team_id: team.id,
         team_name: team.team_name,
@@ -1290,6 +1310,9 @@ export function registerFantasyRoutes(app, {
         email: text(team.account_email) || null,
         entry_type: team.entry_type,
         state: state.state,
+        deactivated_at: team.deactivated_at || null,
+        deactivation_reason: team.deactivated_at ? team.deactivation_reason || null : null,
+        deactivated_by: team.deactivated_at ? team.deactivated_by || null : null,
         saved_at: team.updated_at,
         // A full main team is locked by the main deadline itself.
         locked_at: team.locked_at || (state.state === "locked" ? league.main_deadline : null),
@@ -1303,6 +1326,56 @@ export function registerFantasyRoutes(app, {
   }));
 
   // Site admins: who administers a league.
+  // League admins: deactivates a team (with a reason the owner sees) or brings it back.
+  const setTeamDeactivation = async (req, deactivate) => {
+    const { league } = await requireLeagueAdmin(req.user, req.params.leagueId);
+    const teamId = Number(req.params.teamId);
+    const team = Number.isInteger(teamId)
+      ? await dbGet(db, "SELECT * FROM fantasy_teams WHERE id = ? AND upper(trim(league_id)) = upper(trim(?))", [teamId, league.id])
+      : null;
+    if (!team) throw requestError(404, "Team not found");
+    const reason = text(req.body?.reason);
+    if (deactivate) {
+      if (!reason) throw requestError(400, "Enter the reason for the deactivation");
+      if (reason.length > DEACTIVATION_REASON_MAX) {
+        throw requestError(400, `The reason must be at most ${DEACTIVATION_REASON_MAX} characters`);
+      }
+    }
+    const at = deactivate ? now().toISOString() : null;
+    const by = deactivate ? actorLabel(req.user) : null;
+    await dbRun(
+      db,
+      "UPDATE fantasy_teams SET deactivated_at = ?, deactivation_reason = ?, deactivated_by = ? WHERE id = ?",
+      [at, deactivate ? reason : null, by, team.id]
+    );
+    audit(req, {
+      event_type: deactivate ? "fantasy_team.deactivated" : "fantasy_team.reactivated",
+      entity_type: "fantasy_team",
+      action: "update",
+      record_id: String(team.id),
+      changes: {
+        deactivated_at: { old: team.deactivated_at || null, new: at },
+        deactivation_reason: { old: team.deactivation_reason || null, new: deactivate ? reason : null },
+      },
+      metadata: { league_id: league.id, team_name: team.team_name, user_id: team.user_id },
+    });
+    return { team_id: team.id, deactivated_at: at, deactivation_reason: deactivate ? reason : null, deactivated_by: by };
+  };
+
+  app.post(
+    "/fantasy/:leagueId/teams/:teamId/deactivate",
+    requireAuthenticated,
+    requireTrustedJsonRequest,
+    handle("Failed to deactivate the team", async (req, res) => res.json({ ok: true, team: await setTeamDeactivation(req, true) }))
+  );
+
+  app.post(
+    "/fantasy/:leagueId/teams/:teamId/reactivate",
+    requireAuthenticated,
+    requireTrustedJsonRequest,
+    handle("Failed to reactivate the team", async (req, res) => res.json({ ok: true, team: await setTeamDeactivation(req, false) }))
+  );
+
   app.get("/fantasy/:leagueId/admins", requireAuthenticated, handle("Failed to load league admins", async (req, res) => {
     const { league } = await requireGlobalAdmin(req.user, req.params.leagueId);
     const admins = await dbAll(

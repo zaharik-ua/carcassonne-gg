@@ -218,6 +218,17 @@
   .ff-btn.ff-delete:hover:not(:disabled) { background: var(--bad-bg); }
   .ff-hint { font-size: 12px; color: var(--muted); margin-top: 8px; }
   .ff-message { font-size: 13px; margin-top: 8px; }
+  .ff-deactivated {
+    display: grid;
+    gap: 4px;
+    margin-bottom: 12px;
+    padding: 10px 12px;
+    border: 1px solid #fecaca;
+    border-radius: 6px;
+    background: var(--bad-bg);
+    color: var(--bad-ink);
+    font-size: 13px;
+  }
   .ff-message.bad { color: var(--bad-ink); }
   .ff-message.ok { color: var(--ok-ink); }
 
@@ -1135,6 +1146,11 @@
       note.textContent = `Team building opens ${formatUtc(season().opens_at)}. You can already look at the players and prices.`;
       return note;
     }
+    if (saved?.state === "deactivated") {
+      note.classList.add("bad");
+      note.textContent = "Your team has been deactivated by the league organisers. See the reason under My team.";
+      return note;
+    }
     if (status === "closed") {
       note.classList.add(saved && saved.locked ? "ok" : "warn");
       note.textContent = saved && saved.locked
@@ -1175,6 +1191,7 @@
   function teamBadge() {
     const saved = team();
     const count = draft.slot_ids.length;
+    if (saved?.state === "deactivated") return el("span", "ff-badge bad", "Deactivated");
     if (saved?.state === "locked") return el("span", "ff-badge ok", "Locked");
     if (saved?.state === "committed") return el("span", "ff-badge ok", "Committed");
     if (saved?.state === "not_entered") return el("span", "ff-badge bad", "Not entered");
@@ -1202,6 +1219,14 @@
     const head = el("div", "ff-panel-head");
     head.append(el("h3", "", "My team"), teamBadge());
     panel.appendChild(head);
+    // Deactivated by the league organisers: the team does not score and cannot be changed.
+    if (team()?.state === "deactivated") {
+      const notice = el("div", "ff-deactivated");
+      notice.appendChild(el("strong", "", "Your team has been deactivated by the league organisers."));
+      notice.appendChild(el("div", "", "It does not score and is not shown in the leaderboard."));
+      if (team().deactivation_reason) notice.appendChild(el("div", "", `Reason: ${team().deactivation_reason}`));
+      panel.appendChild(notice);
+    }
     const editable = canEdit();
 
     const field = el("div", "ff-field");

@@ -203,14 +203,18 @@ test("team state: full main teams lock at the main deadline, late teams only by 
   const main = { entry_type: "main", locked_at: null };
   const late = { entry_type: "late", locked_at: null };
   const committed = { entry_type: "late", locked_at: "2026-11-30T12:00:00.000Z" };
-  assert.deepEqual(describeTeamState(main, 5, LEAGUE, "open"), { state: "complete", locked: false, can_edit: true, can_commit: false });
-  assert.deepEqual(describeTeamState(main, 3, LEAGUE, "open"), { state: "draft", locked: false, can_edit: true, can_commit: false });
-  assert.deepEqual(describeTeamState(main, 5, LEAGUE, "late"), { state: "locked", locked: true, can_edit: false, can_commit: false });
-  assert.deepEqual(describeTeamState(main, 3, LEAGUE, "late"), { state: "draft", locked: false, can_edit: true, can_commit: false });
-  assert.deepEqual(describeTeamState(late, 5, LEAGUE, "late"), { state: "draft", locked: false, can_edit: true, can_commit: true });
-  assert.deepEqual(describeTeamState(committed, 5, LEAGUE, "late"), { state: "committed", locked: true, can_edit: false, can_commit: false });
+  assert.deepEqual(describeTeamState(main, 5, LEAGUE, "open"), { state: "complete", deactivated: false, locked: false, can_edit: true, can_commit: false });
+  assert.deepEqual(describeTeamState(main, 3, LEAGUE, "open"), { state: "draft", deactivated: false, locked: false, can_edit: true, can_commit: false });
+  assert.deepEqual(describeTeamState(main, 5, LEAGUE, "late"), { state: "locked", deactivated: false, locked: true, can_edit: false, can_commit: false });
+  assert.deepEqual(describeTeamState(main, 3, LEAGUE, "late"), { state: "draft", deactivated: false, locked: false, can_edit: true, can_commit: false });
+  assert.deepEqual(describeTeamState(late, 5, LEAGUE, "late"), { state: "draft", deactivated: false, locked: false, can_edit: true, can_commit: true });
+  assert.deepEqual(describeTeamState(committed, 5, LEAGUE, "late"), { state: "committed", deactivated: false, locked: true, can_edit: false, can_commit: false });
   assert.equal(describeTeamState(late, 5, LEAGUE, "closed").state, "not_entered");
   assert.equal(describeTeamState(main, 5, LEAGUE, "closed").state, "locked");
+  assert.deepEqual(
+    describeTeamState({ ...main, deactivated_at: "2026-11-25T00:00:00.000Z" }, 5, LEAGUE, "late"),
+    { state: "deactivated", deactivated: true, locked: false, can_edit: false, can_commit: false }
+  );
 });
 
 test("team input needs a name and at most 5 different players", () => {
@@ -514,7 +518,7 @@ test("league admins and site admins get every team with its players", async (t) 
   assert.equal((await teams(api, USERS.stranger)).status, 403);
   const result = await teams(api, USERS.leagueAdmin);
   assert.equal(result.status, 200);
-  assert.deepEqual(result.body.counts, { total: 3, complete: 2, drafts: 1, late: 1, committed: 1 });
+  assert.deepEqual(result.body.counts, { total: 3, complete: 2, drafts: 1, late: 1, committed: 1, deactivated: 0 });
   const jan = result.body.teams.find((team) => team.team_name === "Jan's Five");
   assert.equal(jan.owner, "Jan");
   assert.equal(jan.state, "locked");
@@ -885,4 +889,48 @@ test("applying a plan backs up, writes the prices and refuses stale or edited pl
     await all(db, "SELECT price, effective_from FROM fantasy_prices WHERE slot_id = 's4' ORDER BY effective_from"),
     [{ price: 8, effective_from: "2026-11-24T00:00:00.000Z" }, { price: 9, effective_from: "2026-12-01T00:00:00.000Z" }]
   );
+});
+
+test("a league admin deactivates a team with a reason: it leaves the leaderboard and its owner sees why", async (t) => {
+  const db = await createDatabase(t);
+  const api = createApi(db);
+  const saved = await save(api, USERS.fan, CHEAP_FIVE);
+  await save(api, USERS.other, CHEAP_FIVE, "Other Five");
+  const teamId = saved.body.team.id;
+  const deactivate = (user, body, id = teamId) => api.call("POST /fantasy/:leagueId/teams/:teamId/deactivate", { user, params: { teamId: String(id) }, body });
+  const reactivate = (user) => api.call("POST /fantasy/:leagueId/teams/:teamId/reactivate", { user, params: { teamId: String(teamId) } });
+
+  assert.equal((await deactivate(USERS.stranger, { reason: "x" })).status, 403);
+  assert.equal((await deactivate(USERS.admin, { reason: "  " })).status, 400);
+  assert.equal((await deactivate(USERS.admin, { reason: "x".repeat(301) })).status, 400);
+  assert.equal((await deactivate(USERS.admin, { reason: "x" }, 9999)).status, 404);
+  const done = await deactivate(USERS.admin, { reason: " Second account of the same player " });
+  assert.equal(done.status, 200);
+  assert.equal(done.body.team.deactivation_reason, "Second account of the same player");
+  assert.equal(api.audit.at(-1).event_type, "fantasy_team.deactivated");
+
+  const own = (await state(api, USERS.fan)).body.viewer.team;
+  assert.equal(own.state, "deactivated");
+  assert.equal(own.deactivation_reason, "Second account of the same player");
+  assert.equal(own.can_edit, false);
+  assert.equal((await save(api, USERS.fan, CHEAP_FIVE)).status, 409);
+  assert.equal((await api.call("DELETE /fantasy/:leagueId/team", { user: USERS.fan })).status, 409);
+  assert.equal((await api.call("PATCH /fantasy/:leagueId/team/name", { user: USERS.fan, body: { team_name: "New" } })).status, 409);
+  assert.equal((await state(api)).body.teams_formed, 1);
+
+  api.clock.now = LATE;
+  const board = (await leaderboard(api, USERS.fan)).body;
+  assert.deepEqual(board.teams.map((row) => row.team_name), ["Other Five"]);
+  assert.equal(board.my_team_id, null);
+  assert.equal((await teamDetails(api, teamId)).status, 404);
+  const admin = await teams(api, USERS.leagueAdmin);
+  assert.equal(admin.body.counts.deactivated, 1);
+  const row = admin.body.teams.find((item) => item.team_id === teamId);
+  assert.equal(row.state, "deactivated");
+  assert.equal(row.deactivated_by, "admin@example.com");
+  assert.equal(row.points, null);
+
+  assert.equal((await reactivate(USERS.leagueAdmin)).status, 200);
+  assert.equal((await state(api, USERS.fan)).body.viewer.team.state, "locked");
+  assert.equal((await leaderboard(api)).body.teams.length, 2);
 });

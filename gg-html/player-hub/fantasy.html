@@ -91,6 +91,11 @@
   .fl-table th, .fl-table td { padding: 6px 8px; border-bottom: 1px solid #eef2f6; text-align: left; vertical-align: top; }
   .fl-table th { color: var(--muted); font-weight: 600; background: #f5f7fa; }
   .fl-tag { font-size: 11px; font-weight: 600; padding: 1px 6px; border-radius: 999px; background: #fef3c7; color: #92400e; white-space: nowrap; }
+  .fl-tag.bad { background: #fee2e2; color: var(--bad); }
+  .fl-reason { font-size: 12px; color: var(--muted); margin-top: 2px; }
+  .fl-deactivate { display: grid; gap: 6px; min-width: 220px; }
+  .fl-btn.small { height: 28px; padding: 0 10px; font-size: 12px; }
+  .fl-btn.danger { background: #fff; color: var(--bad); border-color: #fecaca; }
   .fl-table .num { text-align: right; font-variant-numeric: tabular-nums; }
 </style>
 
@@ -106,7 +111,7 @@
   const leagueUrl = (id, suffix = "") => `${AUTH_BASE}/fantasy/${encodeURIComponent(id)}${suffix}`;
   const root = document.getElementById("fantasyLeagues");
   const STATUS_LABELS = { upcoming: "Not open yet", open: "Open", late: "Late entry", closed: "Closed" };
-  const STATE_LABELS = { complete: "Complete", draft: "Draft", locked: "Locked", committed: "Committed", not_entered: "Not entered" };
+  const STATE_LABELS = { complete: "Complete", draft: "Draft", locked: "Locked", committed: "Committed", not_entered: "Not entered", deactivated: "Deactivated" };
 
   function el(tag, className, textContent) {
     const node = document.createElement(tag);
@@ -212,13 +217,13 @@
   function downloadCsv(league, teams) {
     const quote = (value) => `"${String(value ?? "").replace(/"/g, '""')}"`;
     const rows = [[
-      "team_id", "team_name", "user_id", "owner", "bga_nickname", "claimed_bga_nickname", "account_name", "email", "entry_type", "status", "saved_at", "locked_at",
+      "team_id", "team_name", "user_id", "owner", "bga_nickname", "claimed_bga_nickname", "account_name", "email", "entry_type", "status", "deactivated_at", "deactivation_reason", "deactivated_by", "saved_at", "locked_at",
       "scoring_from", "record_id", "player", "stage", "price_at_pick", "player_points", "team_points",
     ]];
     teams.forEach((team) => {
       const base = [
         team.team_id, team.team_name, team.user_id, team.owner, team.bga_nickname, team.claimed_bga_nickname, team.account_name, team.email, team.entry_type, team.state,
-        team.saved_at, team.locked_at, team.scoring_from,
+        team.deactivated_at, team.deactivation_reason, team.deactivated_by, team.saved_at, team.locked_at, team.scoring_from,
       ];
       (team.players.length ? team.players : [null]).forEach((player) => {
         // Points are empty for drafts: only locked teams score.
@@ -250,17 +255,84 @@
     return cell;
   }
 
+  function statusCell(team) {
+    const cell = el("td");
+    if (team.state === "deactivated") {
+      cell.appendChild(el("span", "fl-tag bad", "Deactivated"));
+      if (team.deactivation_reason) cell.appendChild(el("div", "fl-reason", team.deactivation_reason));
+      const by = [team.deactivated_by, team.deactivated_at ? formatUtc(team.deactivated_at) : ""].filter(Boolean).join(" · ");
+      if (by) cell.appendChild(el("div", "fl-reason", by));
+    } else {
+      cell.textContent = `${STATE_LABELS[team.state] || team.state}${team.entry_type === "late" ? " (late)" : ""}`;
+    }
+    return cell;
+  }
+
+  // Deactivate asks for a reason, which the owner sees under My team; Reactivate brings the team back.
+  function actionsCell(league, team, reload) {
+    const cell = el("td");
+    const status = el("div", "fl-message");
+    const post = async (action, body, button) => {
+      button.disabled = true;
+      try {
+        await request(leagueUrl(league.id, `/teams/${encodeURIComponent(team.team_id)}/${action}`), { method: "POST", body: JSON.stringify(body) });
+        reload();
+      } catch (error) {
+        message(status, "bad", error.message);
+        button.disabled = false;
+      }
+    };
+    if (team.state === "deactivated") {
+      const reactivate = el("button", "fl-btn light small", "Reactivate");
+      reactivate.type = "button";
+      reactivate.addEventListener("click", () => {
+        if (window.confirm(`Reactivate "${team.team_name}"? It will score and show in the leaderboard again.`)) post("reactivate", {}, reactivate);
+      });
+      cell.append(reactivate, status);
+      return cell;
+    }
+    const open = el("button", "fl-btn danger small", "Deactivate");
+    open.type = "button";
+    open.addEventListener("click", () => {
+      cell.innerHTML = "";
+      const form = el("form", "fl-deactivate");
+      const reason = el("input", "fl-input");
+      reason.maxLength = 300;
+      reason.placeholder = "Reason (the owner sees it)";
+      const row = el("div", "fl-row");
+      const confirm = el("button", "fl-btn small", "Deactivate");
+      confirm.type = "submit";
+      const cancel = el("button", "fl-btn light small", "Cancel");
+      cancel.type = "button";
+      cancel.addEventListener("click", () => cell.replaceWith(actionsCell(league, team, reload)));
+      row.append(confirm, cancel);
+      form.append(reason, row, status);
+      form.addEventListener("submit", (event) => {
+        event.preventDefault();
+        if (!reason.value.trim()) {
+          message(status, "bad", "Enter the reason.");
+          return;
+        }
+        post("deactivate", { reason: reason.value.trim() }, confirm);
+      });
+      cell.appendChild(form);
+      reason.focus();
+    });
+    cell.append(open, status);
+    return cell;
+  }
+
   function renderTeams(league) {
     const box = el("div");
     box.appendChild(el("div", "fl-section-title", "Teams"));
     const body = el("div", "", "Loading teams…");
     box.appendChild(body);
-    request(leagueUrl(league.id, "/teams")).then((data) => {
+    const load = () => request(leagueUrl(league.id, "/teams")).then((data) => {
       body.innerHTML = "";
       const counts = data.counts || {};
       const row = el("div", "fl-row");
       row.appendChild(el("span", "", `Teams: ${counts.total || 0} · complete: ${counts.complete || 0} · drafts: ${counts.drafts || 0}`
-        + ` · late: ${counts.late || 0} · committed: ${counts.committed || 0}`));
+        + ` · late: ${counts.late || 0} · committed: ${counts.committed || 0} · deactivated: ${counts.deactivated || 0}`));
       const download = el("button", "fl-btn light", "Download CSV");
       download.type = "button";
       download.disabled = !data.teams.length;
@@ -271,7 +343,7 @@
       const wrap = el("div", "fl-table-wrap");
       const table = el("table", "fl-table");
       const headRow = el("tr");
-      [["Team", ""], ["BGA name", ""], ["Email", ""], ["Status", ""]]
+      [["Team", ""], ["BGA name", ""], ["Email", ""], ["Status", ""], ["", ""]]
         .forEach(([label, className]) => headRow.appendChild(el("th", className, label)));
       const thead = el("thead");
       thead.appendChild(headRow);
@@ -284,7 +356,8 @@
           // The account is shown only when no BGA profile is linked: "Name (email)".
           el("td", "", team.bga_nickname ? "" : (team.account_name && team.email ? `${team.account_name} (${team.email})`
             : team.email || team.account_name || `user ${team.user_id}`)),
-          el("td", "", `${STATE_LABELS[team.state] || team.state}${team.entry_type === "late" ? " (late)" : ""}`)
+          statusCell(team),
+          actionsCell(league, team, load)
         );
         tbody.appendChild(tr);
       });
@@ -295,6 +368,7 @@
       body.innerHTML = "";
       body.appendChild(el("div", "fl-message bad", error.message));
     });
+    load();
     return box;
   }
 
