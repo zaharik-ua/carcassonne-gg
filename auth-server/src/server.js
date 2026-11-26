@@ -64,6 +64,7 @@ import { ensureEventsSchema, registerEventRoutes } from "./events.js";
 import { registerCclCaseRoutes, restoreDuelResult, snapshotDuelResult } from "./ccl-cases.js";
 import { registerDuelGameBgaResultRoutes } from "./duel-game-bga-result.js";
 import { registerBgaPlayerAvatarRoutes } from "./bga-player-avatar.js";
+import { registerMonobankJarRoutes } from "./monobank-jar.js";
 import { ensureInPersonSchema } from "./in-person/schema.js";
 import { createRequireInPersonTournamentAdmin } from "./in-person/access.js";
 import { registerInPersonRoutes } from "./in-person/routes.js";
@@ -8628,6 +8629,11 @@ registerDuelGameBgaResultRoutes(app, {
 
 registerBgaPlayerAvatarRoutes(app, {
   fetchBgaPlayerAvatar: runBgaPlayerLookup,
+});
+
+registerMonobankJarRoutes(app, {
+  token: process.env.MONOBANK_TOKEN,
+  sendId: process.env.MONOBANK_JAR_SEND_ID,
 });
 
 function requireActorAuthenticated(req, res, next) {

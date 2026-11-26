@@ -1,0 +1,146 @@
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+<style>
+  .gg-jar {
+    box-sizing: border-box;
+    width: 100%;
+    max-width: 175px;
+    font-family: 'Montserrat', sans-serif;
+    color: #1a1a1a;
+    background: #fff;
+    border-radius: 16px;
+    overflow: hidden;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.12);
+  }
+  .gg-jar *, .gg-jar *::before, .gg-jar *::after { box-sizing: border-box; }
+  .gg-jar-top {
+    position: relative;
+    padding: 12px 10px 10px;
+    text-align: center;
+    color: #fff;
+    background: linear-gradient(160deg, #8f6bff 0%, #ff5d8f 55%, #ffad5c 100%);
+  }
+  .gg-jar-icon { display: block; width: 46px; height: 58px; margin: 0 auto 6px; }
+  .gg-jar-title { margin: 0; font-size: 13px; font-weight: 700; line-height: 1.25; }
+  .gg-jar-text { margin: 4px 0 0; font-size: 11px; font-weight: 500; line-height: 1.35; opacity: 0.95; }
+  .gg-jar-body { padding: 10px 10px 12px; }
+  .gg-jar-stats { display: flex; justify-content: space-between; gap: 6px; }
+  .gg-jar-stat-label { font-size: 10px; font-weight: 500; color: #7a7a7a; }
+  .gg-jar-stat-value { font-size: 13px; font-weight: 700; white-space: nowrap; }
+  .gg-jar-stat-goal { text-align: right; }
+  .gg-jar-bar {
+    height: 6px;
+    margin: 7px 0 4px;
+    border-radius: 3px;
+    background: #ececec;
+    overflow: hidden;
+  }
+  .gg-jar-bar-fill {
+    width: 0;
+    height: 100%;
+    border-radius: 3px;
+    background: linear-gradient(90deg, #8f6bff, #ff5d8f);
+    transition: width 0.8s ease;
+  }
+  .gg-jar-percent { font-size: 10px; font-weight: 600; color: #7a7a7a; text-align: right; }
+  .gg-jar-loading .gg-jar-stat-value,
+  .gg-jar-loading .gg-jar-percent { color: transparent; background: #ececec; border-radius: 3px; }
+  .gg-jar-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    width: 100%;
+    margin-top: 10px;
+    padding: 10px 8px;
+    border-radius: 12px;
+    background: #000;
+    color: #fff !important;
+    font-size: 13px;
+    font-weight: 600;
+    text-decoration: none !important;
+    transition: background 0.15s ease, transform 0.15s ease;
+  }
+  .gg-jar-btn:hover { background: #2b2b2b; }
+  .gg-jar-btn:active { transform: scale(0.97); }
+  .gg-jar-note { margin: 6px 0 0; font-size: 9.5px; line-height: 1.3; color: #8a8a8a; text-align: center; }
+</style>
+
+<div class="gg-jar gg-jar-loading" id="gg-jar">
+  <div class="gg-jar-top">
+    <svg class="gg-jar-icon" viewBox="0 0 46 58" aria-hidden="true">
+      <defs>
+        <clipPath id="gg-jar-clip">
+          <path d="M9 14h28c3 0 5 2 5 5v30c0 4-3 7-7 7H11c-4 0-7-3-7-7V19c0-3 2-5 5-5z" />
+        </clipPath>
+      </defs>
+      <rect x="11" y="2" width="24" height="8" rx="3" fill="#fff" />
+      <path d="M9 14h28c3 0 5 2 5 5v30c0 4-3 7-7 7H11c-4 0-7-3-7-7V19c0-3 2-5 5-5z" fill="rgba(255,255,255,0.28)" stroke="#fff" stroke-width="2" />
+      <rect id="gg-jar-level" x="0" y="56" width="46" height="42" fill="#fff" clip-path="url(#gg-jar-clip)" />
+    </svg>
+    <p class="gg-jar-title">Keep carcassonne.gg online</p>
+    <p class="gg-jar-text">Help us renew the domain for another year. Free &amp; ad-free.</p>
+  </div>
+  <div class="gg-jar-body">
+    <div class="gg-jar-progress" id="gg-jar-progress">
+      <div class="gg-jar-stats">
+        <div>
+          <div class="gg-jar-stat-label">Raised</div>
+          <div class="gg-jar-stat-value" id="gg-jar-raised">0000</div>
+        </div>
+        <div class="gg-jar-stat-goal">
+          <div class="gg-jar-stat-label">Goal</div>
+          <div class="gg-jar-stat-value" id="gg-jar-goal">0000</div>
+        </div>
+      </div>
+      <div class="gg-jar-bar"><div class="gg-jar-bar-fill" id="gg-jar-fill"></div></div>
+      <div class="gg-jar-percent" id="gg-jar-percent">00%</div>
+    </div>
+    <a class="gg-jar-btn" id="gg-jar-btn" href="https://send.monobank.ua/jar/55tWhDvC2j" target="_blank" rel="noopener">
+      💛 Donate
+    </a>
+    <p class="gg-jar-note">via monobank · any card,<br>Apple Pay or Google Pay</p>
+  </div>
+</div>
+
+<script>
+  (function () {
+    var API_URL = "https://api.carcassonne.gg/public/donation-jar";
+    var SYMBOLS = { UAH: "₴", USD: "$", EUR: "€" };
+    var root = document.getElementById("gg-jar");
+    if (!root) return;
+
+    function money(value, currency) {
+      var symbol = SYMBOLS[currency];
+      var text = Math.floor(value).toLocaleString("en-US");
+      return symbol ? symbol + text : text + " " + currency;
+    }
+
+    function hideProgress() {
+      document.getElementById("gg-jar-progress").style.display = "none";
+      root.classList.remove("gg-jar-loading");
+    }
+
+    fetch(API_URL)
+      .then(function (response) { return response.ok ? response.json() : null; })
+      .then(function (data) {
+        if (!data || !data.ok || typeof data.balance !== "number") return hideProgress();
+        var goal = data.goal;
+        var percent = goal ? Math.min(100, Math.round((data.balance / goal) * 100)) : null;
+
+        document.getElementById("gg-jar-raised").textContent = money(data.balance, data.currency);
+        document.getElementById("gg-jar-goal").textContent = goal ? money(goal, data.currency) : "—";
+        document.getElementById("gg-jar-percent").textContent = percent === null ? "" : percent + "%";
+        root.classList.remove("gg-jar-loading");
+        if (data.url) document.getElementById("gg-jar-btn").href = data.url;
+
+        requestAnimationFrame(function () {
+          var level = percent === null ? 0 : percent;
+          document.getElementById("gg-jar-fill").style.width = level + "%";
+          // Jar body spans y=14..56 in the icon.
+          document.getElementById("gg-jar-level").setAttribute("y", String(56 - (42 * level) / 100));
+        });
+      })
+      .catch(hideProgress);
+  })();
+</script>
