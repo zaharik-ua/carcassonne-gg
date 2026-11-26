@@ -163,6 +163,22 @@ async function playerName(db, playerId) {
   return text(row?.bga_nickname) || text(row?.name) || playerId;
 }
 
+// "DD.MM.YYYY HH:MM UTC", or "" when the time is missing or invalid.
+export function formatCclCaseTimeUtc(timeUtc) {
+  const ts = Date.parse(text(timeUtc));
+  if (!Number.isFinite(ts)) return "";
+  const date = new Date(ts);
+  const pad = (value) => String(value).padStart(2, "0");
+  return `${pad(date.getUTCDate())}.${pad(date.getUTCMonth() + 1)}.${date.getUTCFullYear()} `
+    + `${pad(date.getUTCHours())}:${pad(date.getUTCMinutes())} UTC`;
+}
+
+// Default Details of a no-show case: the player and the scheduled match time (before the reset).
+export function cclNoShowDetails(name, timeUtc) {
+  const time = formatCclCaseTimeUtc(timeUtc);
+  return `Player ${name} did not show up for the match${time ? ` scheduled for ${time}` : ""}.`;
+}
+
 // { value: ISO time } when `nextTimeUtc` moves the match time by 1..CCL_TIME_ADJUST_MAX_MINUTES minutes.
 export function validateCclTimeAdjustment(currentTimeUtc, nextTimeUtc) {
   const current = Date.parse(text(currentTimeUtc));
@@ -306,7 +322,7 @@ export function registerCclCaseRoutes(app, {
           created = await createOrAppendTournamentCase(db, {
             case_type: "problem",
             category: "not_played",
-            details: submitted?.value || `Player ${await playerName(db, noShowPlayerId)} did not show up for the match.`,
+            details: submitted?.value || cclNoShowDetails(await playerName(db, noShowPlayerId), match.time_utc),
             submitted_by_user_id: actorUserId(req.user),
             submitted_by_player_id: playerId,
             duel_id: match.id,

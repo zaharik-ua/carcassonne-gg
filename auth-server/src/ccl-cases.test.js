@@ -173,7 +173,7 @@ test("Resolve no-show saves a case and resets the match time", async (t) => {
   const result = await resolve(api, "error-empty", { action: "no_show", no_show_player_id: "taras" });
   assert.equal(result.status, 200, JSON.stringify(result.body));
   assert.equal(result.body.case.category, "not_played");
-  assert.equal(result.body.case.details, "Player taras did not show up for the match.");
+  assert.equal(result.body.case.details, "Player taras did not show up for the match scheduled for 20.11.2026 18:00 UTC.");
 
   const duel = await get(db, "SELECT * FROM duels WHERE id = 'error-empty'");
   assert.equal(duel.status, "Planned");

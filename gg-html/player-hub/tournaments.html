@@ -10577,11 +10577,21 @@
   function openCclResolveModal(match) {
     const ui = createCclModal("Resolve match");
     ui.fields.appendChild(createCclMatchTitle(match));
+    // The scheduled match time (before the reset) as "DD.MM.YYYY HH:MM UTC".
+    const scheduledTs = Date.parse(String(match.time_utc || "").trim());
+    const pad = (value) => String(value).padStart(2, "0");
+    const scheduledText = Number.isFinite(scheduledTs)
+      ? (() => {
+        const date = new Date(scheduledTs);
+        return ` scheduled for ${pad(date.getUTCDate())}.${pad(date.getUTCMonth() + 1)}.${date.getUTCFullYear()} `
+          + `${pad(date.getUTCHours())}:${pad(date.getUTCMinutes())} UTC`;
+      })()
+      : "";
     const outcomes = [
       ...[match.player_1, match.player_2].filter((player) => player?.id).map((player) => ({
         value: `no_show:${player.id}`,
         label: `Player ${cclPlayerName(player)} did not show up for the match`,
-        details: `Player ${cclPlayerName(player)} did not show up for the match.`,
+        details: `Player ${cclPlayerName(player)} did not show up for the match${scheduledText}.`,
         hint: "The admins will review the case.\nThe match time will be reset. You can already agree on a new time with your opponent.",
         button: "Submit",
       })),
