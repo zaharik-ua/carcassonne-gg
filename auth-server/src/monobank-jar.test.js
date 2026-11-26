@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { pickJar, registerMonobankJarRoutes } from "./monobank-jar.js";
+import { pickJar, pickUsdRate, registerMonobankJarRoutes } from "./monobank-jar.js";
 
 const clientInfo = {
   accounts: [{ id: "secret", balance: 999999 }],
@@ -10,7 +10,13 @@ const clientInfo = {
   ],
 };
 
-function context({ fetchResult = () => ({ ok: true, json: async () => clientInfo }), token = "t" } = {}) {
+const rates = [
+  { currencyCodeA: 978, currencyCodeB: 980, rateBuy: 47, rateSell: 48 },
+  { currencyCodeA: 840, currencyCodeB: 980, rateBuy: 41, rateSell: 41.5 },
+];
+const ratesResult = () => ({ ok: true, json: async () => rates });
+
+function context({ fetchResult = () => ({ ok: true, json: async () => clientInfo }), token = "t", fetchRates = ratesResult } = {}) {
   let handler;
   let clock = 100000;
   const calls = [];
@@ -21,7 +27,11 @@ function context({ fetchResult = () => ({ ok: true, json: async () => clientInfo
     token,
     sendId: "https://send.monobank.ua/jar/55tWhDvC2j",
     now: () => clock,
-    fetchImpl: async (url, options) => { calls.push({ url, options }); return fetchResult(); },
+    fetchImpl: async (url, options) => {
+      if (url.endsWith("/bank/currency")) return fetchRates();
+      calls.push({ url, options });
+      return fetchResult();
+    },
   });
   return {
     calls,
@@ -41,7 +51,7 @@ function context({ fetchResult = () => ({ ok: true, json: async () => clientInfo
 
 test("pickJar returns only the requested jar in major currency units", () => {
   assert.deepEqual(pickJar(clientInfo, "55tWhDvC2j"), {
-    ok: true, balance: 1250.5, goal: 3450, currency: "UAH",
+    ok: true, balance: 1250.5, goal: 3450, currency: "UAH", currencyCode: 980,
     url: "https://send.monobank.ua/jar/55tWhDvC2j",
   });
   assert.equal(pickJar(clientInfo, "missing"), null);
@@ -53,6 +63,8 @@ test("route sends the token, hides account data and caches results", async () =>
   assert.equal(first.status, 200);
   assert.equal(first.data.balance, 1250.5);
   assert.equal(first.data.accounts, undefined);
+  assert.equal(first.data.currencyCode, undefined);
+  assert.equal(first.data.balance_usd, 30.13);
   assert.equal(ctx.calls[0].options.headers["X-Token"], "t");
   await ctx.request();
   assert.equal(ctx.calls.length, 1);
@@ -78,4 +90,17 @@ test("route reports missing configuration", async () => {
   const ctx = context({ token: "" });
   assert.equal((await ctx.request()).status, 503);
   assert.equal(ctx.calls.length, 0);
+});
+
+test("pickUsdRate uses the USD selling rate", () => {
+  assert.equal(pickUsdRate(rates, 980), 41.5);
+  assert.equal(pickUsdRate([], 980), null);
+});
+
+test("route still answers in jar currency when the USD rate is unavailable", async () => {
+  const ctx = context({ fetchRates: () => ({ ok: false, status: 429 }) });
+  const result = await ctx.request();
+  assert.equal(result.status, 200);
+  assert.equal(result.data.balance, 1250.5);
+  assert.equal(result.data.balance_usd, undefined);
 });

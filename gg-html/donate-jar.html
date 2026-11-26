@@ -24,10 +24,18 @@
   .gg-jar-title { margin: 0; font-size: 13px; font-weight: 700; line-height: 1.25; }
   .gg-jar-text { margin: 4px 0 0; font-size: 11px; font-weight: 500; line-height: 1.35; opacity: 0.95; }
   .gg-jar-body { padding: 10px 10px 12px; }
-  .gg-jar-stats { display: flex; justify-content: space-between; gap: 6px; }
-  .gg-jar-stat-label { font-size: 10px; font-weight: 500; color: #7a7a7a; }
-  .gg-jar-stat-value { font-size: 13px; font-weight: 700; white-space: nowrap; }
-  .gg-jar-stat-goal { text-align: right; }
+  .gg-jar-summary { display: flex; align-items: baseline; flex-wrap: wrap; gap: 0 5px; }
+  .gg-jar-raised { font-size: 20px; font-weight: 700; line-height: 1.15; white-space: nowrap; }
+  .gg-jar-of { font-size: 11px; font-weight: 500; color: #7a7a7a; white-space: nowrap; }
+  .gg-jar-of b { color: #1a1a1a; font-weight: 700; }
+  .gg-jar-meta {
+    display: flex;
+    justify-content: space-between;
+    font-size: 10px;
+    font-weight: 600;
+    color: #7a7a7a;
+  }
+  .gg-jar-done .gg-jar-meta { color: #1f9d55; }
   .gg-jar-bar {
     height: 6px;
     margin: 7px 0 4px;
@@ -42,9 +50,8 @@
     background: linear-gradient(90deg, #8f6bff, #ff5d8f);
     transition: width 0.8s ease;
   }
-  .gg-jar-percent { font-size: 10px; font-weight: 600; color: #7a7a7a; text-align: right; }
-  .gg-jar-loading .gg-jar-stat-value,
-  .gg-jar-loading .gg-jar-percent { color: transparent; background: #ececec; border-radius: 3px; }
+  .gg-jar-loading .gg-jar-raised,
+  .gg-jar-loading .gg-jar-meta span { color: transparent; background: #ececec; border-radius: 3px; }
   .gg-jar-btn {
     display: flex;
     align-items: center;
@@ -83,18 +90,15 @@
   </div>
   <div class="gg-jar-body">
     <div class="gg-jar-progress" id="gg-jar-progress">
-      <div class="gg-jar-stats">
-        <div>
-          <div class="gg-jar-stat-label">Raised</div>
-          <div class="gg-jar-stat-value" id="gg-jar-raised">0000</div>
-        </div>
-        <div class="gg-jar-stat-goal">
-          <div class="gg-jar-stat-label">Goal</div>
-          <div class="gg-jar-stat-value" id="gg-jar-goal">0000</div>
-        </div>
+      <div class="gg-jar-summary">
+        <span class="gg-jar-raised" id="gg-jar-raised">$00</span>
+        <span class="gg-jar-of">raised of <b id="gg-jar-goal">$83</b></span>
       </div>
       <div class="gg-jar-bar"><div class="gg-jar-bar-fill" id="gg-jar-fill"></div></div>
-      <div class="gg-jar-percent" id="gg-jar-percent">00%</div>
+      <div class="gg-jar-meta">
+        <span id="gg-jar-status">Collecting</span>
+        <span id="gg-jar-percent">00%</span>
+      </div>
     </div>
     <a class="gg-jar-btn" id="gg-jar-btn" href="https://send.monobank.ua/jar/55tWhDvC2j" target="_blank" rel="noopener">
       💛 Donate
@@ -106,6 +110,7 @@
 <script>
   (function () {
     var API_URL = "https://api.carcassonne.gg/public/donation-jar";
+    var GOAL_USD = 83;
     var SYMBOLS = { UAH: "₴", USD: "$", EUR: "€" };
     var root = document.getElementById("gg-jar");
     if (!root) return;
@@ -125,12 +130,19 @@
       .then(function (response) { return response.ok ? response.json() : null; })
       .then(function (data) {
         if (!data || !data.ok || typeof data.balance !== "number") return hideProgress();
-        var goal = data.goal;
-        var percent = goal ? Math.min(100, Math.round((data.balance / goal) * 100)) : null;
+        // Prefer USD (converted on the server at monobank's rate); fall back to the jar's own currency.
+        var inUsd = typeof data.balance_usd === "number";
+        var raised = inUsd ? data.balance_usd : data.balance;
+        var currency = inUsd ? "USD" : data.currency;
+        var goal = inUsd ? GOAL_USD : data.goal;
+        var percent = goal ? Math.min(100, Math.floor((raised / goal) * 100)) : null;
+        var done = goal && raised >= goal;
 
-        document.getElementById("gg-jar-raised").textContent = money(data.balance, data.currency);
-        document.getElementById("gg-jar-goal").textContent = goal ? money(goal, data.currency) : "—";
+        document.getElementById("gg-jar-raised").textContent = money(raised, currency);
+        document.getElementById("gg-jar-goal").textContent = goal ? money(goal, currency) : "—";
         document.getElementById("gg-jar-percent").textContent = percent === null ? "" : percent + "%";
+        document.getElementById("gg-jar-status").textContent = done ? "Goal reached 🎉" : "Collecting";
+        root.classList.toggle("gg-jar-done", !!done);
         root.classList.remove("gg-jar-loading");
         if (data.url) document.getElementById("gg-jar-btn").href = data.url;
 
