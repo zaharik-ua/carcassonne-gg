@@ -476,26 +476,6 @@
     color: var(--dash-text);
   }
 
-  .dash-row-error {
-    display: flex;
-    align-items: flex-start;
-    gap: 6px;
-    margin-top: 2px;
-    padding: 6px 10px;
-    border-radius: 4px;
-    background: var(--dash-attention-bg);
-    font-size: 13px;
-    line-height: 1.4;
-    color: var(--dash-attention);
-    overflow-wrap: anywhere;
-  }
-
-  .dash-row-error .dash-icon {
-    width: 15px;
-    height: 15px;
-    margin-top: 1px;
-  }
-
   .dash-row-side {
     display: grid;
     justify-items: end;
@@ -1042,6 +1022,7 @@
   const filterState = {
     tournamentId: "", days: DEFAULT_DAYS, status: "", proposed: "",
     page: 1, pageSize: DEFAULT_PAGE_SIZE, usersPage: 1, usersPageSize: DEFAULT_PAGE_SIZE,
+    errorsPage: 1, errorsPageSize: DEFAULT_PAGE_SIZE,
   };
   const dropdowns = [];
   let loadSeq = 0;
@@ -1190,6 +1171,8 @@
       pageSize: String(params.get("per_page") || "").trim(),
       usersPage: String(params.get("users_page") || "").trim(),
       usersPageSize: String(params.get("users_per_page") || "").trim(),
+      errorsPage: String(params.get("errors_page") || "").trim(),
+      errorsPageSize: String(params.get("errors_per_page") || "").trim(),
     };
   }
 
@@ -1207,6 +1190,8 @@
     setParam("per_page", Number(state.pageSize) !== DEFAULT_PAGE_SIZE ? String(state.pageSize) : "");
     setParam("users_page", Number(state.usersPage) > 1 ? String(state.usersPage) : "");
     setParam("users_per_page", Number(state.usersPageSize) !== DEFAULT_PAGE_SIZE ? String(state.usersPageSize) : "");
+    setParam("errors_page", Number(state.errorsPage) > 1 ? String(state.errorsPage) : "");
+    setParam("errors_per_page", Number(state.errorsPageSize) !== DEFAULT_PAGE_SIZE ? String(state.errorsPageSize) : "");
     window.history.replaceState(null, "", url.toString());
   }
 
@@ -1272,7 +1257,7 @@
   }
 
 
-  function row({ title, lines = [], errorLine = "", side = [] }) {
+  function row({ title, lines = [], side = [] }) {
     const node = el("div", "dash-row");
     const main = el("div", "dash-row-main");
     main.appendChild(el("div", "dash-row-title", title));
@@ -1281,12 +1266,6 @@
       if (typeof line === "string") main.appendChild(el("div", "dash-row-line", line));
       else main.appendChild(el("div", `dash-row-line ${line.className || ""}`.trim(), line.text));
     });
-    if (errorLine) {
-      const errorEl = el("div", "dash-row-error");
-      errorEl.appendChild(icon("alert"));
-      errorEl.appendChild(el("span", "", errorLine));
-      main.appendChild(errorEl);
-    }
     const sideEl = el("div", "dash-row-side");
     side.filter(Boolean).forEach((child) => sideEl.appendChild(child));
     node.appendChild(main);
@@ -1579,16 +1558,62 @@
     });
   }
 
+  // "Last check 2 hours ago", in the style of Time to play.
+  function lastCheckText(iso) {
+    const ts = Date.parse(iso || "");
+    if (!Number.isFinite(ts)) return "";
+    const ago = Date.now() - ts;
+    return ago < 60000 ? "Last check just now" : `Last check ${durationText(ago)} ago`;
+  }
+
+  // A row in the style of Unplanned matches: match time | tournament logo | players, last check, error | Error and View.
   function renderErrorDuel(item) {
-    return row({
-      title: `${playerName(item.player_1)} vs ${playerName(item.player_2)}`,
-      lines: [
-        duelContext(item),
-        item.time_utc ? `Played ${formatUtc(item.time_utc)}` : "",
-        item.checked_at ? `Last check ${formatUtc(item.checked_at)}` : "",
-      ],
-      errorLine: item.error || "No error message saved",
-      side: [badge({ label: "Error", tone: "attention" }), linkTo(item.link)],
+    const rowEl = el("div", "dash-om-row");
+    rowEl.appendChild(el("div", "dash-om-time", formatMatchTime(item.time_utc)));
+    rowEl.appendChild(el("div", "dash-om-divider"));
+    const logo = el("div", "dash-om-logo");
+    if (item.tournament?.logo) {
+      const img = el("img");
+      img.src = item.tournament.logo;
+      img.alt = item.tournament.name || "";
+      img.title = item.tournament.name || "";
+      logo.appendChild(img);
+    }
+    rowEl.appendChild(logo);
+    rowEl.appendChild(el("div", "dash-om-divider"));
+
+    const players = el("div", "dash-om-players");
+    players.appendChild(matchPlayerLine(item.player_1, false));
+    players.appendChild(matchPlayerLine(item.player_2, false));
+    const lastCheck = lastCheckText(item.checked_at);
+    if (lastCheck) players.appendChild(el("div", "dash-om-meta", lastCheck));
+    players.appendChild(el("div", "dash-om-meta is-overdue", item.error || "No error message saved"));
+    rowEl.appendChild(players);
+
+    const right = el("div", "dash-om-right");
+    right.appendChild(el("span", "dash-status-badge is-attention", "Error"));
+    const view = linkTo(item.link);
+    if (view) right.appendChild(view);
+    rowEl.appendChild(right);
+    return rowEl;
+  }
+
+  function renderErrorSection(config, block) {
+    return renderListSection(config.key, config.title, block, {
+      rows: Number(block?.count || 0) ? (block.items || []).map(renderErrorDuel) : [],
+      emptyText: "No matches in Error.",
+      pager: renderPager(block, {
+        pageSize: filterState.errorsPageSize,
+        onPageSize: (size) => {
+          filterState.errorsPageSize = size;
+          filterState.errorsPage = 1;
+          onFilterChange(config.key, { keepPage: true });
+        },
+        onPage: (page) => {
+          filterState.errorsPage = page;
+          onFilterChange(config.key, { keepPage: true });
+        },
+      }),
     });
   }
 
@@ -1785,6 +1810,7 @@
     tournamentSlot.innerHTML = "";
     tournamentSlot.appendChild(createDropdown(filterState.tournamentId, tournamentOptions, (value) => {
       filterState.tournamentId = value;
+      filterState.errorsPage = 1;
       onFilterChange();
     }).root);
   }
@@ -1798,6 +1824,8 @@
     filterState.pageSize = pageSizeOf(data.blocks?.unplanned_duels);
     filterState.usersPage = Number(data.blocks?.new_users?.page) || 1;
     filterState.usersPageSize = pageSizeOf(data.blocks?.new_users);
+    filterState.errorsPage = Number(data.blocks?.error_duels?.page) || 1;
+    filterState.errorsPageSize = pageSizeOf(data.blocks?.error_duels);
     renderFilters(data);
     const visibleBlocks = BLOCKS.filter((config) => data.blocks?.[config.key]);
     if (!visibleBlocks.length) {
@@ -1812,7 +1840,9 @@
     wrap.appendChild(renderTiles(data, visibleBlocks));
     visibleBlocks.forEach((config) => {
       const block = data.blocks[config.key];
-      const special = { unplanned_duels: renderUnplannedSection, new_users: renderNewUsersSection }[config.key];
+      const special = {
+        unplanned_duels: renderUnplannedSection, error_duels: renderErrorSection, new_users: renderNewUsersSection,
+      }[config.key];
       wrap.appendChild(special ? special(config, block) : renderSection(config, block, data));
     });
     contentEl.appendChild(wrap);
@@ -1831,6 +1861,8 @@
     if (state.pageSize) url.searchParams.set("unplanned_page_size", state.pageSize);
     if (state.usersPage) url.searchParams.set("new_users_page", state.usersPage);
     if (state.usersPageSize) url.searchParams.set("new_users_page_size", state.usersPageSize);
+    if (state.errorsPage) url.searchParams.set("error_page", state.errorsPage);
+    if (state.errorsPageSize) url.searchParams.set("error_page_size", state.errorsPageSize);
     try {
       const response = await fetch(url.toString(), { method: "GET", credentials: "include" });
       if (seq !== loadSeq) return;

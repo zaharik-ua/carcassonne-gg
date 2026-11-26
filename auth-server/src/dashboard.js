@@ -11,7 +11,7 @@ export const DASHBOARD_BLOCK_LIMIT = 10;
 export const DEFAULT_DAYS_BEFORE_DEADLINE = 3;
 export const MAX_DAYS_BEFORE_DEADLINE = 60;
 export const NEW_USERS_DAYS = 7;
-// The unplanned duels and new users blocks are paged; the other blocks show their first DASHBOARD_BLOCK_LIMIT records.
+// The unplanned duels, error duels and new users blocks are paged; the other blocks show their first DASHBOARD_BLOCK_LIMIT records.
 export const PAGE_SIZES = [10, 20, 50];
 export const PLANNING_STATUSES = ["deadline_passed", "no_proposal", "time_proposed", "change_pending"];
 // Unplanned duels with an active time proposal, by when the proposed time is: within N hours, or already passed.
@@ -306,8 +306,8 @@ export async function loadUnplannedDuels(db, {
   return { count: items.length, status_counts: statusCounts, ...paginate(items, page, pageSize) };
 }
 
-export async function loadErrorDuels(db, { tournamentIds }) {
-  if (!tournamentIds.length) return { count: 0, items: [] };
+export async function loadErrorDuels(db, { tournamentIds, page = 1, pageSize = PAGE_SIZES[0] }) {
+  if (!tournamentIds.length) return { count: 0, items: [], page: 1, page_size: pageSize, total_pages: 1 };
   const rows = await dbAll(
     db,
     `
@@ -319,14 +319,13 @@ export async function loadErrorDuels(db, { tournamentIds }) {
     `,
     tournamentIds.map((id) => id.toUpperCase())
   );
-  return {
-    count: rows.length,
-    items: rows.slice(0, DASHBOARD_BLOCK_LIMIT).map((row) => ({
-      ...duelSummary(row),
-      error: text(row.results_last_error) || null,
-      checked_at: toIso(row.results_checked_at),
-    })),
-  };
+  const flagOf = rows.length ? await loadFlagResolver(db, tournamentIds) : null;
+  const items = rows.map((row) => ({
+    ...duelSummary(row, flagOf),
+    error: text(row.results_last_error) || null,
+    checked_at: toIso(row.results_checked_at),
+  }));
+  return { count: items.length, ...paginate(items, page, pageSize) };
 }
 
 export async function loadNewsDrafts(db, { nowIso }) {
@@ -624,7 +623,9 @@ export async function buildDashboard(db, user, { query = {}, now = new Date() } 
     blocks.unplanned_duels = await loadUnplannedDuels(db, {
       tournamentIds, nowIso, days, planningStatus, proposedTime, page: unplannedPage, pageSize: unplannedPageSize,
     });
-    blocks.error_duels = await loadErrorDuels(db, { tournamentIds });
+    blocks.error_duels = await loadErrorDuels(db, {
+      tournamentIds, page: parsePage(query.error_page), pageSize: parsePageSize(query.error_page_size),
+    });
   }
   if (playerId) {
     blocks.my_duels = await loadMyDuels(db, { playerId, nowIso });
