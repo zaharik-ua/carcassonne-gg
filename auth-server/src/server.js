@@ -10688,6 +10688,63 @@ async function loadChallengePlayerTimeContext(playerId) {
   };
 }
 
+async function loadChallengePlayerActivity(playerId) {
+  const normalizedPlayerId = normalizeNullableText(playerId);
+  const empty = { has_sent_request: false, has_challenge_match: false, has_rivals_match: false, has_activity: false };
+  if (!normalizedPlayerId) return empty;
+
+  const row = await dbGetAsync(
+    `
+      SELECT
+        EXISTS (
+          SELECT 1
+          FROM challenge_requests cr
+          WHERE trim(COALESCE(cr.created_by_player_id, '')) = trim(?)
+          LIMIT 1
+        ) AS has_sent_request,
+        EXISTS (
+          SELECT 1
+          FROM duels challenge_duel
+          WHERE challenge_duel.deleted_at IS NULL
+            AND (
+              challenge_duel.source_type = 'challenge'
+              OR trim(COALESCE(challenge_duel.challenge_period_id, '')) <> ''
+            )
+            AND lower(trim(COALESCE(challenge_duel.status, ''))) IN ('planned', 'in progress', 'done')
+            AND (
+              trim(COALESCE(challenge_duel.player_1_id, '')) = trim(?)
+              OR trim(COALESCE(challenge_duel.player_2_id, '')) = trim(?)
+            )
+          LIMIT 1
+        ) AS has_challenge_match,
+        EXISTS (
+          SELECT 1
+          FROM challenge_periods cp
+          WHERE trim(COALESCE(cp.rivals_tournament_id, '')) <> ''
+            AND EXISTS (
+              SELECT 1
+              ${buildChallengeTournamentDuelsSql("cp.rivals_tournament_id", "played")}
+                AND (
+                  trim(COALESCE(tournament_duel.player_1_id, '')) = trim(?)
+                  OR trim(COALESCE(tournament_duel.player_2_id, '')) = trim(?)
+                )
+              LIMIT 1
+            )
+          LIMIT 1
+        ) AS has_rivals_match
+    `,
+    [normalizedPlayerId, normalizedPlayerId, normalizedPlayerId, normalizedPlayerId, normalizedPlayerId]
+  );
+
+  const result = {
+    has_sent_request: Number(row?.has_sent_request) === 1,
+    has_challenge_match: Number(row?.has_challenge_match) === 1,
+    has_rivals_match: Number(row?.has_rivals_match) === 1,
+  };
+  result.has_activity = result.has_sent_request || result.has_challenge_match || result.has_rivals_match;
+  return result;
+}
+
 app.get("/challenge-periods/player", async (req, res) => {
   const playerId = normalizeNullableText(req.user?.player_id);
   const includeHistory = req.query.include_history === "1";
@@ -10786,10 +10843,12 @@ app.get("/challenge-periods/player", async (req, res) => {
         includeHistory ? 1 : 0,
       ]
     );
+    const playerActivity = await loadChallengePlayerActivity(playerId);
     return res.json({
       ok: true,
       player_id: playerId,
       player_time_context: timeContext,
+      player_challenge_activity: playerActivity,
       challenge_periods: (rows || []).map(mapChallengePeriodForPlayer),
     });
   } catch (error) {

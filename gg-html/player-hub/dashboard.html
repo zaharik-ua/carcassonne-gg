@@ -933,6 +933,11 @@
     height: 16px;
   }
 
+  /* A red outline with a light red fill (the color of the No time proposed tile). */
+  .dash-om-nouser .dash-icon svg {
+    fill: #fbd0d0;
+  }
+
   .dash-om-meta {
     margin-top: 2px;
     font-size: 11px;
@@ -1125,7 +1130,7 @@
     check: '<path d="M20 6 9 17l-5-5"/>',
     chevronDown: '<path d="m6 9 6 6 6-6"/>',
     clock: '<circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/>',
-    userX: '<circle cx="12" cy="8" r="4"/><path d="M5 21v-1a7 7 0 0 1 14 0v1"/><path d="M3 3l18 18"/>',
+    user: '<circle cx="12" cy="8" r="4"/><path d="M5 21v-1a7 7 0 0 1 14 0v1Z"/>',
   };
 
   function icon(name) {
@@ -1408,7 +1413,7 @@
   }
 
   // Flag, name with a link to the player's profile, a clock icon for the player who proposed the time,
-  // and a crossed-out user icon for a player without a site user.
+  // and a red user icon for a player without a site user.
   function matchPlayerLine(player, isProposer) {
     const line = el("div", "dash-om-player");
     if (player?.association_flag) {
@@ -1434,7 +1439,7 @@
       mark.title = "No user on the site";
       mark.setAttribute("role", "img");
       mark.setAttribute("aria-label", "No user on the site");
-      mark.appendChild(icon("userX"));
+      mark.appendChild(icon("user"));
       line.appendChild(mark);
     }
     return line;

@@ -457,6 +457,16 @@
   function markInvitationDone() {
     invitationCompletionNotified = true;
     contentEl.querySelector("[data-cbp-invitation-step]")?.classList.add("done");
+    hideChecklistIfComplete();
+  }
+
+  function hideChecklistIfComplete() {
+    const checklist = contentEl.querySelector(".cbp-checklist");
+    if (!checklist) return;
+    const steps = checklist.querySelectorAll(".cbp-step");
+    if (steps.length && Array.from(steps).every((step) => step.classList.contains("done"))) {
+      checklist.remove();
+    }
   }
 
   function onChallengeProgress(event) {
@@ -569,11 +579,14 @@
         method: "GET",
         credentials: "include",
       });
-      if (!response.ok) return [];
+      if (!response.ok) return { periods: [], activity: null };
       const data = await response.json().catch(() => ({}));
-      return Array.isArray(data?.challenge_periods) ? data.challenge_periods : [];
+      return {
+        periods: Array.isArray(data?.challenge_periods) ? data.challenge_periods : [],
+        activity: data?.player_challenge_activity || null,
+      };
     } catch (_error) {
-      return [];
+      return { periods: [], activity: null };
     }
   }
 
@@ -1054,7 +1067,7 @@
     });
   }
 
-  function renderChecklist(session, profile, challengePeriods) {
+  function renderChecklist(session, profile, challengePeriods, challengeActivity) {
     cleanupAuth();
 
     const user = session.user || null;
@@ -1067,11 +1080,15 @@
     const hasPhoto = getPhotoCount(profile, user) > 0;
     const profileReady = authenticated && !!profileId && hasRealName && hasPhoto;
     const invitationDone = invitationCompletionNotified || (
+      authenticated && challengeActivity?.has_activity === true
+    ) || (
       authenticated && (Array.isArray(challengePeriods) ? challengePeriods : []).some((period) => (
         period?.has_sent_request === true
         || Number(period?.has_sent_request) === 1
         || Number(period?.matches_count) > 0
         || Number(period?.matches_played_count) > 0
+        || Number(period?.tournament_matches_played_count) > 0
+        || Number(period?.tournament_matches_scheduled_count) > 0
         || !!String(period?.challenge_duel_id || "").trim()
         || ["match_scheduled", "played"].includes(String(period?.player_status || "").trim())
       ))
@@ -1116,6 +1133,7 @@
     contentEl.className = "";
     contentEl.innerHTML = "";
     contentEl.appendChild(checklist);
+    hideChecklistIfComplete();
   }
 
   async function renderChallenges() {
@@ -1126,19 +1144,21 @@
     const session = await fetchSession();
     let profile = null;
     let challengePeriods = [];
+    let challengeActivity = null;
     if (session.authenticated && session.user) {
       const profileId = getCurrentUserProfileId(session.user);
       if (profileId) {
-        const [profiles, periods] = await Promise.all([
+        const [profiles, periodsResult] = await Promise.all([
           fetchProfiles(),
           fetchChallengePeriods(),
         ]);
         profile = findProfileById(profiles, profileId);
-        challengePeriods = periods;
+        challengePeriods = periodsResult.periods;
+        challengeActivity = periodsResult.activity;
       }
     }
 
-    renderChecklist(session, profile, challengePeriods);
+    renderChecklist(session, profile, challengePeriods, challengeActivity);
   }
 
   renderChallenges();
