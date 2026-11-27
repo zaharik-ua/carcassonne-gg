@@ -291,6 +291,12 @@
     outline-offset: 2px;
   }
 
+  /* The tile whose filter the list below shows; a second click removes the filter. */
+  .dash-tile.is-active {
+    outline: 3px solid var(--dash-text);
+    outline-offset: 2px;
+  }
+
   .dash-tile-icon {
     grid-column: 2;
     grid-row: 1;
@@ -342,7 +348,7 @@
     background: var(--dash-primary-hover);
   }
 
-  /* Unplanned matches: the colors of the Time proposed badge (dash-status-badge is-warn). */
+  /* Time proposed: the colors of the Time proposed badge (dash-status-badge is-warn). */
   .dash-tile.tone-warn-soft {
     background: #fff8e1;
     color: #5c4300;
@@ -632,8 +638,11 @@
     border-radius: 0 0 4px 4px;
   }
 
-  .dash-om-controls.is-filters {
-    justify-content: flex-start;
+  /* Per page and the list's own filters, left of the paging buttons. */
+  .dash-om-controls-left {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
     gap: 8px 16px;
   }
 
@@ -1049,15 +1058,15 @@
   const contentEl = document.getElementById("dashContent");
   const filtersEl = document.getElementById("dashFilters");
   const tournamentSlot = document.getElementById("dashTournament");
+  // Deadline within: the server default (DEFAULT_DAYS_BEFORE_DEADLINE); the list has no Deadline within filter.
   const DEFAULT_DAYS = "5";
-  const DAY_OPTIONS = [3, 4, 5, 6, 7].map((days) => ({ value: String(days), label: `${days} day${days === 1 ? "" : "s"}` }));
   // Unplanned matches with an active time proposal, by when the proposed time is (PROPOSED_TIME_WINDOWS on the server).
+  // "passed" (Already passed) is set by the Proposed time passed tile, so it is not in the dropdown.
   const PROPOSED_TIME_OPTIONS = [
     { value: "", label: "Any time" },
     { value: "4h", label: "Within 4 hours" },
     { value: "12h", label: "Within 12 hours" },
     { value: "1d", label: "Within 1 day" },
-    { value: "passed", label: "Already passed" },
   ];
   const PAGE_SIZE_OPTIONS = [10, 20, 50];
   const DEFAULT_PAGE_SIZE = PAGE_SIZE_OPTIONS[0];
@@ -1208,7 +1217,6 @@
     const params = new URLSearchParams(window.location.search);
     return {
       tournamentId: String(params.get("tournament_id") || "").trim(),
-      days: String(params.get("days") || "").trim(),
       status: String(params.get("status") || "").trim(),
       proposed: String(params.get("proposed_time") || "").trim(),
       page: String(params.get("page") || "").trim(),
@@ -1227,7 +1235,7 @@
       else url.searchParams.delete(name);
     };
     setParam("tournament_id", state.tournamentId);
-    setParam("days", state.days === DEFAULT_DAYS ? "" : state.days);
+    url.searchParams.delete("days");
     setParam("status", state.status);
     setParam("proposed_time", state.proposed);
     setParam("page", Number(state.page) > 1 ? String(state.page) : "");
@@ -1448,7 +1456,8 @@
       optionBtn.addEventListener("click", (event) => {
         event.stopPropagation();
         close();
-        if (option.value !== selected.value) onChange(option.value);
+        // Against `value`: a value missing from the options (Already passed) shows the first one.
+        if (option.value !== value) onChange(option.value);
       });
       menu.appendChild(optionBtn);
     });
@@ -1468,13 +1477,17 @@
     return wrap;
   }
 
-  // Per page and Prev / Page N of M / Next (.results-controls), under the rows of a list.
-  function renderPager(block, { pageSize, onPageSize, onPage }) {
+  // Per page, `extra` controls (the list's filters) and Prev / Page N of M / Next (.results-controls),
+  // above the rows of a list, or under them with `bottom`.
+  function renderPager(block, { pageSize, onPageSize, onPage, extra = [], bottom = false }) {
     const totalPages = Math.max(1, Number(block?.total_pages) || 1);
     const page = Math.min(Math.max(1, Number(block?.page) || 1), totalPages);
-    const bar = el("div", "dash-om-controls is-bottom");
+    const bar = el("div", `dash-om-controls${bottom ? " is-bottom" : ""}`);
     const sizeOptions = PAGE_SIZE_OPTIONS.map((size) => ({ value: String(size), label: String(size) }));
-    bar.appendChild(createPicker("Per page", String(pageSize), sizeOptions, (value) => onPageSize(Number(value))));
+    const left = el("div", "dash-om-controls-left");
+    left.appendChild(createPicker("Per page", String(pageSize), sizeOptions, (value) => onPageSize(Number(value))));
+    extra.filter(Boolean).forEach((control) => left.appendChild(control));
+    bar.appendChild(left);
 
     const pagination = el("div", "dash-pagination");
     const prev = el("button", "dash-pagebtn", "Prev");
@@ -1490,8 +1503,9 @@
     return bar;
   }
 
-  // Title with the count, then a card: `top` (e.g. filters), the rows, the paging row (team-official-matches.html).
-  function renderListSection(key, titleText, block, { top = null, rows = [], emptyText, pager }) {
+  // Title with the count, then a card with the paging row and the rows (team-official-matches.html);
+  // the paging row goes above the rows unless it was made with `bottom`.
+  function renderListSection(key, titleText, block, { rows = [], emptyText, pager }) {
     const section = el("section", "dash-om");
     section.id = `dash-${key}`;
     const title = el("h2", "dash-om-title");
@@ -1499,47 +1513,30 @@
     title.appendChild(el("span", "dash-om-count", Number(block?.count || 0)));
     section.appendChild(title);
     const card = el("div", "dash-om-card");
-    if (top) card.appendChild(top);
+    const pagerOnTop = !pager.classList.contains("is-bottom");
+    if (pagerOnTop) card.appendChild(pager);
     if (rows.length) rows.forEach((rowEl) => card.appendChild(rowEl));
     else card.appendChild(el("div", "dash-om-row is-empty", emptyText));
-    card.appendChild(pager);
+    if (!pagerOnTop) card.appendChild(pager);
     section.appendChild(card);
     return section;
   }
 
-  // Deadline within, Status and Proposed time, in the style of Per page.
-  function renderUnplannedFilters(block) {
-    const bar = el("div", "dash-om-controls is-filters");
-    const counts = block?.status_counts || {};
-    const statusKeys = Object.keys(PLANNING_STATUS);
-    const total = statusKeys.reduce((sum, key) => sum + Number(counts[key] || 0), 0);
-    const statusOptions = [{ value: "", label: `All statuses (${total})` }]
-      .concat(statusKeys.map((key) => ({ value: key, label: `${PLANNING_STATUS[key].label} (${Number(counts[key] || 0)})` })));
-    const dayOptions = DAY_OPTIONS.some((option) => option.value === filterState.days)
-      ? DAY_OPTIONS
-      : DAY_OPTIONS.concat({ value: filterState.days, label: `${filterState.days} days` });
-    bar.appendChild(createPicker("Deadline within", filterState.days, dayOptions, (value) => {
-      filterState.days = value;
-      onFilterChange("unplanned_duels");
-    }));
-    bar.appendChild(createPicker("Status", filterState.status, statusOptions, (value) => {
-      filterState.status = value;
-      onFilterChange("unplanned_duels");
-    }));
-    bar.appendChild(createPicker("Proposed time", filterState.proposed, PROPOSED_TIME_OPTIONS, (value) => {
+  // Proposed time, in the style of Per page. Status is set by the counter tiles.
+  function renderProposedTimePicker() {
+    return createPicker("Proposed time", filterState.proposed, PROPOSED_TIME_OPTIONS, (value) => {
       filterState.proposed = value;
       onFilterChange("unplanned_duels");
-    }));
-    return bar;
+    });
   }
 
   function renderUnplannedSection(config, block) {
     const filtered = filterState.status || filterState.proposed;
     return renderListSection(config.key, config.title, block, {
-      top: renderUnplannedFilters(block),
       rows: Number(block?.count || 0) ? (block.items || []).map(renderUnplannedDuel) : [],
       emptyText: filtered ? "No matches match these filters." : "No unplanned matches.",
       pager: renderPager(block, {
+        extra: [renderProposedTimePicker()],
         pageSize: filterState.pageSize,
         onPageSize: (size) => {
           filterState.pageSize = size;
@@ -1588,6 +1585,7 @@
       rows: Number(block?.count || 0) ? (block.items || []).map(renderNewUser) : [],
       emptyText: "No new users.",
       pager: renderPager(block, {
+        bottom: true,
         pageSize: filterState.usersPageSize,
         onPageSize: (size) => {
           filterState.usersPageSize = size;
@@ -1847,10 +1845,12 @@
     return section;
   }
 
-  function createTile({ label, count, iconName, tone, onClick }) {
-    const tile = el("button", `dash-tile ${count ? tone : "is-clear"}`);
+  // `active`: undefined for a tile without a filter, else whether its filter is on (aria-pressed).
+  function createTile({ label, count, iconName, tone, onClick, active }) {
+    const tile = el("button", `dash-tile ${count ? tone : "is-clear"}${active ? " is-active" : ""}`);
     tile.type = "button";
     tile.setAttribute("aria-label", `${label}: ${count}. Go to section`);
+    if (active !== undefined) tile.setAttribute("aria-pressed", active ? "true" : "false");
     const tileIcon = el("span", "dash-tile-icon");
     tileIcon.appendChild(icon(count ? iconName : "check"));
     const body = el("span", "dash-tile-body");
@@ -1881,7 +1881,9 @@
     const counts = block?.status_counts || {};
     const sum = Object.values(counts).reduce((total, value) => total + Number(value || 0), 0);
     if (!filterState.proposed) {
-      Object.assign(cached, { total: sum, deadline_passed: counts.deadline_passed, no_proposal: counts.no_proposal });
+      Object.assign(cached, {
+        total: sum, deadline_passed: counts.deadline_passed, no_proposal: counts.no_proposal, time_proposed: counts.time_proposed,
+      });
     } else if (filterState.proposed === "passed") {
       cached.proposed_time_passed = sum;
     }
@@ -1891,18 +1893,28 @@
 
   function unplannedTiles(block) {
     const metrics = unplannedMetrics(block);
-    const showList = (status, proposed) => () => {
+    const apply = (status, proposed) => {
       scrollToSection("unplanned_duels");
       if (filterState.status === status && filterState.proposed === proposed) return;
       filterState.status = status;
       filterState.proposed = proposed;
       onFilterChange("unplanned_duels");
     };
+    // A status tile keeps a Proposed time dropdown value; the tiles' own filters exclude each other.
+    const keptProposed = filterState.proposed === "passed" ? "" : filterState.proposed;
+    const statusTile = (status) => ({
+      active: filterState.status === status,
+      onClick: () => apply(filterState.status === status ? "" : status, keptProposed),
+    });
+    const passedActive = filterState.proposed === "passed";
     return [
-      { label: "Deadline passed", count: metrics.deadline_passed, iconName: "alert", tone: "tone-attention", onClick: showList("deadline_passed", "") },
-      { label: "Unplanned matches", count: metrics.total, iconName: "calendarClock", tone: "tone-warn-soft", onClick: showList("", "") },
-      { label: "No time proposed", count: metrics.no_proposal, iconName: "calendarClock", tone: "tone-attention-soft", onClick: showList("no_proposal", "") },
-      { label: "Proposed time passed", count: metrics.proposed_time_passed, iconName: "clock", tone: "tone-attention", onClick: showList("", "passed") },
+      { label: "Deadline passed", count: metrics.deadline_passed, iconName: "alert", tone: "tone-attention", ...statusTile("deadline_passed") },
+      { label: "No time proposed", count: metrics.no_proposal, iconName: "calendarClock", tone: "tone-attention-soft", ...statusTile("no_proposal") },
+      { label: "Time proposed", count: metrics.time_proposed, iconName: "clock", tone: "tone-warn-soft", ...statusTile("time_proposed") },
+      {
+        label: "Proposed time passed", count: metrics.proposed_time_passed, iconName: "clock", tone: "tone-attention",
+        active: passedActive, onClick: () => apply("", passedActive ? "" : "passed"),
+      },
     ].map((tile) => createTile({ ...tile, count: Number(tile.count || 0) }));
   }
 
@@ -1985,7 +1997,6 @@
     const state = readUrlState();
     const url = new URL(DASHBOARD_URL);
     if (state.tournamentId) url.searchParams.set("tournament_id", state.tournamentId);
-    if (state.days) url.searchParams.set("days_before_deadline", state.days);
     if (state.status) url.searchParams.set("planning_status", state.status);
     if (state.proposed) url.searchParams.set("proposed_time", state.proposed);
     if (state.page) url.searchParams.set("unplanned_page", state.page);

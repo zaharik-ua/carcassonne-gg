@@ -254,7 +254,7 @@ export function matchesProposedTimeWindow(item, window, nowIso) {
 
 const emptyStatusCounts = () => Object.fromEntries(PLANNING_STATUSES.map((status) => [status, 0]));
 // The counter tiles: unplanned duels within the days window, whatever the Status and Proposed time filters.
-const emptyUnplannedMetrics = () => ({ total: 0, deadline_passed: 0, no_proposal: 0, proposed_time_passed: 0 });
+const emptyUnplannedMetrics = () => ({ total: 0, deadline_passed: 0, no_proposal: 0, time_proposed: 0, proposed_time_passed: 0 });
 
 export async function loadUnplannedDuels(db, {
   tournamentIds, nowIso, days, planningStatus = null, proposedTime = null, page = 1, pageSize = PAGE_SIZES[0],
@@ -307,6 +307,7 @@ export async function loadUnplannedDuels(db, {
     metrics.total += 1;
     if (status === "deadline_passed") metrics.deadline_passed += 1;
     if (status === "no_proposal") metrics.no_proposal += 1;
+    if (status === "time_proposed") metrics.time_proposed += 1;
     if (matchesProposedTimeWindow(item, "passed", nowIso)) metrics.proposed_time_passed += 1;
     if (!matchesProposedTimeWindow(item, proposedTime, nowIso)) continue;
     statusCounts[status] += 1;
