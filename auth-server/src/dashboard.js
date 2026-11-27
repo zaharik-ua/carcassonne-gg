@@ -8,7 +8,7 @@
 // Blocks list records with a link; open cases can be closed or deleted (tournament-cases.js).
 
 export const DASHBOARD_BLOCK_LIMIT = 10;
-export const DEFAULT_DAYS_BEFORE_DEADLINE = 3;
+export const DEFAULT_DAYS_BEFORE_DEADLINE = 5;
 export const MAX_DAYS_BEFORE_DEADLINE = 60;
 export const NEW_USERS_DAYS = 7;
 // The unplanned duels, error duels and new users blocks are paged; the other blocks show their first DASHBOARD_BLOCK_LIMIT records.
@@ -253,12 +253,17 @@ export function matchesProposedTimeWindow(item, window, nowIso) {
 }
 
 const emptyStatusCounts = () => Object.fromEntries(PLANNING_STATUSES.map((status) => [status, 0]));
+// The counter tiles: unplanned duels within the days window, whatever the Status and Proposed time filters.
+const emptyUnplannedMetrics = () => ({ total: 0, deadline_passed: 0, no_proposal: 0, proposed_time_passed: 0 });
 
 export async function loadUnplannedDuels(db, {
   tournamentIds, nowIso, days, planningStatus = null, proposedTime = null, page = 1, pageSize = PAGE_SIZES[0],
 }) {
   if (!tournamentIds.length) {
-    return { count: 0, items: [], status_counts: emptyStatusCounts(), page: 1, page_size: pageSize, total_pages: 1 };
+    return {
+      count: 0, items: [], status_counts: emptyStatusCounts(), metrics: emptyUnplannedMetrics(),
+      page: 1, page_size: pageSize, total_pages: 1,
+    };
   }
   const limitIso = new Date(Date.parse(nowIso) + days * DAY_MS).toISOString();
   const rows = await dbAll(
@@ -281,6 +286,7 @@ export async function loadUnplannedDuels(db, {
   const items = [];
   // Counts by status follow the proposed time filter, so each status option shows what it would list.
   const statusCounts = emptyStatusCounts();
+  const metrics = emptyUnplannedMetrics();
   for (const row of rows) {
     const status = getPlanningStatus(row, nowIso);
     if (!status) continue;
@@ -298,12 +304,16 @@ export async function loadUnplannedDuels(db, {
       player_1_contacts: contactsOf(row, "player_1"),
       player_2_contacts: contactsOf(row, "player_2"),
     };
+    metrics.total += 1;
+    if (status === "deadline_passed") metrics.deadline_passed += 1;
+    if (status === "no_proposal") metrics.no_proposal += 1;
+    if (matchesProposedTimeWindow(item, "passed", nowIso)) metrics.proposed_time_passed += 1;
     if (!matchesProposedTimeWindow(item, proposedTime, nowIso)) continue;
     statusCounts[status] += 1;
     if (planningStatus && status !== planningStatus) continue;
     items.push(item);
   }
-  return { count: items.length, status_counts: statusCounts, ...paginate(items, page, pageSize) };
+  return { count: items.length, status_counts: statusCounts, metrics, ...paginate(items, page, pageSize) };
 }
 
 export async function loadErrorDuels(db, { tournamentIds, page = 1, pageSize = PAGE_SIZES[0] }) {

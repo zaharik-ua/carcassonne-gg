@@ -127,10 +127,10 @@ async function createDatabase(t) {
 }
 
 test("days before deadline defaults to 3 and is clamped", () => {
-  assert.equal(parseDaysBeforeDeadline(undefined), 3);
+  assert.equal(parseDaysBeforeDeadline(undefined), 5);
   assert.equal(parseDaysBeforeDeadline("7"), 7);
-  assert.equal(parseDaysBeforeDeadline("-1"), 3);
-  assert.equal(parseDaysBeforeDeadline("abc"), 3);
+  assert.equal(parseDaysBeforeDeadline("-1"), 5);
+  assert.equal(parseDaysBeforeDeadline("abc"), 5);
   assert.equal(parseDaysBeforeDeadline("1000"), 60);
 });
 
@@ -232,6 +232,8 @@ test("tournament admin: unplanned duels with a deadline and error duels of their
   assert.equal(pending.player_2.association_flag, "fr.png");
   assert.equal(unplanned.items.find((item) => item.id === "no-proposal").player_2.association_flag, null);
   assert.deepEqual(unplanned.status_counts, { deadline_passed: 1, no_proposal: 1, time_proposed: 1, change_pending: 1 });
+  // "change" has a proposed time (10:00) before NOW (12:00).
+  assert.deepEqual(unplanned.metrics, { total: 4, deadline_passed: 1, no_proposal: 1, proposed_time_passed: 1 });
 
   assert.deepEqual(dashboard.blocks.error_duels.items.map((item) => item.id), ["error"]);
   assert.equal(dashboard.blocks.error_duels.items[0].error, "BGA table not found");

@@ -342,6 +342,34 @@
     background: var(--dash-primary-hover);
   }
 
+  /* Unplanned matches: the colors of the Time proposed badge (dash-status-badge is-warn). */
+  .dash-tile.tone-warn-soft {
+    background: #fff8e1;
+    color: #5c4300;
+  }
+
+  .dash-tile.tone-warn-soft:hover {
+    background: #fdefc4;
+  }
+
+  /* No time proposed: the colors of the Deadline passed badge (dash-status-badge is-attention). */
+  .dash-tile.tone-attention-soft {
+    background: #fde8e8;
+    color: #b42318;
+  }
+
+  .dash-tile.tone-attention-soft:hover {
+    background: #fbd5d5;
+  }
+
+  .dash-tile.tone-warn-soft .dash-tile-count {
+    color: #5c4300;
+  }
+
+  .dash-tile.tone-attention-soft .dash-tile-count {
+    color: #b42318;
+  }
+
   .dash-tile.tone-attention .dash-tile-count,
   .dash-tile.tone-info .dash-tile-count {
     color: #fff;
@@ -1021,8 +1049,8 @@
   const contentEl = document.getElementById("dashContent");
   const filtersEl = document.getElementById("dashFilters");
   const tournamentSlot = document.getElementById("dashTournament");
-  const DEFAULT_DAYS = "3";
-  const DAY_OPTIONS = [1, 2, 3, 4, 5].map((days) => ({ value: String(days), label: `${days} day${days === 1 ? "" : "s"}` }));
+  const DEFAULT_DAYS = "5";
+  const DAY_OPTIONS = [3, 4, 5, 6, 7].map((days) => ({ value: String(days), label: `${days} day${days === 1 ? "" : "s"}` }));
   // Unplanned matches with an active time proposal, by when the proposed time is (PROPOSED_TIME_WINDOWS on the server).
   const PROPOSED_TIME_OPTIONS = [
     { value: "", label: "Any time" },
@@ -1819,26 +1847,59 @@
     return section;
   }
 
+  function createTile({ label, count, iconName, tone, onClick }) {
+    const tile = el("button", `dash-tile ${count ? tone : "is-clear"}`);
+    tile.type = "button";
+    tile.setAttribute("aria-label", `${label}: ${count}. Go to section`);
+    const tileIcon = el("span", "dash-tile-icon");
+    tileIcon.appendChild(icon(count ? iconName : "check"));
+    const body = el("span", "dash-tile-body");
+    body.appendChild(el("span", "dash-tile-count", count));
+    body.appendChild(el("span", "dash-tile-label", label));
+    tile.appendChild(tileIcon);
+    tile.appendChild(body);
+    tile.addEventListener("click", onClick);
+    return tile;
+  }
+
+  const scrollToSection = (key) => {
+    document.getElementById(`dash-${key}`)?.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
+
+  // Unplanned matches has four tiles; each one sets the Status and Proposed time filters of the list.
+  // Their counts (metrics on the server) do not depend on those filters.
+  function unplannedTiles(block) {
+    const metrics = block?.metrics || {};
+    const showList = (status, proposed) => () => {
+      scrollToSection("unplanned_duels");
+      if (filterState.status === status && filterState.proposed === proposed) return;
+      filterState.status = status;
+      filterState.proposed = proposed;
+      onFilterChange("unplanned_duels");
+    };
+    return [
+      { label: "Deadline passed", count: metrics.deadline_passed, iconName: "alert", tone: "tone-attention", onClick: showList("deadline_passed", "") },
+      { label: "Unplanned matches", count: metrics.total ?? block?.count, iconName: "calendarClock", tone: "tone-warn-soft", onClick: showList("", "") },
+      { label: "No time proposed", count: metrics.no_proposal, iconName: "calendarClock", tone: "tone-attention-soft", onClick: showList("no_proposal", "") },
+      { label: "Proposed time passed", count: metrics.proposed_time_passed, iconName: "clock", tone: "tone-attention", onClick: showList("", "passed") },
+    ].map((tile) => createTile({ ...tile, count: Number(tile.count || 0) }));
+  }
+
   function renderTiles(data, visibleBlocks) {
     const tiles = el("div", "dash-tiles");
     visibleBlocks.forEach((config) => {
       const block = data.blocks[config.key];
-      const count = blockCount(block, config);
-      const tone = !count ? "is-clear" : config.info ? "tone-info" : "tone-attention";
-      const tile = el("button", `dash-tile ${tone}`);
-      tile.type = "button";
-      tile.setAttribute("aria-label", `${config.tile}: ${count}. Go to section`);
-      const tileIcon = el("span", "dash-tile-icon");
-      tileIcon.appendChild(icon(count ? config.icon : "check"));
-      const body = el("span", "dash-tile-body");
-      body.appendChild(el("span", "dash-tile-count", count));
-      body.appendChild(el("span", "dash-tile-label", config.tile));
-      tile.appendChild(tileIcon);
-      tile.appendChild(body);
-      tile.addEventListener("click", () => {
-        document.getElementById(`dash-${config.key}`)?.scrollIntoView({ behavior: "smooth", block: "start" });
-      });
-      tiles.appendChild(tile);
+      if (config.key === "unplanned_duels") {
+        unplannedTiles(block).forEach((tile) => tiles.appendChild(tile));
+        return;
+      }
+      tiles.appendChild(createTile({
+        label: config.tile,
+        count: blockCount(block, config),
+        iconName: config.icon,
+        tone: config.info ? "tone-info" : "tone-attention",
+        onClick: () => scrollToSection(config.key),
+      }));
     });
     return tiles;
   }
