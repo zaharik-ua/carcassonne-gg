@@ -22,6 +22,8 @@
     --dash-neutral-bg: #eef1f5;
     --dash-radius: 6px;
     --dash-ease: 160ms ease;
+    /* A tile click scrolls its section below the site menu (45px) with a 16px gap. */
+    --dash-scroll-offset: 61px;
   }
 
   body {
@@ -339,13 +341,32 @@
     background: var(--dash-attention-hover);
   }
 
-  .dash-tile.tone-info {
-    background: var(--dash-primary);
+  /* News proposals: a medium emerald green; white text keeps 4.5:1 contrast. */
+  .dash-tile.tone-ok {
+    background: #0a8259;
     color: #fff;
   }
 
+  .dash-tile.tone-ok:hover {
+    background: #097550;
+  }
+
+  .dash-tile.tone-ok .dash-tile-count {
+    color: #fff;
+  }
+
+  /* New users: light blue, saturated enough to stand out on the site's light grey background. */
+  .dash-tile.tone-info {
+    background: #bfdbf7;
+    color: #0f4c81;
+  }
+
   .dash-tile.tone-info:hover {
-    background: var(--dash-primary-hover);
+    background: #a9cdf2;
+  }
+
+  .dash-tile.tone-info .dash-tile-count {
+    color: #0f4c81;
   }
 
   /* Time proposed: the colors of the Time proposed badge (dash-status-badge is-warn). */
@@ -358,14 +379,14 @@
     background: #fdefc4;
   }
 
-  /* No time proposed: the colors of the Deadline passed badge (dash-status-badge is-attention). */
+  /* No time proposed: a deeper shade of the Deadline passed badge, to stand out on the site background. */
   .dash-tile.tone-attention-soft {
-    background: #fde8e8;
-    color: #b42318;
+    background: #fbd0d0;
+    color: #a51f15;
   }
 
   .dash-tile.tone-attention-soft:hover {
-    background: #fbd5d5;
+    background: #f8bcbc;
   }
 
   .dash-tile.tone-warn-soft .dash-tile-count {
@@ -373,11 +394,10 @@
   }
 
   .dash-tile.tone-attention-soft .dash-tile-count {
-    color: #b42318;
+    color: #a51f15;
   }
 
-  .dash-tile.tone-attention .dash-tile-count,
-  .dash-tile.tone-info .dash-tile-count {
+  .dash-tile.tone-attention .dash-tile-count {
     color: #fff;
   }
 
@@ -387,7 +407,7 @@
     background: var(--dash-card);
     border: 1px solid var(--dash-border);
     border-radius: var(--dash-radius);
-    scroll-margin-top: 16px;
+    scroll-margin-top: var(--dash-scroll-offset);
     transition: opacity var(--dash-ease);
   }
 
@@ -581,6 +601,7 @@
   /* ---------- Unplanned matches: the match list of team-official-matches.html ---------- */
 
   .dash-om {
+    scroll-margin-top: var(--dash-scroll-offset);
     transition: opacity var(--dash-ease);
   }
 
@@ -900,6 +921,18 @@
     height: 15px;
   }
 
+  /* A player without a site user (Unplanned matches). */
+  .dash-om-nouser {
+    display: inline-flex;
+    flex: 0 0 auto;
+    color: #d92d20;
+  }
+
+  .dash-om-nouser .dash-icon {
+    width: 16px;
+    height: 16px;
+  }
+
   .dash-om-meta {
     margin-top: 2px;
     font-size: 11px;
@@ -1092,6 +1125,7 @@
     check: '<path d="M20 6 9 17l-5-5"/>',
     chevronDown: '<path d="m6 9 6 6 6-6"/>',
     clock: '<circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/>',
+    userX: '<circle cx="12" cy="8" r="4"/><path d="M5 21v-1a7 7 0 0 1 14 0v1"/><path d="M3 3l18 18"/>',
   };
 
   function icon(name) {
@@ -1207,7 +1241,7 @@
     { key: "unplanned_duels", title: "Unplanned matches", tile: "Unplanned matches", icon: "calendarClock", render: renderUnplannedDuel },
     { key: "error_duels", title: "Matches in Error", tile: "Errors", icon: "alert", render: renderErrorDuel },
     { key: "cases", title: "Open cases", tile: "Open cases", icon: "inbox", render: renderCase },
-    { key: "news_drafts", title: "News proposals in Draft", tile: "News proposals", icon: "newspaper", render: renderNewsDraft },
+    { key: "news_drafts", title: "News proposals in Draft", tile: "News proposals", icon: "newspaper", render: renderNewsDraft, tone: "tone-ok" },
     { key: "new_users", title: "New users", tile: "New users", icon: "userPlus", render: renderNewUser, info: true },
     { key: "my_duels", title: "My matches", tile: "My matches: action needed", icon: "swords", render: renderMyDuel, countKey: "action_count" },
     { key: "my_cases", title: "My cases", tile: "My open cases", icon: "fileText", render: renderMyCase, countKey: "active_count" },
@@ -1373,7 +1407,8 @@
       : el("div", "dash-om-meta is-overdue", `Proposed time passed ${durationText(-left)} ago`);
   }
 
-  // Flag, name with a link to the player's profile, and a clock icon for the player who proposed the time.
+  // Flag, name with a link to the player's profile, a clock icon for the player who proposed the time,
+  // and a crossed-out user icon for a player without a site user.
   function matchPlayerLine(player, isProposer) {
     const line = el("div", "dash-om-player");
     if (player?.association_flag) {
@@ -1391,6 +1426,15 @@
       mark.setAttribute("role", "img");
       mark.setAttribute("aria-label", "Proposed the match time");
       mark.appendChild(icon("clock"));
+      line.appendChild(mark);
+    }
+    // `has_user` comes with Unplanned matches only; false: the player has no user on the site.
+    if (player?.has_user === false) {
+      const mark = el("span", "dash-om-nouser");
+      mark.title = "No user on the site";
+      mark.setAttribute("role", "img");
+      mark.setAttribute("aria-label", "No user on the site");
+      mark.appendChild(icon("userX"));
       line.appendChild(mark);
     }
     return line;
@@ -1849,7 +1893,7 @@
   function createTile({ label, count, iconName, tone, onClick, active }) {
     const tile = el("button", `dash-tile ${count ? tone : "is-clear"}${active ? " is-active" : ""}`);
     tile.type = "button";
-    tile.setAttribute("aria-label", `${label}: ${count}. Go to section`);
+    tile.setAttribute("aria-label", active === undefined ? `${label}: ${count}. Go to section` : `${label}: ${count}. Filter the list`);
     if (active !== undefined) tile.setAttribute("aria-pressed", active ? "true" : "false");
     const tileIcon = el("span", "dash-tile-icon");
     tileIcon.appendChild(icon(count ? iconName : "check"));
@@ -1893,8 +1937,8 @@
 
   function unplannedTiles(block) {
     const metrics = unplannedMetrics(block);
+    // These tiles only filter the list; the page does not scroll (the other tiles scroll to their section).
     const apply = (status, proposed) => {
-      scrollToSection("unplanned_duels");
       if (filterState.status === status && filterState.proposed === proposed) return;
       filterState.status = status;
       filterState.proposed = proposed;
@@ -1930,7 +1974,7 @@
         label: config.tile,
         count: blockCount(block, config),
         iconName: config.icon,
-        tone: config.info ? "tone-info" : "tone-attention",
+        tone: config.tone || (config.info ? "tone-info" : "tone-attention"),
         onClick: () => scrollToSection(config.key),
       }));
     });

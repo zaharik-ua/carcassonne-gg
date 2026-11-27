@@ -174,8 +174,10 @@ export function getPlanningStatus(row, nowIso) {
   return null;
 }
 
+// `contacts`: also the player's contacts and whether the player has a site user (users.bga_id = profiles.id).
 const PLAYER_COLUMNS = (alias, prefix, { contacts = false } = {}) => [
   `${alias}.id AS ${prefix}_id`,
+  ...(contacts ? [`EXISTS (SELECT 1 FROM users u WHERE trim(u.bga_id) = ${alias}.id) AS ${prefix}_has_user`] : []),
   `${alias}.bga_nickname AS ${prefix}_nickname`,
   `${alias}.name AS ${prefix}_name`,
   `${alias}.association AS ${prefix}_association`,
@@ -292,8 +294,11 @@ export async function loadUnplannedDuels(db, {
     if (!status) continue;
     const deadline = toIso(row.deadline_utc);
     const proposedBy = text(row.proposed_time_by_player_id);
+    const summary = duelSummary(row, flagOf);
     const item = {
-      ...duelSummary(row, flagOf),
+      ...summary,
+      player_1: summary.player_1 && { ...summary.player_1, has_user: !!row.player_1_has_user },
+      player_2: summary.player_2 && { ...summary.player_2, has_user: !!row.player_2_has_user },
       link: buildDuelLink(row, { adminPage: true }),
       duel_format: text(row.duel_format) || null,
       planning_status: status,

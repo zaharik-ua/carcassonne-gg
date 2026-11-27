@@ -228,12 +228,19 @@ test("tournament admin: unplanned duels with a deadline and error duels of their
   assert.deepEqual(pending.player_1_contacts, { telegram: "@one" });
   assert.equal(pending.link, "/player-hub/tournaments?id=CCL-2027&edit=1&match_id=pending");
   assert.equal(pending.player_1.association_flag, "ua.png");
+  assert.equal(pending.player_1.has_user, true);
   // The slot association (FR) wins over the profile association (DE).
   assert.equal(pending.player_2.association_flag, "fr.png");
   assert.equal(unplanned.items.find((item) => item.id === "no-proposal").player_2.association_flag, null);
   assert.deepEqual(unplanned.status_counts, { deadline_passed: 1, no_proposal: 1, time_proposed: 1, change_pending: 1 });
   // "change" has a proposed time (10:00) before NOW (12:00).
   assert.deepEqual(unplanned.metrics, { total: 4, deadline_passed: 1, no_proposal: 1, time_proposed: 1, proposed_time_passed: 1 });
+  // p2 without a site user.
+  await run(db, "UPDATE users SET bga_id = NULL WHERE bga_id = 'p2'");
+  const withoutUser = await buildDashboard(db, USERS.tournamentAdmin, { now: NOW });
+  const noProposal = withoutUser.blocks.unplanned_duels.items.find((item) => item.id === "no-proposal");
+  assert.equal(noProposal.player_1.has_user, true);
+  assert.equal(noProposal.player_2.has_user, false);
 
   assert.deepEqual(dashboard.blocks.error_duels.items.map((item) => item.id), ["error"]);
   assert.equal(dashboard.blocks.error_duels.items[0].error, "BGA table not found");
