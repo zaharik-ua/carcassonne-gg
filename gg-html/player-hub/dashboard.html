@@ -1868,8 +1868,29 @@
 
   // Unplanned matches has four tiles; each one sets the Status and Proposed time filters of the list.
   // Their counts (metrics on the server) do not depend on those filters.
+  // Tile counts of an API without `metrics` (not restarted yet), by tournament and days, so they
+  // do not change with the Status and Proposed time filters.
+  const unplannedMetricsCache = new Map();
+
+  // The tile counts never depend on the Status and Proposed time filters. The server sends them as
+  // `metrics`; without them they come from `status_counts`, which ignore the Status filter.
+  function unplannedMetrics(block) {
+    if (block?.metrics) return block.metrics;
+    const key = `${filterState.tournamentId}|${filterState.days}`;
+    const cached = unplannedMetricsCache.get(key) || {};
+    const counts = block?.status_counts || {};
+    const sum = Object.values(counts).reduce((total, value) => total + Number(value || 0), 0);
+    if (!filterState.proposed) {
+      Object.assign(cached, { total: sum, deadline_passed: counts.deadline_passed, no_proposal: counts.no_proposal });
+    } else if (filterState.proposed === "passed") {
+      cached.proposed_time_passed = sum;
+    }
+    unplannedMetricsCache.set(key, cached);
+    return cached;
+  }
+
   function unplannedTiles(block) {
-    const metrics = block?.metrics || {};
+    const metrics = unplannedMetrics(block);
     const showList = (status, proposed) => () => {
       scrollToSection("unplanned_duels");
       if (filterState.status === status && filterState.proposed === proposed) return;
@@ -1879,7 +1900,7 @@
     };
     return [
       { label: "Deadline passed", count: metrics.deadline_passed, iconName: "alert", tone: "tone-attention", onClick: showList("deadline_passed", "") },
-      { label: "Unplanned matches", count: metrics.total ?? block?.count, iconName: "calendarClock", tone: "tone-warn-soft", onClick: showList("", "") },
+      { label: "Unplanned matches", count: metrics.total, iconName: "calendarClock", tone: "tone-warn-soft", onClick: showList("", "") },
       { label: "No time proposed", count: metrics.no_proposal, iconName: "calendarClock", tone: "tone-attention-soft", onClick: showList("no_proposal", "") },
       { label: "Proposed time passed", count: metrics.proposed_time_passed, iconName: "clock", tone: "tone-attention", onClick: showList("", "passed") },
     ].map((tile) => createTile({ ...tile, count: Number(tile.count || 0) }));
