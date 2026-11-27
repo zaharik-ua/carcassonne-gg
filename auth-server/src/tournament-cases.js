@@ -289,7 +289,47 @@ export function caseAuditEntry(caseResult, metadata = {}) {
 const actorPlayerId = (user) => text(user?.player_id ?? user?.bga_id);
 const actorUserId = (user) => (Number.isInteger(Number(user?.id)) && Number(user?.id) > 0 ? Number(user.id) : null);
 
+// Global admins manage every case; tournament admins (role = admin in tournament_access_users)
+// manage the cases of their tournaments. Cases without a tournament (Rivals) are for global admins.
+export async function canManageTournamentCase(db, user, row) {
+  if (!row) return false;
+  if (Number(user?.admin) === 1) return true;
+  const userId = actorUserId(user);
+  const tournamentId = text(row.tournament_id);
+  if (!userId || !tournamentId) return false;
+  const access = await dbGet(
+    db,
+    `
+      SELECT 1 FROM tournament_access_users
+      WHERE tournament_entity_type = 'tournament'
+        AND user_id = ?
+        AND lower(trim(role)) = 'admin'
+        AND upper(trim(tournament_id)) = upper(trim(?))
+      LIMIT 1
+    `,
+    [userId, tournamentId]
+  );
+  return !!access;
+}
+
+function caseChangeAuditEntry(before, after, action) {
+  const changes = {};
+  Object.keys(after || {}).forEach((key) => {
+    if ((before?.[key] ?? null) !== (after?.[key] ?? null)) changes[key] = { old: before?.[key] ?? null, new: after[key] ?? null };
+  });
+  return {
+    event_type: `tournament_case.${action === "delete" ? "deleted" : "updated"}`,
+    entity_type: "tournament_case",
+    action,
+    record_id: String(after?.id ?? before?.id ?? ""),
+    changes,
+    metadata: { tournament_id: before?.tournament_id || null },
+  };
+}
+
 // POST /tournaments/:tournamentId/cases — a case without a match, from the tournament Rules page.
+// POST /tournament-cases/:caseId/close — an admin closes a case (status = closed).
+// DELETE /tournament-cases/:caseId — an admin soft-deletes a case (deleted_at is set).
 export function registerTournamentCaseRoutes(app, {
   db,
   requireAuthenticated,
@@ -342,6 +382,72 @@ export function registerTournamentCaseRoutes(app, {
     } catch (error) {
       logger.error?.("Failed to create tournament case", error);
       return res.status(500).json({ ok: false, message: "Failed to send the case" });
+    }
+  });
+
+  // The case an admin may change, or null after sending the error response.
+  async function loadManagedCase(req, res) {
+    const caseId = Number(req.params?.caseId);
+    if (!Number.isInteger(caseId) || caseId <= 0) {
+      res.status(400).json({ ok: false, message: "Invalid case id" });
+      return null;
+    }
+    const row = await loadTournamentCase(db, caseId);
+    if (!row || row.deleted_at) {
+      res.status(404).json({ ok: false, message: "Case not found" });
+      return null;
+    }
+    if (!(await canManageTournamentCase(db, req.user, row))) {
+      res.status(403).json({ ok: false, message: "Only admins of this tournament can change the case" });
+      return null;
+    }
+    return row;
+  }
+
+  const logChange = (req, before, after, action) => {
+    if (typeof logAuditEvent === "function") {
+      logAuditEvent({ ...getAuditActor(req.user), ...caseChangeAuditEntry(before, after, action) }, () => {});
+    }
+  };
+
+  app.post("/tournament-cases/:caseId/close", requireAuthenticated, requireTrustedJsonRequest, async (req, res) => {
+    try {
+      const before = await loadManagedCase(req, res);
+      if (!before) return undefined;
+      if (before.status === "closed") return res.json({ ok: true, case: formatSubmittedCase(before) });
+      await dbRun(
+        db,
+        `
+          UPDATE tournament_cases
+          SET status = 'closed', resolved_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
+          WHERE id = ? AND deleted_at IS NULL
+        `,
+        [before.id]
+      );
+      const after = await loadTournamentCase(db, before.id);
+      logChange(req, before, after, "update");
+      return res.json({ ok: true, case: formatSubmittedCase(after) });
+    } catch (error) {
+      logger.error?.("Failed to close tournament case", error);
+      return res.status(500).json({ ok: false, message: "Failed to close the case" });
+    }
+  });
+
+  app.delete("/tournament-cases/:caseId", requireAuthenticated, requireTrustedJsonRequest, async (req, res) => {
+    try {
+      const before = await loadManagedCase(req, res);
+      if (!before) return undefined;
+      await dbRun(
+        db,
+        "UPDATE tournament_cases SET deleted_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND deleted_at IS NULL",
+        [before.id]
+      );
+      const after = await loadTournamentCase(db, before.id);
+      logChange(req, before, after, "delete");
+      return res.json({ ok: true, id: before.id });
+    } catch (error) {
+      logger.error?.("Failed to delete tournament case", error);
+      return res.status(500).json({ ok: false, message: "Failed to delete the case" });
     }
   });
 }

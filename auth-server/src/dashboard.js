@@ -5,7 +5,7 @@
 //   (global admins too): open cases of those tournaments (global admins see all), unplanned duels
 //   with a structured deadline (tournament_stages, CCL for now) and duels in Error.
 // - Players with a linked profile: their own active duels and the cases they submitted (all tournaments).
-// Blocks only list records with a link; actions on them come later.
+// Blocks list records with a link; open cases can be closed or deleted (tournament-cases.js).
 
 export const DASHBOARD_BLOCK_LIMIT = 10;
 export const DEFAULT_DAYS_BEFORE_DEADLINE = 3;

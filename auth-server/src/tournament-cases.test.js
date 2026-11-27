@@ -189,6 +189,7 @@ function createApi(db) {
   const app = {
     get: (routePath, ...handlers) => routes.set(`GET ${routePath}`, handlers.at(-1)),
     post: (routePath, ...handlers) => routes.set(`POST ${routePath}`, handlers.at(-1)),
+    delete: (routePath, ...handlers) => routes.set(`DELETE ${routePath}`, handlers.at(-1)),
   };
   const audit = [];
   registerTournamentCaseRoutes(app, {
@@ -252,4 +253,42 @@ test("POST /tournaments/:tournamentId/cases sends a case from the Rules page", a
   assert.equal(missing.status, 404);
   const noProfile = await api.call(route, { user: { id: 1 }, params: { tournamentId: "CCL-2027" }, body: { case_type: "feedback", details: "x" } });
   assert.equal(noProfile.status, 403);
+});
+
+test("admins close and soft-delete cases of their tournaments", async (t) => {
+  const db = await createDatabase(t);
+  await exec(db, `
+    CREATE TABLE tournament_access_users (tournament_entity_type TEXT, tournament_id TEXT, user_id INTEGER, role TEXT);
+    INSERT INTO users (id) VALUES (2), (3);
+    INSERT INTO tournaments (id) VALUES ('OTHER');
+    INSERT INTO tournament_access_users VALUES ('tournament', 'ccl-2027', 2, 'Admin');
+    INSERT INTO tournament_cases (case_type, category, details, submitted_by_player_id, tournament_id)
+      VALUES ('request', 'general', 'a', 'reporter', 'CCL-2027'),
+             ('request', 'general', 'b', 'reporter', 'OTHER'),
+             ('feedback', NULL, 'c', 'reporter', NULL);
+  `);
+  const api = createApi(db);
+  const tournamentAdmin = { id: 2 };
+  const globalAdmin = { id: 3, admin: 1 };
+  const close = "POST /tournament-cases/:caseId/close";
+  const remove = "DELETE /tournament-cases/:caseId";
+
+  assert.equal((await api.call(close, { user: { id: 1, player_id: "reporter" }, params: { caseId: "1" } })).status, 403);
+  assert.equal((await api.call(close, { user: tournamentAdmin, params: { caseId: "2" } })).status, 403);
+  assert.equal((await api.call(remove, { user: tournamentAdmin, params: { caseId: "3" } })).status, 403);
+  assert.equal((await api.call(close, { user: tournamentAdmin, params: { caseId: "x" } })).status, 400);
+
+  const closed = await api.call(close, { user: tournamentAdmin, params: { caseId: "1" } });
+  assert.equal(closed.status, 200, JSON.stringify(closed.body));
+  assert.equal(closed.body.case.status, "closed");
+  assert.equal(api.audit.at(-1).event_type, "tournament_case.updated");
+  assert.deepEqual(api.audit.at(-1).changes.status, { old: "open", new: "closed" });
+
+  const deleted = await api.call(remove, { user: globalAdmin, params: { caseId: "3" } });
+  assert.equal(deleted.status, 200);
+  assert.equal(api.audit.at(-1).event_type, "tournament_case.deleted");
+  const [row] = await all(db, "SELECT deleted_at FROM tournament_cases WHERE id = 3");
+  assert.ok(row.deleted_at);
+  assert.equal((await api.call(remove, { user: globalAdmin, params: { caseId: "3" } })).status, 404);
+  assert.equal((await api.call(close, { user: globalAdmin, params: { caseId: "3" } })).status, 404);
 });

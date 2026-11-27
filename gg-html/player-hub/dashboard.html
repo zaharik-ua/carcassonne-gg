@@ -523,6 +523,22 @@
     border-color: #9ea7b3;
   }
 
+  .dash-link:disabled {
+    opacity: 0.6;
+    cursor: default;
+  }
+
+  .dash-link-danger {
+    color: var(--dash-attention);
+  }
+
+  .dash-row-actions {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 6px;
+  }
+
   .dash-link:focus-visible {
     outline: 2px solid var(--dash-primary);
     outline-offset: 2px;
@@ -1657,9 +1673,42 @@
       ],
       side: [
         badge({ label: caseLabel(item.priority), tone: CASE_PRIORITY_TONE[item.priority] ?? "" }),
-        linkTo(item.link),
+        caseActions(item),
       ],
     });
+  }
+
+  // View, Close (status = closed) and Delete (soft delete) of an open case; the list reloads after a change.
+  function caseActions(item) {
+    const wrap = el("div", "dash-row-actions");
+    const view = linkTo(item.link);
+    if (view) wrap.appendChild(view);
+    const action = (label, className, confirmText, method, path, failText) => {
+      const btn = el("button", className, label);
+      btn.type = "button";
+      btn.addEventListener("click", async () => {
+        if (!window.confirm(confirmText)) return;
+        wrap.querySelectorAll("button").forEach((node) => { node.disabled = true; });
+        try {
+          const response = await fetch(`${AUTH_BASE}${path}`, {
+            method, credentials: "include", headers: { "Content-Type": "application/json" }, body: "{}",
+          });
+          const data = await response.json().catch(() => ({}));
+          if (!response.ok || !data?.ok) throw new Error(data?.message || failText);
+          load();
+        } catch (error) {
+          wrap.querySelectorAll("button").forEach((node) => { node.disabled = false; });
+          window.alert(error?.message || failText);
+        }
+      });
+      return btn;
+    };
+    const name = caseTitle(item);
+    wrap.appendChild(action("Close", "dash-link", `Close the case "${name}"?`, "POST",
+      `/tournament-cases/${encodeURIComponent(item.id)}/close`, "Failed to close the case"));
+    wrap.appendChild(action("Delete", "dash-link dash-link-danger", `Delete the case "${name}"?`, "DELETE",
+      `/tournament-cases/${encodeURIComponent(item.id)}`, "Failed to delete the case"));
+    return wrap;
   }
 
   const MY_CASE_STATUS_TONE = { open: "warn", in_progress: "warn", resolved: "ok", closed: "" };
