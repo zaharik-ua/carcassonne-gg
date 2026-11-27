@@ -99,7 +99,7 @@ test("the case a player may send depends on the match state", () => {
   assert.equal(scenario({ status: "Planned", time_utc: "2026-11-25T18:00:00Z" }), null);
   // An agreed time that a player asked to change.
   assert.equal(scenario({ status: "Planned", time_utc: "2026-11-25T18:00:00Z", proposed_time_status: "change_pending" }), "scheduling");
-  assert.equal(scenario({ status: "Error" }), "not_played");
+  assert.equal(scenario({ status: "Error" }), "no_show");
   assert.equal(scenario({ status: "Error" }, [{ player_1_score: 0 }]), "incomplete");
   assert.equal(scenario({ status: "Error" }, [{ status: "No show" }]), "incomplete");
   // Players edit the result themselves for 24 hours after the match start.
@@ -159,10 +159,12 @@ test("Resolve → Other saves a Match was not played case and keeps the match in
   const sent = await report(api, "error-empty", { category: "not_played", details: "BGA was down" });
   assert.equal(sent.status, 201, JSON.stringify(sent.body));
   assert.deepEqual([sent.body.case.case_type, sent.body.case.category], ["problem", "not_played"]);
+  assert.equal(sent.body.case.reported_player_id, null);
   // A type or category from the client does not change the case.
   const again = await report(api, "error-empty", { case_type: "complaint", details: "More" });
   assert.equal(again.body.case.id, sent.body.case.id);
   assert.equal(again.body.case.case_type, "problem");
+  assert.equal((await report(api, "error-empty", { category: "no_show", details: "x" })).status, 409);
   assert.equal((await report(api, "error-empty", { category: "conduct", details: "x" })).status, 409);
   assert.equal((await get(db, "SELECT status FROM duels WHERE id = 'error-empty'")).status, "Error");
 });
@@ -172,7 +174,9 @@ test("Resolve no-show saves a case and resets the match time", async (t) => {
   const api = createApi(db);
   const result = await resolve(api, "error-empty", { action: "no_show", no_show_player_id: "taras" });
   assert.equal(result.status, 200, JSON.stringify(result.body));
-  assert.equal(result.body.case.category, "not_played");
+  assert.deepEqual([result.body.case.case_type, result.body.case.category], ["complaint", "no_show"]);
+  assert.equal(result.body.case.reported_player_id, "taras");
+  assert.equal((await get(db, "SELECT reported_player_id FROM tournament_cases")).reported_player_id, "taras");
   assert.equal(result.body.case.details, "Player taras did not show up for the match scheduled for 20.11.2026 18:00 UTC.");
 
   const duel = await get(db, "SELECT * FROM duels WHERE id = 'error-empty'");

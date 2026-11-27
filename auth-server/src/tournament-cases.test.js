@@ -61,17 +61,16 @@ async function createDatabase(t) {
 
 const columnNames = async (db) => new Set((await all(db, "PRAGMA table_info(tournament_cases)")).map((column) => column.name));
 
-test("creates tournament_cases with details and without subject or reported player", async (t) => {
+test("creates tournament_cases with details and reported_player_id, without subject", async (t) => {
   const db = await createDatabase(t);
   const names = await columnNames(db);
   [
     "case_type", "category", "status", "priority", "details",
-    "submitted_by_user_id", "submitted_by_player_id", "responsible_user_id",
+    "submitted_by_user_id", "submitted_by_player_id", "responsible_user_id", "reported_player_id",
     "match_id", "duel_id", "tournament_id", "challenge_period_id",
     "related_entity_type", "related_entity_id", "resolution", "resolved_at", "deleted_at",
   ].forEach((name) => assert.equal(names.has(name), true, `missing ${name}`));
   assert.equal(names.has("subject"), false);
-  assert.equal(names.has("reported_player_id"), false);
 
   await run(db, "INSERT INTO tournament_cases (case_type, details, submitted_by_player_id) VALUES ('feedback', 'Nice', 'reporter')");
   await assert.rejects(
@@ -84,7 +83,7 @@ test("creates tournament_cases with details and without subject or reported play
   );
 });
 
-test("rebuilds the first version of the table, dropping subject and reported_player_id", async (t) => {
+test("rebuilds the first version of the table, dropping subject and keeping reported_player_id", async (t) => {
   const db = await openDatabase(t);
   await exec(db, `
     CREATE TABLE tournament_cases (
@@ -124,10 +123,10 @@ test("rebuilds the first version of the table, dropping subject and reported_pla
 
   const names = await columnNames(db);
   assert.equal(names.has("subject"), false);
-  assert.equal(names.has("reported_player_id"), false);
   const rows = await all(db, "SELECT * FROM tournament_cases");
   assert.equal(rows.length, 1);
   assert.equal(rows[0].id, 7);
+  assert.equal(rows[0].reported_player_id, "other");
   assert.equal(rows[0].details, "Did not show up");
   assert.equal(rows[0].duel_id, "duel-1");
   assert.equal(rows[0].created_at, "2026-11-01 10:00:00");
@@ -138,6 +137,43 @@ test("rebuilds the first version of the table, dropping subject and reported_pla
   // New ids continue after the copied ones.
   const insert = await run(db, "INSERT INTO tournament_cases (case_type, submitted_by_player_id) VALUES ('feedback', 'reporter')");
   assert.equal(insert.lastID, 8);
+});
+
+test("adds reported_player_id back to a table that was rebuilt without it", async (t) => {
+  const db = await openDatabase(t);
+  await exec(db, `
+    CREATE TABLE tournament_cases (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      case_type TEXT NOT NULL DEFAULT 'problem',
+      category TEXT,
+      status TEXT NOT NULL DEFAULT 'open',
+      priority TEXT NOT NULL DEFAULT 'normal',
+      details TEXT NOT NULL DEFAULT '',
+      submitted_by_user_id INTEGER,
+      submitted_by_player_id TEXT NOT NULL,
+      responsible_user_id INTEGER,
+      match_id TEXT,
+      duel_id TEXT,
+      tournament_id TEXT,
+      challenge_period_id TEXT,
+      related_entity_type TEXT,
+      related_entity_id TEXT,
+      resolution TEXT,
+      resolved_at TEXT,
+      deleted_at TEXT,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      CHECK (case_type IN ('problem', 'complaint', 'request', 'feedback', 'other'))
+    );
+    INSERT INTO tournament_cases (id, case_type, category, details, submitted_by_player_id)
+      VALUES (3, 'problem', 'not_played', 'Player other did not show up', 'reporter');
+  `);
+  await ensureTournamentCasesSchema(db);
+  assert.equal((await columnNames(db)).has("reported_player_id"), true);
+  const [row] = await all(db, "SELECT * FROM tournament_cases");
+  assert.equal(row.id, 3);
+  assert.equal(row.reported_player_id, null);
+  assert.equal(row.details, "Player other did not show up");
 });
 
 test("a player's open case on a duel takes new details of the same category", async (t) => {

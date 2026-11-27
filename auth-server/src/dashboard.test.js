@@ -46,7 +46,7 @@ async function createDatabase(t) {
     CREATE TABLE matches (id TEXT PRIMARY KEY, time_utc TEXT, deleted_at TEXT);
     CREATE TABLE tournament_cases (id INTEGER PRIMARY KEY, case_type TEXT, category TEXT, status TEXT, priority TEXT,
       details TEXT, submitted_by_user_id INTEGER, submitted_by_player_id TEXT, resolution TEXT, resolved_at TEXT,
-      responsible_user_id INTEGER, match_id TEXT,
+      responsible_user_id INTEGER, reported_player_id TEXT, match_id TEXT,
       duel_id TEXT, tournament_id TEXT, challenge_period_id TEXT, created_at TEXT, deleted_at TEXT);
     INSERT INTO tournament_cases (id, case_type, category, status, priority, details, submitted_by_player_id,
       responsible_user_id, duel_id, tournament_id, challenge_period_id, created_at, deleted_at) VALUES
@@ -56,6 +56,7 @@ async function createDatabase(t) {
       (4, 'request', NULL, 'resolved', 'high', 'Resolved', 'p1', NULL, NULL, 'WTCOC', NULL, '2026-11-01 10:00:00', NULL),
       (5, 'other', NULL, 'open', 'high', 'Deleted', 'p1', NULL, NULL, 'WTCOC', NULL, '2026-11-01 10:00:00', '2026-11-02');
     UPDATE tournament_cases SET resolution = 'Fixed', resolved_at = '2026-11-03 10:00:00' WHERE id = 4;
+    UPDATE tournament_cases SET reported_player_id = 'p2' WHERE id = 1;
     CREATE TABLE news (id INTEGER PRIMARY KEY, title TEXT, status TEXT, is_proposal INTEGER, tournament_id TEXT,
       created_by TEXT, created_at TEXT, deleted_at TEXT);
     CREATE TABLE duels (id TEXT PRIMARY KEY, tournament_id TEXT, match_id TEXT, challenge_period_id TEXT, group_id TEXT,
@@ -184,6 +185,9 @@ test("global admin sees global blocks and only the tournaments they were added t
   assert.equal(cases.count, 3);
   assert.equal(cases.items[0].responsible, "Admin");
   assert.equal(cases.items[1].submitted_by.name, "one");
+  // The player who did not show up, for admins.
+  assert.equal(cases.items[1].reported_player.id, "p2");
+  assert.equal(cases.items[0].reported_player, null);
   assert.equal(cases.items[1].details, "Player two did not show up");
   assert.equal(cases.items[1].days_open, 10);
   assert.equal(cases.items[1].link, "/player-hub/tournaments?id=WTCOC&edit=1&match_id=M1");

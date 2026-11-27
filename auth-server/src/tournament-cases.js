@@ -10,7 +10,7 @@ export const CASE_DETAILS_MAX_LENGTH = 5000;
 export const CASE_DETAILS_SEPARATOR = "\n--\n";
 
 // Categories of each type. A type without categories stores category = NULL.
-// complaint/no_show is the Rivals (Challenges) no-show report.
+// complaint/no_show is a no-show report (Rivals and CCL); reported_player_id holds the player who did not show up.
 export const TOURNAMENT_CASE_CATEGORIES = {
   problem: ["scheduling", "not_played", "incomplete", "result_dispute"],
   complaint: ["conduct", "no_show"],
@@ -92,6 +92,7 @@ const TABLE_SQL = (name) => `
     submitted_by_user_id INTEGER,
     submitted_by_player_id TEXT NOT NULL,
     responsible_user_id INTEGER,
+    reported_player_id TEXT,
     match_id TEXT,
     duel_id TEXT,
     tournament_id TEXT,
@@ -106,6 +107,7 @@ const TABLE_SQL = (name) => `
     FOREIGN KEY (submitted_by_user_id) REFERENCES users(id) ON DELETE SET NULL,
     FOREIGN KEY (submitted_by_player_id) REFERENCES profiles(id) ON DELETE RESTRICT,
     FOREIGN KEY (responsible_user_id) REFERENCES users(id) ON DELETE SET NULL,
+    FOREIGN KEY (reported_player_id) REFERENCES profiles(id) ON DELETE SET NULL,
     FOREIGN KEY (match_id) REFERENCES matches(id) ON DELETE SET NULL,
     FOREIGN KEY (duel_id) REFERENCES duels(id) ON DELETE SET NULL,
     FOREIGN KEY (tournament_id) REFERENCES tournaments(id) ON DELETE SET NULL,
@@ -137,20 +139,21 @@ const INDEXES_SQL = `
 
 const KEPT_COLUMNS = [
   "id", "case_type", "category", "status", "priority", "details",
-  "submitted_by_user_id", "submitted_by_player_id", "responsible_user_id",
+  "submitted_by_user_id", "submitted_by_player_id", "responsible_user_id", "reported_player_id",
   "match_id", "duel_id", "tournament_id", "challenge_period_id",
   "related_entity_type", "related_entity_id",
   "resolution", "resolved_at", "deleted_at", "created_at", "updated_at",
 ];
 
-// The first version had subject and reported_player_id and no 'feedback' type. SQLite cannot drop
-// a foreign-key column or change a CHECK in place, so the table is rebuilt; subject and
-// reported_player_id are dropped without moving their data (details already holds the text).
+// The first version had subject and no 'feedback' type; an interim version also dropped
+// reported_player_id. SQLite cannot drop a column or change a CHECK in place, so the table is rebuilt:
+// subject is dropped without moving its data (details already holds the text), reported_player_id is
+// kept, or added back empty.
 async function needsRebuild(db) {
   const table = await dbGet(db, "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'tournament_cases'");
   if (!table) return false;
   const columns = new Set((await dbAll(db, "PRAGMA table_info(tournament_cases)")).map((column) => column.name));
-  return columns.has("subject") || columns.has("reported_player_id") || !String(table.sql || "").includes("'feedback'");
+  return columns.has("subject") || !columns.has("reported_player_id") || !String(table.sql || "").includes("'feedback'");
 }
 
 async function rebuildTable(db) {
@@ -239,15 +242,15 @@ export async function createOrAppendTournamentCase(db, fields) {
     `
       INSERT INTO tournament_cases (
         case_type, category, status, priority, details,
-        submitted_by_user_id, submitted_by_player_id,
+        submitted_by_user_id, submitted_by_player_id, reported_player_id,
         match_id, duel_id, tournament_id, challenge_period_id,
         created_at, updated_at
       )
-      VALUES (?, ?, 'open', 'normal', ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+      VALUES (?, ?, 'open', 'normal', ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
     `,
     [
       fields.case_type, category, fields.details,
-      fields.submitted_by_user_id ?? null, playerId,
+      fields.submitted_by_user_id ?? null, playerId, text(fields.reported_player_id) || null,
       text(fields.match_id) || null, duelId, text(fields.tournament_id) || null,
       text(fields.challenge_period_id) || null,
     ]
@@ -266,6 +269,7 @@ export function formatSubmittedCase(row) {
     category_label: row.category ? TOURNAMENT_CASE_CATEGORY_LABELS[row.category] || row.category : null,
     status: row.status,
     details: row.details,
+    reported_player_id: row.reported_player_id || null,
     tournament_id: row.tournament_id || null,
     duel_id: row.duel_id || null,
     created_at: row.created_at,

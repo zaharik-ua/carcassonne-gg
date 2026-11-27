@@ -444,10 +444,12 @@ export async function loadOpenCases(db, { nowIso, tournamentId = "", tournamentI
       SELECT c.id, c.case_type, c.category, c.status, c.priority, c.details, c.created_at,
         c.tournament_id, c.match_id, c.duel_id, c.challenge_period_id,
         c.submitted_by_player_id, sp.bga_nickname AS submitted_nickname, sp.name AS submitted_name,
+        c.reported_player_id, rp.bga_nickname AS reported_nickname, rp.name AS reported_name,
         ru.name AS responsible_name, d.match_id AS duel_match_id,
         t.name AS tournament_name, t.short_title AS tournament_short_title
       FROM tournament_cases c
       LEFT JOIN profiles sp ON sp.id = c.submitted_by_player_id
+      LEFT JOIN profiles rp ON rp.id = c.reported_player_id
       LEFT JOIN users ru ON ru.id = c.responsible_user_id
       LEFT JOIN duels d ON d.id = c.duel_id
       LEFT JOIN tournaments t ON upper(trim(t.id)) = upper(trim(c.tournament_id))
@@ -476,6 +478,8 @@ export async function loadOpenCases(db, { nowIso, tournamentId = "", tournamentI
         priority: text(row.priority) || "normal",
         details: text(row.details),
         submitted_by: person(row, "submitted_by_player_id", "submitted"),
+        // The player a complaint is about (a no-show); admins only, players never see it.
+        reported_player: person(row, "reported_player_id", "reported"),
         responsible: text(row.responsible_name) || null,
         tournament: text(row.tournament_id) ? tournamentOf(row) : null,
         duel_id: text(row.duel_id) || null,

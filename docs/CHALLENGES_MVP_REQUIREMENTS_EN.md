@@ -407,7 +407,7 @@ This flow is used if players have already played a match, but did not create an 
 - [x] **CH-CAS-004** The dropdown contains `Match cancelled by mutual agreement of both players` and one `Player <nickname> did not show up for the match` option for each participant; the nickname is displayed in bold.
 - [x] **CH-CAS-005** Mutual cancellation changes the duel to `Cancelled`, stores `cancellation_reason = 'Match cancelled by mutual agreement of both players.'`, and does not create a `tournament_cases` record.
 - [x] **CH-CAS-006** For a no-show, the modal displays a required editable `Details` textarea prefilled in English with the absent player, opponent, Challenge period name, and scheduled UTC date and time.
-- [x] **CH-CAS-007** A no-show changes the duel to `Cancelled`, stores the final `Details` text in `duels.cancellation_reason`, and creates an open `tournament_cases` record with type `complaint` and category `no_show`.
+- [x] **CH-CAS-007** A no-show changes the duel to `Cancelled`, stores the final `Details` text in `duels.cancellation_reason`, and creates an open `tournament_cases` record with type `complaint`, category `no_show` and `reported_player_id` = the player who did not show up.
 - [x] **CH-CAS-008** The no-show case is linked to the duel, Challenge period, and the period's `rivals_tournament_id` when present; it also stores the submitting player; the no-show player is named in `details`.
 - [ ] **CH-CAS-009** Both resolution flows transactionally change the related request to `auto_cancelled`; the `Cancelled` duel stops occupying a slot, but neither player's participation status changes.
 - [x] **CH-CAS-010** The backend permits resolution only to a participant in the relevant Challenge duel, rechecks the `Error` status and absence of a result, and returns a conflict when the match has already changed.
@@ -621,6 +621,7 @@ This universal table stores tournament complaints, problems, and player requests
 | `submitted_by_user_id` | `INTEGER` | yes | `NULL` | FK → `users.id`; authenticated user who created the case. |
 | `submitted_by_player_id` | `TEXT` | no | — | FK → `profiles.id`; player who submitted the case. |
 | `responsible_user_id` | `INTEGER` | yes | `NULL` | FK → `users.id`; user responsible for handling the case. |
+| `reported_player_id` | `TEXT` | yes | `NULL` | FK → `profiles.id`; the player the complaint is about (for `no_show`, the player who did not show up). |
 | `match_id` | `TEXT` | yes | `NULL` | FK → `matches.id`; related team match, when present. |
 | `duel_id` | `TEXT` | yes | `NULL` | FK → `duels.id`; related duel, when present. |
 | `tournament_id` | `TEXT` | yes | `NULL` | FK → `tournaments.id`; related tournament, when present. |

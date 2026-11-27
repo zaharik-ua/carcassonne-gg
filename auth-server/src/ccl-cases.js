@@ -1,5 +1,5 @@
 // Cases about a CCL match (one duels row): a player reports a problem from their match list,
-// or resolves a match in Error that has no games played.
+// or resolves a match in Error that has no games played (a no-show or an agreed reschedule).
 import { getCclResultEditAccess } from "./ccl-result-edit.js";
 import { CCL_MATCH_SOURCE_TYPE } from "./ccl-matches.js";
 import { loadCclTournament } from "./ccl-routes.js";
@@ -12,6 +12,14 @@ import {
 } from "./tournament-cases.js";
 
 export const CCL_RESOLVE_ACTIONS = new Set(["no_show", "reschedule"]);
+// The Match problem category a player sends from each scenario: Report a problem, or Resolve → Other
+// for a match in Error without games (no_show scenario → Match was not played).
+export const CCL_REPORT_CATEGORIES = {
+  scheduling: "scheduling",
+  no_show: "not_played",
+  incomplete: "incomplete",
+  result_dispute: "result_dispute",
+};
 // Resolve of a partly played match: the match time may be moved by this much to find its games on BGA.
 export const CCL_TIME_ADJUST_MAX_MINUTES = 60;
 
@@ -52,8 +60,8 @@ export function isCclGamePlayed(game) {
 // Which case the player may send about the match now, or null:
 // - scheduling: planned match with both players and no agreed time, or an agreed time with a pending
 //   change proposal (Report a problem next to the time button);
-// - not_played: Error and no game played (Resolve);
-// - incomplete: Error with at least one game played (Report a problem);
+// - no_show: Error and no game played (Resolve: a no-show, an agreed reschedule or Other);
+// - incomplete: Error with at least one game played (Resolve);
 // - result_dispute: Done and the players' result editing window is over (Report a problem).
 export function getCclCaseScenario({ match, games = [], playerId, now = new Date() }) {
   if (!getDuelSide(match, playerId)) return null;
@@ -63,7 +71,7 @@ export function getCclCaseScenario({ match, games = [], playerId, now = new Date
     const changePending = text(match?.proposed_time_status).toLowerCase() === "change_pending";
     return !hasValue(match?.time_utc) || changePending ? "scheduling" : null;
   }
-  if (status === "error") return (games || []).some(isCclGamePlayed) ? "incomplete" : "not_played";
+  if (status === "error") return (games || []).some(isCclGamePlayed) ? "incomplete" : "no_show";
   if (status === "done") {
     const access = getCclResultEditAccess({ duel: match, playerId, isAdmin: false, now });
     return access.expired ? "result_dispute" : null;
@@ -269,8 +277,8 @@ export function registerCclCaseRoutes(app, {
     }
   };
 
-  // Report a problem (scenarios scheduling, incomplete, result_dispute) or Resolve → Other
-  // for a match in Error without games; the case is always Match problem / the scenario.
+  // Report a problem (scenarios scheduling, incomplete, result_dispute) or Resolve → Other for a match
+  // in Error without games (Match problem / Match was not played).
   app.post(
     "/ccl/matches/:id/cases",
     requireAuthenticated,
@@ -280,12 +288,13 @@ export function registerCclCaseRoutes(app, {
       if (details.error) throw requestError(400, details.error);
       const created = await inTransaction(db, async () => {
         const { match, playerId, scenario } = await loadCaseContext(db, req.user, req.params.id, now());
-        if (!scenario) throw requestError(409, "A problem cannot be reported for this match now");
+        const expected = CCL_REPORT_CATEGORIES[scenario];
+        if (!expected) throw requestError(409, "A problem cannot be reported for this match now");
         const category = text(req.body?.category).toLowerCase();
-        if (category && category !== scenario) throw requestError(409, "The match has changed. Reload the page and try again");
+        if (category && category !== expected) throw requestError(409, "The match has changed. Reload the page and try again");
         return createOrAppendTournamentCase(db, {
           case_type: "problem",
-          category: scenario,
+          category: expected,
           details: details.value,
           submitted_by_user_id: actorUserId(req.user),
           submitted_by_player_id: playerId,
@@ -298,8 +307,9 @@ export function registerCclCaseRoutes(app, {
     })
   );
 
-  // Resolve a match in Error with no games played: a player did not show up (case + new time),
-  // or the players agreed to reschedule (new time, no case).
+  // Resolve a match in Error with no games played: a player did not show up (Complaint / No-show
+  // about that player + new time), or the players agreed to reschedule (new time, no case).
+  // Other goes to POST /ccl/matches/:id/cases (Match problem / Match was not played).
   app.post(
     "/ccl/matches/:id/resolve",
     requireAuthenticated,
@@ -309,7 +319,7 @@ export function registerCclCaseRoutes(app, {
       if (!CCL_RESOLVE_ACTIONS.has(action)) throw requestError(400, "Choose what happened with the match");
       const result = await inTransaction(db, async () => {
         const { match, playerId, scenario } = await loadCaseContext(db, req.user, req.params.id, now());
-        if (scenario !== "not_played") throw requestError(409, "The match has changed. Reload the page and try again");
+        if (scenario !== "no_show") throw requestError(409, "The match has changed. Reload the page and try again");
         let created = null;
         if (action === "no_show") {
           const noShowPlayerId = text(req.body?.no_show_player_id);
@@ -320,11 +330,12 @@ export function registerCclCaseRoutes(app, {
           const submitted = text(req.body?.details) ? normalizeCaseDetails(req.body.details) : null;
           if (submitted?.error) throw requestError(400, submitted.error);
           created = await createOrAppendTournamentCase(db, {
-            case_type: "problem",
-            category: "not_played",
+            case_type: "complaint",
+            category: "no_show",
             details: submitted?.value || cclNoShowDetails(await playerName(db, noShowPlayerId), match.time_utc),
             submitted_by_user_id: actorUserId(req.user),
             submitted_by_player_id: playerId,
+            reported_player_id: noShowPlayerId,
             duel_id: match.id,
             tournament_id: match.tournament_id,
           });

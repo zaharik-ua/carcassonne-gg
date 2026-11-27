@@ -11791,18 +11791,20 @@ app.patch("/challenge-periods/:id/matches/:duelId/resolve-issue", requireAuthent
               details,
               submitted_by_user_id,
               submitted_by_player_id,
+              reported_player_id,
               duel_id,
               tournament_id,
               challenge_period_id,
               created_at,
               updated_at
             )
-            VALUES ('complaint', 'no_show', 'open', 'normal', ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+            VALUES ('complaint', 'no_show', 'open', 'normal', ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
           `,
           [
             submittedDetails,
             actorUserId,
             actorPlayerId,
+            reportedPlayerId,
             duelId,
             normalizeNullableText(period.rivals_tournament_id),
             periodId,

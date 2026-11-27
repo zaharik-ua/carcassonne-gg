@@ -10313,6 +10313,7 @@
     not_played: "Match was not played",
     incomplete: "Match not finished",
     result_dispute: "Wrong match result",
+    no_show: "No-show",
     conduct: "Rule violation or opponent's behaviour",
     general: "Other question for admins",
   };
@@ -10573,7 +10574,7 @@
   }
 
   // Resolve a match in Error without games: a no-show, an agreed reschedule, or another problem.
-  // Every case from here is Match problem / Match was not played (the server sets it).
+  // A no-show is a Complaint / No-show case about that player, Other is Match problem / Match was not played.
   function openCclResolveModal(match) {
     const ui = createCclModal("Resolve match");
     ui.fields.appendChild(createCclMatchTitle(match));
@@ -10601,11 +10602,20 @@
         hint: "The match time will be reset — agree on a new time with your opponent.",
         button: "Confirm",
       },
-      { value: "other", label: "Other", hint: "", button: "Submit" },
+      {
+        value: "other",
+        label: "Other",
+        hint: "",
+        button: "Submit",
+        type: CCL_CASE_TYPE_LABELS.problem,
+        category: CCL_CASE_CATEGORY_LABELS.not_played,
+      },
     ];
     const hint = document.createElement("div");
     hint.className = "cp-ccl-case-hint";
     const details = createCclCaseTextarea();
+    const typeInput = createCclReadonlyInput(CCL_CASE_TYPE_LABELS.complaint);
+    const categoryInput = createCclReadonlyInput(CCL_CASE_CATEGORY_LABELS.no_show);
     let caseRows = [];
     let detailsRow = null;
     let submitButton = null;
@@ -10619,6 +10629,8 @@
       }
       // A no-show and Other create a case: its read-only Type and Category are shown.
       const createsCase = !!outcome && outcome.value !== "reschedule";
+      typeInput.value = outcome?.type || CCL_CASE_TYPE_LABELS.complaint;
+      categoryInput.value = outcome?.category || CCL_CASE_CATEGORY_LABELS.no_show;
       caseRows.forEach((row) => row.classList.toggle("cp-hidden", !createsCase));
       detailsRow?.classList.toggle("cp-hidden", !createsCase);
       // The hint sits under Details when the outcome creates a case, otherwise under the outcome.
@@ -10631,10 +10643,7 @@
     };
     const outcome = createCclDropdown(outcomes, { placeholder: "Choose what happened", onChange: syncOutcome });
     const outcomeRow = ui.addField("Match outcome", outcome.root);
-    caseRows = [
-      ui.addField("Type", createCclReadonlyInput(CCL_CASE_TYPE_LABELS.problem)),
-      ui.addField("Category", createCclReadonlyInput(CCL_CASE_CATEGORY_LABELS.not_played)),
-    ];
+    caseRows = [ui.addField("Type", typeInput), ui.addField("Category", categoryInput)];
     detailsRow = ui.addField("Details", details);
 
     ui.addButton("Cancel", "cp-btn-secondary", ui.close);
@@ -10890,7 +10899,7 @@
         );
         actions.prepend(scenario === "scheduling" ? createCclSplitAction(timeButton, [reportProblem]) : timeButton);
       }
-      if (scenario === "not_played") {
+      if (scenario === "no_show") {
         addAction("Resolve", "cp-btn-primary", () => openCclResolveModal(match));
       }
       if (scenario === "incomplete") {

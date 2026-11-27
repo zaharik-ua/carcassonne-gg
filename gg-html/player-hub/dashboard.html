@@ -1734,7 +1734,11 @@
     return row({
       title: caseTitle(item),
       lines: [
-        [item.tournament?.name, item.submitted_by?.name ? `From ${item.submitted_by.name}` : ""].filter(Boolean).join(" · "),
+        [
+          item.tournament?.name,
+          item.submitted_by?.name ? `From ${item.submitted_by.name}` : "",
+          item.reported_player?.name ? `About ${item.reported_player.name}` : "",
+        ].filter(Boolean).join(" · "),
         caseDetailsPreview(item),
         [
           item.created_at ? `Opened ${formatDate(item.created_at)} (${item.days_open ?? 0} d)` : "",

@@ -407,7 +407,7 @@ Terminal-статуси для повторного запрошення:
 - [x] **CH-CAS-004** Dropdown містить `Match cancelled by mutual agreement of both players` і по одному варіанту `Player <nickname> did not show up for the match` для кожного учасника; nickname відображається напівжирним.
 - [x] **CH-CAS-005** Взаємне скасування переводить duel у `Cancelled`, записує `cancellation_reason = 'Match cancelled by mutual agreement of both players.'` і не створює `tournament_cases`.
 - [x] **CH-CAS-006** Для no-show modal показує обов'язкове editable textarea `Details`, попередньо заповнене англійським текстом із no-show гравцем, суперником, назвою Challenge period і запланованими UTC датою та часом.
-- [x] **CH-CAS-007** No-show переводить duel у `Cancelled`, зберігає фінальний текст `Details` у `duels.cancellation_reason` і створює відкритий `tournament_cases` типу `complaint` та категорії `no_show`.
+- [x] **CH-CAS-007** No-show переводить duel у `Cancelled`, зберігає фінальний текст `Details` у `duels.cancellation_reason` і створює відкритий `tournament_cases` типу `complaint` та категорії `no_show` з `reported_player_id` = гравець, який не з'явився.
 - [x] **CH-CAS-008** No-show case пов'язується з duel, Challenge period і `rivals_tournament_id` періоду, якщо турнір заданий; також зберігається автор звернення; гравець, який не з'явився, вказаний у `details`.
 - [ ] **CH-CAS-009** Обидва resolution flow транзакційно переводять пов'язану заявку в `auto_cancelled`; `Cancelled` duel перестає займати слот, але статус участі обох гравців не змінюється.
 - [x] **CH-CAS-010** Backend дозволяє resolution лише учаснику відповідного Challenge-duel, повторно перевіряє `Error` і відсутність результату та повертає conflict для вже зміненого матчу.
@@ -621,6 +621,7 @@ Terminal-статуси для повторного запрошення:
 | `submitted_by_user_id` | `INTEGER` | так | `NULL` | FK → `users.id`; auth-користувач, який створив кейс. |
 | `submitted_by_player_id` | `TEXT` | ні | — | FK → `profiles.id`; гравець, який відправив звернення. |
 | `responsible_user_id` | `INTEGER` | так | `NULL` | FK → `users.id`; відповідальний за опрацювання кейсу. |
+| `reported_player_id` | `TEXT` | так | `NULL` | FK → `profiles.id`; гравець, на якого скарга (для `no_show` — той, хто не з'явився). |
 | `match_id` | `TEXT` | так | `NULL` | FK → `matches.id`; пов'язаний командний матч, якщо є. |
 | `duel_id` | `TEXT` | так | `NULL` | FK → `duels.id`; пов'язаний duel, якщо є. |
 | `tournament_id` | `TEXT` | так | `NULL` | FK → `tournaments.id`; пов'язаний турнір, якщо є. |
